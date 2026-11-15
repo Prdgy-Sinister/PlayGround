@@ -1,36 +1,67 @@
 import * as THREE from '../vendor/three.module.js';
 import { clamp, lerp, mulberry32, hashStr, smoothstep } from './util.js';
 
-/* Builds a closed, arc-length-sampled circuit from a radial harmonic spline. */
+/* Builds a closed, arc-length-sampled circuit. A circuit can come from the
+   procedural radial spline or from a loop drawn in the Track Lab. */
 export function buildLayout(track, eraIndex) {
   const rnd = mulberry32(hashStr(track.name) + 7);
-  const lobes = clamp(Math.round(track.turns / 4), 3, 6);
-  const ph = [rnd() * 6.283, rnd() * 6.283, rnd() * 6.283];
-  const squash = .70 + rnd() * .34;
-  const elevation = track.name === 'Spa-Francorchamps' ? 11
-    : track.name === 'Nürburgring' ? 13
-      : track.name === 'Monaco' ? 2.6
-        : track.name === 'Circuit of the Americas' ? 8 : 5;
-
-  const count = 18;
+  const custom = Array.isArray(track.points) && track.points.length >= 4;
   const pts = [];
-  for (let i = 0; i < count; i++) {
-    const a = i / count * Math.PI * 2;
-    const r = 1
-      + .20 * Math.cos(lobes * a + ph[0])
-      + .085 * Math.cos((lobes + 2) * a + ph[1])
-      + .042 * Math.cos((lobes + 4) * a + ph[2]);
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r * squash;
-    const y = elevation * (.5 * Math.sin(2 * a + ph[1]) + .3 * Math.sin(3 * a + ph[0]) + .2 * Math.sin(5 * a + ph[2]));
-    pts.push(new THREE.Vector3(x, y, z));
+  let elevation = 0;
+
+  if (custom) {
+    /* The drawn loop is stored in a centred [-1, 1] space. Keep its aspect
+       ratio while normalising it so the length scaling below is predictable. */
+    let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+    for (const p of track.points) {
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minZ = Math.min(minZ, p.z ?? p.y); maxZ = Math.max(maxZ, p.z ?? p.y);
+    }
+    const span = Math.max(maxX - minX, maxZ - minZ) || 1;
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+    for (const p of track.points) {
+      pts.push(new THREE.Vector3((p.x - cx) / span, 0, ((p.z ?? p.y) - cz) / span));
+    }
+    elevation = track.elevation ?? 2.4;
+    for (let i = 0; i < pts.length; i++) {
+      const a = i / pts.length * Math.PI * 2;
+      pts[i].y = elevation * (.55 * Math.sin(2 * a + .8) + .25 * Math.sin(3 * a + 2.1));
+    }
+  } else {
+    const lobes = clamp(Math.round(track.turns / 4), 3, 6);
+    const ph = [rnd() * 6.283, rnd() * 6.283, rnd() * 6.283];
+    const squash = .70 + rnd() * .34;
+    elevation = track.name === 'Spa-Francorchamps' ? 11
+      : track.name === 'Nürburgring' ? 13
+        : track.name === 'Monaco' ? 2.6
+          : track.name === 'Circuit of the Americas' ? 8 : 5;
+
+    const count = 18;
+    for (let i = 0; i < count; i++) {
+      const a = i / count * Math.PI * 2;
+      const r = 1
+        + .20 * Math.cos(lobes * a + ph[0])
+        + .085 * Math.cos((lobes + 2) * a + ph[1])
+        + .042 * Math.cos((lobes + 4) * a + ph[2]);
+      const x = Math.cos(a) * r;
+      const z = Math.sin(a) * r * squash;
+      const y = elevation * (.5 * Math.sin(2 * a + ph[1]) + .3 * Math.sin(3 * a + ph[0]) + .2 * Math.sin(5 * a + ph[2]));
+      pts.push(new THREE.Vector3(x, y, z));
+    }
   }
 
-  let curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', .5);
-  const rawLen = curve.getLength();
-  const scale = track.len / rawLen;
+  /* Scale only the horizontal footprint. Measuring the 3D curve here would
+     include elevation and make long, hilly tracks silently shorter than the
+     lap distance used by the race logic. */
+  let rawLen = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    rawLen += Math.hypot(b.x - a.x, b.z - a.z);
+  }
+  const scale = track.len / Math.max(rawLen, .001);
   pts.forEach(p => { p.x *= scale; p.z *= scale; });
-  curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', .5);
+
+  let curve = new THREE.CatmullRomCurve3(pts, true, custom ? 'centripetal' : 'catmullrom', .5);
 
   const S = 1200;
   const sp = curve.getSpacedPoints(S);
@@ -44,8 +75,30 @@ export function buildLayout(track, eraIndex) {
   const length = curve.getLength();
   const halfWidth = 5.35 + eraIndex * .2;
 
+  /* Curvature drives the automatic corner speed profile. The sign tells the
+     renderer/race logic which way the car will be pushed when it runs wide. */
+  const curvature = new Float32Array(S);
+  const turn = new Float32Array(S);
+  const ds = length / S;
+  for (let i = 0; i < S; i++) {
+    const a = samples[(i - 1 + S) % S].tangent;
+    const b = samples[(i + 1) % S].tangent;
+    const ang = Math.acos(clamp(a.dot(b), -1, 1));
+    const crossY = a.z * b.x - a.x * b.z;
+    curvature[i] = ang / Math.max(ds * 2, .001);
+    turn[i] = crossY > 0 ? 1 : -1;
+  }
+  /* A little smoothing removes single-sample spikes from the spline. */
+  const smooth = new Float32Array(S);
+  for (let i = 0; i < S; i++) {
+    let sum = 0;
+    for (let k = -2; k <= 2; k++) sum += curvature[(i + k + S) % S];
+    smooth[i] = sum / 5;
+  }
+  curvature.set(smooth);
+
   const layout = {
-    curve, samples, length, halfWidth, S,
+    curve, samples, length, halfWidth, S, curvature, turn, custom,
     sample(u) {
       let f = u * S; f = ((f % S) + S) % S;
       const i = Math.floor(f), t = f - i;
@@ -54,6 +107,33 @@ export function buildLayout(track, eraIndex) {
       const side = a.side.clone().lerp(b.side, t).normalize();
       const tangent = a.tangent.clone().lerp(b.tangent, t).normalize();
       return { pos, side, tangent };
+    },
+    curvatureAt(u) {
+      let f = u * S; f = ((f % S) + S) % S;
+      const i = Math.floor(f), t = f - i;
+      return curvature[i] * (1 - t) + curvature[(i + 1) % S] * t;
+    },
+    turnAt(u) {
+      let f = u * S; f = ((f % S) + S) % S;
+      return turn[Math.floor(f)] || 1;
+    },
+    /* v = sqrt(lateral-g * g / curvature) with a backward braking pass so the
+       profile brakes before a corner, not inside it. Returns m/s. */
+    buildSpeedProfile(latG, decel, maxSpeed, boost = 4.0) {
+      const prof = new Float32Array(S);
+      for (let i = 0; i < S; i++) {
+        const k = Math.max(1e-4, curvature[i] * boost);
+        prof[i] = Math.min(maxSpeed, Math.sqrt(Math.max(.05, latG) * 9.81 / k));
+      }
+      const step = length / S;
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = S - 1; i >= 0; i--) {
+          const next = prof[(i + 1) % S];
+          const limit = Math.sqrt(next * next + 2 * Math.max(2, decel) * step);
+          if (prof[i] > limit) prof[i] = limit;
+        }
+      }
+      return prof;
     },
     nearest(x, z) {
       let best = 1e9, by = 0;

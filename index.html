@@ -20,6 +20,7 @@
         <button class="nav-link" data-page="career">MY CAREER</button>
         <button class="nav-link" data-page="garage">CAR DEVELOPMENT</button>
         <button class="nav-link" data-page="history">HALL OF FAME</button>
+        <button class="nav-link" data-page="tracklab">TRACK LAB</button>
       </nav>
       <div class="profile"><span class="profile-dot"></span><span><b id="driverName">ROOKIE</b><small>DRIVER RATING <strong id="rating">12</strong></small></span><button id="soundToggle" class="sound-toggle" title="Toggle engine audio">♫</button></div>
     </header>
@@ -40,6 +41,7 @@
             <div class="art-car"><span class="car-shadow"></span><span class="car-body"></span><span class="car-nose"></span><span class="car-wing"></span><span class="wheel w1"></span><span class="wheel w2"></span><span class="wheel w3"></span><span class="wheel w4"></span><span class="cockpit"></span><span class="car-highlight"></span></div>
             <div class="art-stamp"><b>76</b><span>YEARS OF<br>FORMULA ONE</span></div>
             <div class="art-caption"><span>01 / 09</span> THE GOLDEN PIONEERS <i></i></div>
+            <div class="art-view"><button id="heroRotateLeft" aria-label="Rotate car left">⟲</button><button id="heroAutoRotate" aria-label="Toggle auto rotation">◉</button><button id="heroRotateRight" aria-label="Rotate car right">⟳</button></div>
           </div>
         </div>
         <div class="era-strip"><div class="strip-heading"><span>THE NINE ERAS</span><small>A SPORT IN CONSTANT MOTION</small></div><div id="eraCards" class="era-cards"></div></div>
@@ -52,16 +54,17 @@
       <section id="careerPage" class="page"></section>
       <section id="garagePage" class="page"></section>
       <section id="historyPage" class="page"></section>
+      <section id="tracklabPage" class="page"></section>
     </main>
     <section id="raceScreen" class="race-screen hidden">
       <canvas id="raceCanvas" aria-label="3D Formula racing circuit"></canvas>
       <div class="race-vignette"></div>
-      <div class="race-header"><div class="race-brand"><b>F1</b><span>THROUGH THE<br>GENERATIONS</span></div><div class="race-event"><span id="raceRound">ROUND 01</span><b id="raceTitle">MONACO GRAND PRIX</b><small id="raceSubtitle">1950 · RACE DAY</small></div><button id="pauseRace" class="icon-button" aria-label="Pause race">Ⅱ</button></div>
+      <div class="race-header"><div class="race-brand"><b>F1</b><span>THROUGH THE<br>GENERATIONS</span></div><div class="race-event"><span id="raceRound">ROUND 01</span><b id="raceTitle">MONACO GRAND PRIX</b><small id="raceSubtitle">1950 · RACE DAY</small></div><button id="rotateButton" class="icon-button" aria-label="Rotate camera automatically" title="Rotate view">↻</button><button id="pauseRace" class="icon-button" aria-label="Pause race">Ⅱ</button></div>
       <div id="countdownLights" class="countdown-lights hidden"><span></span><span></span><span></span><span></span><span></span><small>LIGHTS OUT AND AWAY WE GO</small></div>
       <div class="race-hud"><div class="hud-left"><div class="position-box"><b id="positionValue">P 08</b><small>POSITION</small></div><div class="lap-box"><b id="lapValue">01<span>/03</span></b><small>LAP</small></div><div class="time-box"><b id="timeValue">00:00.000</b><small>LAP TIME <i id="deltaValue">—</i></small></div></div><div class="hud-right"><div class="speed-box"><b id="speedValue">000</b><span>KM/H</span><div class="rpm-bar"><i id="rpmBar"></i></div><small id="gearValue">GEAR N</small></div><div class="telemetry"><div><span>TYRE</span><b id="tyreValue">SOFT · 100%</b></div><div><span>FUEL</span><b id="fuelValue">48 L</b></div><div><span>ENGINE</span><b id="engineValue">92°</b></div><div><span>CONDITION</span><b id="conditionValue">100%</b></div></div></div></div>
       <div class="race-message" id="raceMessage">WELCOME TO THE GRID</div>
-      <div class="race-bottom"><div class="race-controls-hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>DRIVE</span><kbd>C</kbd><span>CAMERA</span><kbd>P</kbd><span>PIT</span></div><div class="race-bottom-actions"><button id="cameraButton" class="race-action">CAM <b>CHASE</b></button><button id="weatherButton" class="race-action">WEATHER <b>DRY</b></button><button id="tyreButton" class="race-action">TYRE <b>SOFT</b></button><button id="pitButton" class="race-action">PIT <b>REQUEST</b></button><button id="exitRace" class="race-action exit">EXIT SESSION ↗</button></div></div>
-      <div class="mobile-controls"><button data-control="left">◀</button><button data-control="brake">BRAKE</button><button data-control="gas">THROTTLE</button><button data-control="right">▶</button></div>
+      <div class="race-bottom"><div class="race-controls-hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>DRIVE</span><kbd>C</kbd><span>CAMERA</span><kbd>1-5</kbd><span>ANGLES</span><span>DRAG TO LOOK</span><kbd>P</kbd><span>PIT</span></div><div class="race-bottom-actions"><button id="cameraButton" class="race-action">CAM <b>CHASE</b></button><button id="weatherButton" class="race-action">WEATHER <b>DRY</b></button><button id="tyreButton" class="race-action">TYRE <b>SOFT</b></button><button id="pitButton" class="race-action">PIT <b>REQUEST</b></button><button id="exitRace" class="race-action exit">EXIT SESSION ↗</button></div></div>
+      <div class="mobile-controls"><div class="mc-steer"><button data-control="left" aria-label="Steer left">◀</button><button data-control="right" aria-label="Steer right">▶</button></div><div class="mc-pedals"><button data-control="brake" aria-label="Brake">BRAKE</button><button data-control="gas" aria-label="Throttle">THROTTLE</button></div></div>
       <div id="pauseModal" class="modal hidden"><div class="modal-card"><span class="eyebrow"><i></i>RACE CONTROL</span><h2>SESSION PAUSED</h2><p>Take a breath. Your race is right where you left it.</p><button id="resumeRace" class="button primary">RESUME RACE <span>→</span></button><button id="pauseExit" class="button ghost">END SESSION</button></div></div>
       <div id="resultModal" class="modal hidden"><div class="modal-card result-card"><span class="eyebrow"><i></i>CHEQUERED FLAG</span><h2 id="resultTitle">PODIUM FINISH</h2><p id="resultCopy">A brilliant drive through the streets of Monaco.</p><div class="result-stats"><div><b id="resultPosition">P 01</b><small>FINISH</small></div><div><b id="resultTime">03:42.991</b><small>BEST LAP</small></div><div><b id="resultXP">+120</b><small>REPUTATION</small></div></div><div id="podiumCars" class="podium-cars"></div><button id="continueAfterRace" class="button primary">BACK TO THE PADDOCK <span>↗</span></button></div></div>
     </section>
