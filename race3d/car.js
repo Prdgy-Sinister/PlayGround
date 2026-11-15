@@ -277,7 +277,7 @@ export function buildCar(style, opts, shared) {
   }
 
   /* ---- diffuser ---- */
-  if (!low) {
+  if (!low && !style.vintage) {
     const diff = box(.92, .12, .5, carbon);
     diff.position.set(0, .17, -2.02);
     add(diff);

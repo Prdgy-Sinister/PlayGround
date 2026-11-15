@@ -11,3 +11,6 @@
 .hero-art.live{background:#87999c}
 .hero-art.live .art-car,.hero-art.live .art-sun,.hero-art.live .art-track,.hero-art.live .art-lines{opacity:0;transition:opacity .45s ease}
 .hero-art.live:before{background:linear-gradient(90deg,#11151066,transparent 64%),linear-gradient(0deg,#13181266,transparent 44%)}
+.hero-art:before{pointer-events:none}
+.art-sun,.art-track,.art-lines,.art-car{pointer-events:none}
+.art-year,.art-stamp,.art-caption{pointer-events:none}

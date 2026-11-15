@@ -15,7 +15,7 @@ export class Showroom {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 1.06;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -23,7 +23,7 @@ export class Showroom {
     const sky = getSkyTexture('DRY');
     this.scene.background = sky;
     this.scene.environment = sky;
-    this.scene.fog = new THREE.Fog(0x9fb8c5, 55, 340);
+    this.scene.fog = new THREE.Fog(0xa6bfcb, 45, 280);
 
     this.camera = new THREE.PerspectiveCamera(30, 1, .1, 900);
 
@@ -47,7 +47,6 @@ export class Showroom {
 
     this.time = 0;
     this.yaw = -.62;
-    this.auto = true;
     this.dragging = false;
     this.idle = 0;
     this.lastX = 0;
@@ -68,15 +67,15 @@ export class Showroom {
   buildStage() {
     const ground = new THREE.Mesh(
       new THREE.CircleGeometry(320, 64),
-      new THREE.MeshStandardMaterial({ color: 0x22261e, roughness: .98, metalness: 0 })
+      new THREE.MeshStandardMaterial({ color: 0x1c2119, roughness: .98, metalness: 0 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
 
     const base = new THREE.Mesh(
-      new THREE.CylinderGeometry(5.15, 5.3, this.platformTop, 64),
-      new THREE.MeshStandardMaterial({ color: 0x1c201b, roughness: .48, metalness: .45 })
+      new THREE.CylinderGeometry(4.1, 4.24, this.platformTop, 64),
+      new THREE.MeshStandardMaterial({ color: 0x161a15, roughness: .45, metalness: .5 })
     );
     base.position.y = this.platformTop / 2;
     base.receiveShadow = true;
@@ -84,8 +83,8 @@ export class Showroom {
     this.stage.add(base);
 
     const surface = new THREE.Mesh(
-      new THREE.CircleGeometry(5.02, 64),
-      new THREE.MeshStandardMaterial({ map: this.textures.asphalt, roughness: .72, metalness: .2, color: 0x7b8175 })
+      new THREE.CircleGeometry(4.0, 64),
+      new THREE.MeshStandardMaterial({ map: this.textures.asphalt, roughness: .7, metalness: .22, color: 0x5a6056 })
     );
     surface.rotation.x = -Math.PI / 2;
     surface.position.y = this.platformTop + .002;
@@ -93,7 +92,7 @@ export class Showroom {
     this.stage.add(surface);
 
     const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(5.13, .035, 8, 120),
+      new THREE.TorusGeometry(4.08, .035, 8, 120),
       new THREE.MeshStandardMaterial({ color: 0xc9a961, metalness: 1, roughness: .28 })
     );
     rim.rotation.x = Math.PI / 2;
@@ -105,9 +104,9 @@ export class Showroom {
   /* textures are built before the stage is assembled */
 
   buildLighting() {
-    this.scene.add(new THREE.HemisphereLight(0xdceaf6, 0x2a2e24, 1.4));
+    this.scene.add(new THREE.HemisphereLight(0xd6e7f3, 0x272b21, 1.5));
 
-    const key = new THREE.DirectionalLight(0xfff3da, 3.4);
+    const key = new THREE.DirectionalLight(0xfff8ec, 2.9);
     key.position.set(7.5, 10, 6.5);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
@@ -121,7 +120,7 @@ export class Showroom {
     key.shadow.normalBias = .045;
     this.scene.add(key);
 
-    const fill = new THREE.DirectionalLight(0xc3dcef, 1.15);
+    const fill = new THREE.DirectionalLight(0xc3dcef, .9);
     fill.position.set(-7, 4.5, 5.5);
     this.scene.add(fill);
 
@@ -164,23 +163,36 @@ export class Showroom {
     const h = Math.max(2, this.canvas.clientHeight);
     this.camera.aspect = w / h;
 
-    let radius = 2.45, height = 1.1;
+    let size = new THREE.Vector3(1.9, 1.15, 4.8);
     if (this.rig) {
+      /* measure the car unrotated: a rotated AABB would inflate the fit */
+      const savedYaw = this.stage.rotation.y;
+      this.stage.rotation.y = 0;
+      this.stage.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(this.rig.root);
-      const size = box.getSize(new THREE.Vector3());
-      radius = Math.hypot(size.x, size.z) * .5;
-      height = size.y;
+      this.stage.rotation.y = savedYaw;
+
+      /* put the geometric centre of the car on the turntable axis */
+      const center = box.getCenter(new THREE.Vector3());
+      this.rig.root.position.x -= center.x;
+      this.rig.root.position.z -= center.z;
+      this.stage.updateMatrixWorld(true);
+      size = box.getSize(size);
     }
     const halfV = THREE.MathUtils.degToRad(this.camera.fov * .5);
     const halfH = Math.atan(Math.tan(halfV) * this.camera.aspect);
-    const dist = (radius / Math.sin(Math.min(halfV, halfH))) * 1.06;
+    const dir = new THREE.Vector3(.53, .18, .84).normalize();
 
-    const target = new THREE.Vector3(0, this.platformTop + height * .46, 0);
-    const dir = new THREE.Vector3(.52, .46, .78).normalize();
+    /* fit the long, low car against the horizontal field of view, using the
+       footprint radius so the framing stays safe while the stage turns */
+    const footprint = .5 * Math.hypot(size.x, size.z);
+    const dist = Math.max(footprint / Math.tan(halfH), (size.y * .5) / Math.tan(halfV)) * 1.48;
+
+    const target = new THREE.Vector3(0, this.platformTop + size.y * .5, 0);
     this.camera.position.copy(target).addScaledVector(dir, dist);
     this.camera.lookAt(target);
     /* keep the car sitting slightly low in the frame so the hero overlays breathe */
-    this.camera.rotateX(.03);
+    this.camera.rotateX(0);
     this.camera.updateProjectionMatrix();
   }
 
@@ -190,7 +202,6 @@ export class Showroom {
       this.dragging = true;
       this.idle = 0;
       this.lastX = e.clientX;
-      this.auto = false;
       el.setPointerCapture && el.setPointerCapture(e.pointerId);
       el.classList.add('dragging');
     };
