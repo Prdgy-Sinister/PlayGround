@@ -382,10 +382,6 @@ export function buildCar(style, opts, shared) {
 
   root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
-  /* Bake every static body panel into one mesh per material. This cuts the
-     draw-call count of the field by roughly 70% without changing the model. */
-  mergeStatic(body, new Set(helmet ? [helmet] : []));
-
   return {
     root, body, wheels, helmet, brakeLight: !style.vintage, rainLightMat: brake,
     eye: new THREE.Vector3(0, style.vintage ? .99 : .97, cockpitZ + (style.vintage ? .10 : .05)),

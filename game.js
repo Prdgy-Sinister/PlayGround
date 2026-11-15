@@ -254,7 +254,7 @@ function initUI(){const stored=loadStoredTrack();if(stored){registerCustomTrack(
 function bindControls(){window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();keys[key]=true;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key))e.preventDefault();if(game&&(game.pitRunning||game.pitComplete)){if(key===' '||key==='enter'){e.preventDefault();pitAction()}return}if(key==='p'&&game)requestPit();if(key==='c'&&game)cycleCamera();if(['1','2','3','4','5'].includes(key)&&game)setCamera(+key-1);if(key==='escape'&&game)pauseGame()},{passive:false});window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});$$('.mobile-controls button').forEach(button=>{const control=button.dataset.control;const down=e=>{e.preventDefault();touchControls[control]=true};const up=e=>{e.preventDefault();touchControls[control]=false};button.addEventListener('pointerdown',down);['pointerup','pointercancel','pointerleave'].forEach(type=>button.addEventListener(type,up))});window.addEventListener('resize',()=>{if(game)resizeCanvas();if(showroom)showroom.resize();if(activePage==='tracklab'&&trackLab&&trackLab.onResize)trackLab.onResize()})}
 function careerTrack(round){const eligible=TRACKS.filter(track=>track.era.includes(career.era)&&!track.custom);return eligible[((round%eligible.length)+eligible.length)%eligible.length]}
 function startCareerRace(){const track=careerTrack(career.round);startSession('race',TRACKS.indexOf(track),career.era,true)}
-function startSession(mode,trackIndex,eraIndex,fromCareer=false){const nextEra=clamp(eraIndex,0,8),nextTrack=clamp(trackIndex,0,TRACKS.length-1),track=TRACKS[nextTrack],era=ERAS[nextEra];if(!track.era.includes(nextEra)){toast('That circuit is not available in this generation.');return}if(game)cancelAnimationFrame(game.raf);selectedEra=nextEra;selectedTrack=nextTrack;const laps=mode==='qualifying'?1:mode==='practice'?2:mode==='timetrial'?2:3;const upgrades=career.upgrades||{};const power=era.power+Math.min(12,(upgrades.engine||0)*2)+(selectedEra>=3?Math.min(5,(upgrades.turbo||0)):0);const grip=era.grip+Math.min(13,(upgrades.aero||0)*2)+(upgrades.suspension||0);const player={distance:0,lateral:0,speed:0,damage:0,tyre:100,fuel:Math.max(10,Math.round((laps*7.2+1.5)*10)/10),engineTemp:88,condition:100,boost:100,steer:0,lapTime:0,bestLap:Infinity,lapStart:0,gear:1,offroad:0,skid:0};const ai=Array.from({length:7},(_,i)=>({id:i,distance:((7-i)*8+Math.random()*3),lateral:(Math.random()-.5)*.8,speed:era.max*(.57+Math.random()*.06),pace:.89+Math.random()*.09,color:['#e44735','#e5e6da','#48a9c1','#e6b640','#54a879','#e1e2d9','#db6b43'][i]}));game={mode,fromCareer,trackIndex:selectedTrack,eraIndex:selectedEra,track,era,laps,player,ai,running:true,started:false,paused:false,completedLaps:0,countdown:3.7,lights:0,weather:'DRY',tyre:'SOFT',camera:0,pitRequested:false,pitRunning:false,pitComplete:false,pitGame:null,pitTimer:0,damageTimer:0,elapsed:0,sessionTime:0,raf:0,view:{w:0,h:0,dpr:1},messageTimer:0,warnCooldown:0,lapLength:track.len,lookAuto:false,seed:Math.random()*100,sessionLabel:{race:'RACE DAY',practice:'PRACTICE 1',qualifying:'QUALIFYING',championship:'CHAMPIONSHIP',timetrial:'TIME TRIAL'}[mode]||'RACE DAY',power,grip};$('#raceScreen').classList.remove('hidden');document.body.classList.add('racing');if(showroom)showroom.stop();$('#pauseModal').classList.add('hidden');$('#resultModal').classList.add('hidden');$('#pitModal').classList.add('hidden');$('#pitResult').classList.add('hidden');$('#countdownLights').classList.remove('hidden');$('#countdownLights').classList.remove('lit','go');$('#raceTitle').textContent=`${track.name.toUpperCase()} GRAND PRIX`;$('#raceRound').textContent=fromCareer?`ROUND ${String(career.round+1).padStart(2,'0')}`:'GRAND PRIX';$('#raceSubtitle').textContent=`${era.year} · ${game.sessionLabel} · ${(track.len/1000).toFixed(2)} KM`;$('#lapValue').innerHTML=`01<span>/${String(laps).padStart(2,'0')}</span>`;$('#positionValue').textContent='P 08';$('#tyreValue').textContent='SOFT · 100%';$('#fuelValue').textContent=`${Math.round(player.fuel)} L`;$('#engineValue').textContent='88°';$('#conditionValue').textContent='100%';$('#cameraButton').innerHTML='CAM <b>CHASE</b>';$('#rotateButton').classList.remove('active');$('#weatherButton').innerHTML='WEATHER <b>DRY</b>';$('#tyreButton').innerHTML='TYRE <b>SOFT</b>';$('#pitButton').innerHTML='PIT <b>REQUEST</b>';message('PREPARING THE CIRCUIT');(async()=>{const session=game;try{const Cls=await ensureRace3D();if(!Cls)throw new Error('renderer module missing');if(!race3d)race3d=new Cls($('#raceCanvas'));if(game!==session)return;race3d.load(game);game.r3d=race3d;resizeCanvas()}catch(err){console.error('3D renderer unavailable',err);if(game===session)game.r3d=null}if(game!==session)return;if(!game.r3d)resizeCanvas();message('GET READY');frameLast=performance.now();if(soundOn)startAudio();if(game&&game.running)game.raf=requestAnimationFrame(raceFrame)})()}
+function startSession(mode,trackIndex,eraIndex,fromCareer=false){const nextEra=clamp(eraIndex,0,8),nextTrack=clamp(trackIndex,0,TRACKS.length-1),track=TRACKS[nextTrack],era=ERAS[nextEra];if(!track.era.includes(nextEra)){toast('That circuit is not available in this generation.');return}if(game)cancelAnimationFrame(game.raf);selectedEra=nextEra;selectedTrack=nextTrack;const laps=mode==='qualifying'?1:mode==='practice'?2:mode==='timetrial'?2:5;const upgrades=career.upgrades||{};const power=era.power+Math.min(12,(upgrades.engine||0)*2)+(selectedEra>=3?Math.min(5,(upgrades.turbo||0)):0);const grip=era.grip+Math.min(13,(upgrades.aero||0)*2)+(upgrades.suspension||0);const player={distance:0,lateral:0,speed:0,damage:0,tyre:100,fuel:Math.max(10,Math.round((laps*7.2+1.5)*10)/10),engineTemp:88,condition:100,boost:100,steer:0,lapTime:0,bestLap:Infinity,lapStart:0,gear:1,offroad:0,skid:0};const ai=Array.from({length:7},(_,i)=>({id:i,distance:((7-i)*8+Math.random()*3),lateral:(Math.random()-.5)*.8,speed:era.max*(.57+Math.random()*.06),pace:.89+Math.random()*.09,color:['#e44735','#e5e6da','#48a9c1','#e6b640','#54a879','#e1e2d9','#db6b43'][i]}));game={mode,fromCareer,trackIndex:selectedTrack,eraIndex:selectedEra,track,era,laps,player,ai,running:true,started:false,paused:false,completedLaps:0,countdown:3.7,lights:0,weather:'DRY',tyre:'SOFT',camera:0,pitRequested:false,pitCompleted:false,pitRunning:false,pitComplete:false,pitGame:null,pitTimer:0,damageTimer:0,elapsed:0,sessionTime:0,raf:0,view:{w:0,h:0,dpr:1},messageTimer:0,warnCooldown:0,lapLength:track.len,lookAuto:false,seed:Math.random()*100,sessionLabel:{race:'RACE DAY',practice:'PRACTICE 1',qualifying:'QUALIFYING',championship:'CHAMPIONSHIP',timetrial:'TIME TRIAL'}[mode]||'RACE DAY',power,grip};$('#lapValue').innerHTML=`01<span>/${String(laps).padStart(2,'0')}</span>`;$('#elapsedValue').textContent=fmtTime(0);$('#raceScreen').classList.remove('hidden');document.body.classList.add('racing');if(showroom)showroom.stop();$('#pauseModal').classList.add('hidden');$('#resultModal').classList.add('hidden');$('#pitModal').classList.add('hidden');$('#pitResult').classList.add('hidden');$('#countdownLights').classList.remove('hidden');$('#countdownLights').classList.remove('lit','go');$('#raceTitle').textContent=`${track.name.toUpperCase()} GRAND PRIX`;$('#raceRound').textContent=fromCareer?`ROUND ${String(career.round+1).padStart(2,'0')}`:'GRAND PRIX';$('#raceSubtitle').textContent=`${era.year} · ${game.sessionLabel} · ${(track.len/1000).toFixed(2)} KM`;$('#lapValue').innerHTML=`01<span>/${String(laps).padStart(2,'0')}</span>`;$('#positionValue').textContent='P 08';$('#tyreValue').textContent='SOFT · 100%';$('#fuelValue').textContent=`${Math.round(player.fuel)} L`;$('#engineValue').textContent='88°';$('#conditionValue').textContent='100%';$('#cameraButton').innerHTML='CAM <b>CHASE</b>';$('#rotateButton').classList.remove('active');$('#weatherButton').innerHTML='WEATHER <b>DRY</b>';$('#tyreButton').innerHTML='TYRE <b>SOFT</b>';$('#pitButton').innerHTML='PIT <b>REQUEST</b>';message('PREPARING THE CIRCUIT');(async()=>{const session=game;try{const Cls=await ensureRace3D();if(!Cls)throw new Error('renderer module missing');if(!race3d)race3d=new Cls($('#raceCanvas'));if(game!==session)return;race3d.load(game);game.r3d=race3d;resizeCanvas()}catch(err){console.error('3D renderer unavailable',err);if(game===session)game.r3d=null}if(game!==session)return;if(!game.r3d)resizeCanvas();message('GET READY');frameLast=performance.now();if(soundOn)startAudio();if(game&&game.running)game.raf=requestAnimationFrame(raceFrame)})()}
 async function ensureRace3D(){if(Race3DClass)return Race3DClass;const mod=await import('./race3d/index.js');Race3DClass=mod.Race3D;return Race3DClass}
 async function ensureShowroom(){if(ShowroomClass)return ShowroomClass;const mod=await import('./race3d/showroom.js');ShowroomClass=mod.Showroom;return ShowroomClass}
 async function initShowroom(){const canvas=$('#heroCanvas');if(showroom||showroomFailed||!canvas)return;if(game){setTimeout(initShowroom,2500);return}try{const Cls=await ensureShowroom();showroom=new Cls(canvas);showroom.setEra(selectedEra,ERAS[selectedEra].colors);showroom.resize();const autoBtn=$('#heroAutoRotate');if(autoBtn)autoBtn.classList.toggle('active',showroom.autoSpin);if(activePage==='home'&&!game){showroom.start();document.querySelector('.hero-art').classList.add('live')}}catch(err){console.warn('3D showroom unavailable',err);showroom=null;showroomFailed=true}}
@@ -449,6 +449,7 @@ function finishPitStop(){
   advanceAI(g,penalty);
   g.pitRunning=false;
   g.pitComplete=false;
+  g.pitCompleted=true;
   g.pitGame=null;
   if(pitRaf)cancelAnimationFrame(pitRaf);
   pitRaf=0;
@@ -464,7 +465,6 @@ function updateRace(dt){
   if(!g)return;
   const p=g.player;
   if(g.pitRunning||g.pitComplete)return;
-  g.elapsed+=dt;
   if(!g.started){
     g.countdown-=dt;
     const lit=clamp(Math.floor((3.7-g.countdown)*1.25),0,5);
@@ -481,6 +481,7 @@ function updateRace(dt){
     }
     return;
   }
+  g.elapsed+=dt;
 
   const lapLen=g.lapLength||g.track.len;
   const u=((p.distance/lapLen)%1+1)%1;
@@ -560,12 +561,18 @@ function updateRace(dt){
     hud('lapValue').innerHTML=`${Math.min(g.laps,lapNow+1).toString().padStart(2,'0')}<span>/${String(g.laps).padStart(2,'0')}</span>`;
     if(lapNow<g.laps){
       message(`LAP ${lapNow+1} · ${fmtTime(lap)}`);
-      if(g.pitRequested){
+      if(g.pitRequested||(['race','championship'].includes(g.mode)&&!g.pitCompleted)){
         g.pitRequested=false;
         startPitStop(g,lapNow,lap);
         return;
       }
-    }else finishSession();
+    }else if(['race','championship'].includes(g.mode)&&!g.pitCompleted){
+       g.completedLaps=g.laps-1;
+       p.distance=(g.laps-1)*lapLen;
+       message('MANDATORY PIT STOP REQUIRED');
+       startPitStop(g,g.laps-1,lap);
+       return;
+     }else finishSession();
   }
 
   g.ai.forEach((car,i)=>{
@@ -598,6 +605,7 @@ function updateRace(dt){
     const order=[{distance:p.distance,player:true},...g.ai].sort((a,b)=>b.distance-a.distance);
     hud('positionValue').textContent=`P ${String(order.findIndex(x=>x.player)+1).padStart(2,'0')}`;
     hud('timeValue').textContent=fmtTime(p.lapTime);
+     hud('elapsedValue').textContent=fmtTime(g.elapsed);
     hud('deltaValue').textContent=Number.isFinite(p.bestLap)?`BEST ${fmtTime(p.bestLap)}`:'—';
     hud('speedValue').textContent=String(Math.round(p.speed)).padStart(3,'0');
     hud('gearValue').textContent=`GEAR ${p.gear}`;
