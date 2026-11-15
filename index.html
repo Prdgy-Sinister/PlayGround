@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101916" />
+  <title>Green Empire — Underground War</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Green Empire home"><span class="brand-mark">GE</span><span class="brand-copy"><strong>GREEN EMPIRE</strong><small>UNDERGROUND WAR</small></span></a>
+      <div class="top-center"><span class="season-tag"><i></i> SEASON 04</span><span class="season-name">Concrete Jungle</span></div>
+      <div class="player-chip"><div class="avatar">M</div><div><strong>Marlow</strong><small><span class="rank-dot"></span> STREET HUSTLER</small></div><button class="more-btn" aria-label="Player menu">•••</button></div>
+    </header>
+    <section class="resource-bar" aria-label="Resources">
+      <div class="resource"><span class="res-icon cash-icon">$</span><div><small>CASH</small><strong id="cash">2,450</strong></div><button class="res-plus" data-resource="cash">+</button></div>
+      <div class="resource"><span class="res-icon leaf-icon">✳</span><div><small>HARVEST</small><strong id="harvest">860</strong></div><button class="res-plus" data-resource="harvest">+</button></div>
+      <div class="resource"><span class="res-icon chem-icon">◈</span><div><small>SUPPLIES</small><strong id="supplies">420</strong></div><button class="res-plus" data-resource="supplies">+</button></div>
+      <div class="resource"><span class="res-icon rep-icon">★</span><div><small>REPUTATION</small><strong id="rep">120</strong></div><button class="res-plus" data-resource="rep">+</button></div>
+      <div class="heat-widget"><span class="heat-icon">◉</span><div class="heat-label"><small>NEIGHBORHOOD HEAT</small><strong id="heatText">LOW PROFILE</strong></div><div class="heat-meter"><span id="heatBar"></span></div></div>
+      <button class="settings-btn" id="soundBtn" title="Toggle sound">♫</button>
+    </section>
+    <main class="main-layout">
+      <aside class="left-rail">
+        <div class="rail-label">EMPIRE</div>
+        <button class="nav-item active" data-view="base"><span class="nav-icon">⌂</span><span>My Base</span></button>
+        <button class="nav-item" data-view="crew"><span class="nav-icon">♟</span><span>Operations</span><b class="nav-count">3</b></button>
+        <button class="nav-item" data-view="research"><span class="nav-icon">⌬</span><span>Research</span></button>
+        <button class="nav-item" data-view="intel"><span class="nav-icon">◎</span><span>Intel</span><span class="new-dot"></span></button>
+        <div class="rail-spacer"></div>
+        <div class="district-card"><div class="district-top"><span>YOUR DISTRICT</span><span class="online-dot"></span></div><strong>Southside</strong><small>Territory 01 <span>·</span> Level 1</small><div class="district-art">⌂</div></div>
+        <button class="help-btn" id="helpBtn">? <span>How to play</span></button>
+      </aside>
+      <section class="game-area" id="gameArea">
+        <div class="map-toolbar"><div class="map-title"><div class="crumb">TERRITORY <span>/</span> SOUTH YARD</div><h1>Southside Hideout <span class="level-pill">HQ 1</span></h1></div><div class="map-actions"><div class="live-pill"><span class="pulse"></span> LIVE</div><button class="ghost-btn" id="editBtn">⌖ <span>Edit layout</span></button><button class="primary-btn small" id="buildBtn">＋ Build</button></div></div>
+        <div class="map-frame"><div class="map-sky"></div><canvas id="gameCanvas" aria-label="Interactive isometric base map"></canvas><div class="map-compass"><span>N</span><div>⌖</div></div><div class="zoom-controls"><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomOut" aria-label="Zoom out">−</button></div><div class="map-tip" id="mapTip"><span class="tip-spark">✦</span><span>Tap a building to manage it</span><button id="tipClose" aria-label="Dismiss tip">×</button></div><div class="base-tag"><span class="base-tag-icon">⌂</span><div><strong>MARLOW'S YARD</strong><small>PROTECTED TERRITORY</small></div></div><div class="worker-toast" id="workerToast"><span>✦</span> <b>Collection ready</b><button>Collect all</button></div></div>
+        <div class="map-footer"><div class="map-legend"><span><i class="legend-dot green"></i> Production</span><span><i class="legend-dot gold"></i> Storage</span><span><i class="legend-dot blue"></i> Operations</span></div><div class="map-footer-right"><span class="online-count"><i></i> 1,284 crews online</span><span class="coords">SECTOR 04 · 19.42° N</span></div></div>
+      </section>
+      <aside class="right-panel" id="rightPanel">
+        <div class="panel-header"><div><div class="eyebrow">COMMAND CENTER</div><h2 id="panelTitle">Your Empire</h2></div><button class="close-panel" id="closePanel" aria-label="Close panel">×</button></div>
+        <div class="panel-scroll" id="panelContent"></div>
+      </aside>
+    </main>
+    <nav class="mobile-nav"><button class="active" data-view="base"><span>⌂</span>Base</button><button data-view="crew"><span>♟</span>Ops</button><button data-view="research"><span>⌬</span>Research</button><button data-view="intel"><span>◎</span>Intel</button></nav>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="modal-backdrop" id="modalBackdrop"><section class="modal" id="modal" role="dialog" aria-modal="true"><button class="modal-close" id="modalClose">×</button><div id="modalContent"></div></section></div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
