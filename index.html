@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#141210" />
+    <title>The Way of the Samurai — A Mountain Crafting Life</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23b53a2d'/><text x='50' y='70' font-size='58' text-anchor='middle' fill='%23f3ece0' font-family='serif'>侍</text></svg>" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+      <div class="vignette"></div>
+      <div class="grain"></div>
+
+      <header id="hud" class="hidden">
+        <div class="brand">
+          <span class="crest">侍</span>
+          <div class="brand-text">
+            <span>THE WAY OF</span>
+            <strong>THE SAMURAI</strong>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat money" title="Ryō — your coin">
+            <span class="stat-k">両</span>
+            <div><small>RYŌ</small><b id="hud-money">0</b></div>
+          </div>
+          <div class="stat rep" title="Your reputation among the mountain people">
+            <span class="stat-k">誉</span>
+            <div><small id="hud-rank">UNKNOWN ARTISAN</small><b id="hud-rep">0</b><i><u id="hud-repbar"></u></i></div>
+          </div>
+          <div class="stat date" title="Season, day and hour">
+            <span class="stat-k" id="hud-season-kanji">春</span>
+            <div><small id="hud-season">SPRING</small><b id="hud-date">Day 1 · 08:00</b></div>
+          </div>
+          <div class="stat weather" title="Weather">
+            <span class="stat-k" id="hud-weather-icon">☀</span>
+            <div><small>WEATHER</small><b id="hud-weather">Clear</b></div>
+          </div>
+        </div>
+        <div class="hud-actions">
+          <button class="icon-btn" id="btn-map" title="Mountain map (M)">地<small>MAP</small></button>
+          <button class="icon-btn" id="btn-meditate" title="Meditate — pass time and restore focus">禅<small>REST</small></button>
+          <button class="icon-btn" id="btn-sound" title="Sound">音<small>SOUND</small></button>
+          <button class="icon-btn" id="btn-help" title="Codex and controls">巻<small>CODEX</small></button>
+        </div>
+      </header>
+
+      <section id="quests" class="hidden">
+        <div class="quest-head"><span>家</span><b>PATH OF THE ARTISAN</b></div>
+        <div id="quest-list"></div>
+      </section>
+
+      <div id="focus-wrap" class="hidden">
+        <div class="focus-label"><span>心</span><small>FOCUS</small><b id="focus-num">100</b></div>
+        <div class="focus-bar"><u id="focus-fill"></u></div>
+      </div>
+
+      <div id="zone-tag" class="zone-tag"></div>
+      <div id="prompt" class="prompt hidden"><kbd>E</kbd><span id="prompt-text">Interact</span></div>
+      <div id="mobile-interact" class="mobile-interact hidden">TEND</div>
+      <div id="toasts"></div>
+
+      <nav id="dock" class="hidden">
+        <button data-panel="estate"><span>宅</span><b>ESTATE</b><small>Upgrade</small></button>
+        <button data-panel="bonsai"><span>盆</span><b>BONSAI</b><small>Cultivate</small></button>
+        <button data-panel="forge"><span>鍛</span><b>FORGE</b><small>Craft</small></button>
+        <button data-panel="auction"><span>競</span><b>AUCTION</b><small>Sell</small></button>
+        <button data-panel="market"><span>市</span><b>MARKET</b><small>Trade</small></button>
+        <button data-panel="map"><span>山</span><b>WORLD</b><small>Travel</small></button>
+      </nav>
+
+      <div id="joystick" class="joystick hidden"><div class="stick"></div></div>
+      <div id="compass" class="compass hidden"><div class="needle">北</div><span id="compass-label">YOUR ESTATE</span></div>
+      <div id="fade" class="fade"></div>
+
+      <div id="intro" class="intro">
+        <div class="intro-bg"></div>
+        <div class="intro-vignette"></div>
+        <div class="intro-content">
+          <div class="intro-kanji">侍の道</div>
+          <p class="intro-kicker">A quiet life in the Japanese mountains</p>
+          <h1>THE WAY OF<br /><em>THE SAMURAI</em></h1>
+          <div class="intro-rule"><span></span><i>鍬</i><span></span></div>
+          <p class="intro-copy">
+            Lay down the sword of war. Take up the blade of the craftsman.<br />
+            Raise living bonsai, forge steel, and trade with the mountain folk —<br />
+            from the sunlit auction grounds to the secrets that wake after dark.
+          </p>
+          <button id="start-btn" class="btn btn-large">Begin Your New Life</button>
+          <div class="intro-foot">
+            <span>WASD / arrows to walk</span><span>Drag to look</span><span>E to interact</span><span>M for map</span>
+          </div>
+        </div>
+        <div class="intro-side">山 奥 の 隠 里</div>
+      </div>
+
+      <div id="loading" class="loading">
+        <div class="enso"></div>
+        <p>Gathering mountain mist…</p>
+      </div>
+
+      <div id="modal-root"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
