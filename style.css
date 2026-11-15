@@ -1,0 +1,381 @@
+:root {
+  --bg: #111815;
+  --bg2: #1e2a26;
+  --panel: rgba(13, 23, 22, 0.9);
+  --panel-strong: rgba(10, 17, 17, 0.96);
+  --gold: #d8bc77;
+  --green: #7ecf9b;
+  --red: #cf7d60;
+  --text: #f4efe7;
+  --muted: #b8c0b2;
+  --line: rgba(255,255,255,0.12);
+  --shadow: rgba(0,0,0,0.35);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(180deg, #0b1111, #101b18 30%, #111a17 100%);
+  color: var(--text);
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 16px;
+}
+
+button {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(216,188,119,0.2), rgba(216,188,119,0.08));
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 120ms ease;
+}
+
+button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+button:active { transform: translateY(0); }
+
+#game-shell {
+  width: min(1600px, 100%);
+  min-height: calc(100vh - 32px);
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr) 340px;
+  gap: 18px;
+}
+
+.sidebar, #viewport-wrap {
+  background: rgba(11, 18, 16, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 24px 64px var(--shadow);
+}
+
+.sidebar {
+  padding: 14px 12px;
+}
+
+.panel-header {
+  padding: 6px 8px 16px;
+  font-size: 0.8rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold);
+  border-bottom: 1px solid var(--line);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.stat-grid div {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.stat-grid span { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; }
+.stat-grid strong { font-size: 1.05rem; }
+
+.panel-block {
+  margin-top: 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.panel-block h3 {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.button-row.single { grid-template-columns: 1fr; }
+.button-row.compact { grid-template-columns: 1fr 1fr; }
+
+#viewport-wrap {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 14px;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.subtitle {
+  color: var(--gold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.top-bar h1 {
+  margin: 4px 0 0;
+  font-size: clamp(1.6rem, 2vw, 2.6rem);
+}
+
+#viewport {
+  position: relative;
+  min-height: 680px;
+  margin-top: 12px;
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(89, 136, 151, 0.4), rgba(17, 32, 29, 0.9)),
+    radial-gradient(circle at top, rgba(255, 204, 115, 0.25), transparent 30%),
+    linear-gradient(180deg, #3e5d52 0%, #233d35 35%, #162521 100%);
+  border: 1px solid var(--line);
+}
+
+.garden-scene {
+  position: absolute;
+  inset: 0;
+  padding: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.estate-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.house {
+  position: absolute;
+  left: 62px;
+  bottom: 54px;
+  width: 230px;
+  height: 150px;
+  background: linear-gradient(180deg, #dfc8a2, #b88b5a);
+  border: 4px solid rgba(82, 53, 27, 0.7);
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,0.12);
+}
+
+.house::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 24px;
+  height: 90px;
+  background: rgba(85, 63, 42, 0.15);
+  border-radius: 8px;
+}
+
+.house::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -42px;
+  width: 0; height: 0;
+  border-left: 105px solid transparent;
+  border-right: 105px solid transparent;
+  border-bottom: 60px solid #7a3224;
+}
+
+.workshop {
+  position: absolute;
+  right: 200px;
+  bottom: 60px;
+  width: 180px;
+  height: 120px;
+  background: linear-gradient(180deg, #bca27a, #7f5a2a);
+  border: 4px solid rgba(70, 44, 17, 0.76);
+  border-radius: 10px;
+}
+
+.garden-pond,
+.garden-path,
+.garden-stone,
+.garden-tree,
+.garden-flower,
+.garden-bonsai {
+  position: absolute;
+}
+
+.garden-pond {
+  left: 350px;
+  bottom: 50px;
+  width: 220px;
+  height: 120px;
+  background: linear-gradient(180deg, rgba(114,173,178,0.85), rgba(39,69,72,0.95));
+  border-radius: 50% 55% 42% 42%;
+  box-shadow: inset 0 12px 0 rgba(255,255,255,0.18);
+}
+
+.garden-path {
+  left: 240px;
+  bottom: 46px;
+  width: 520px;
+  height: 72px;
+  background: linear-gradient(180deg, #d6c29c, #b19062);
+  border-radius: 40px;
+  box-shadow: 0 0 0 3px rgba(64,48,32,0.12);
+}
+
+.garden-stone {
+  width: 20px; height: 20px; background: #888d8b; border-radius: 50%;
+  box-shadow: inset 0 0 0 3px rgba(35,35,35,0.18);
+}
+
+.garden-tree {
+  width: 32px; height: 80px;
+  background: linear-gradient(180deg, #5d7d4b, #36533b);
+  border-radius: 40% 40% 18% 18%;
+  bottom: 120px;
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,0.06);
+}
+
+.garden-tree::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -36px;
+  width: 64px;
+  height: 64px;
+  background: radial-gradient(circle, rgba(108, 164, 110, 0.8), rgba(32, 70, 32, 0.9));
+  border-radius: 50%;
+}
+
+.garden-bonsai {
+  width: 86px; height: 102px;
+  bottom: 88px;
+  cursor: pointer;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08));
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: transform 120ms ease;
+}
+
+.garden-bonsai:hover {
+  transform: translateY(-4px);
+}
+
+.garden-bonsai .trunk {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: 12px;
+  height: 54px;
+  background: linear-gradient(180deg, #714b2a, #492710);
+  border-radius: 8px;
+}
+
+.garden-bonsai .canopy {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 10px;
+  width: 70px;
+  height: 48px;
+  background: radial-gradient(circle at 50% 35%, rgba(150, 214, 130, 0.95), rgba(59, 90, 54, 0.9));
+  border-radius: 50% 50% 44% 44%;
+}
+
+.garden-bonsai.juniper .canopy { background: radial-gradient(circle at 50% 35%, rgba(110, 175, 110, 0.9), rgba(34, 79, 39, 0.9)); }
+.garden-bonsai.maple .canopy { background: radial-gradient(circle at 50% 35%, rgba(227, 130, 92, 0.9), rgba(118, 57, 34, 0.9)); }
+.garden-bonsai.cherry .canopy { background: radial-gradient(circle at 50% 35%, rgba(242, 178, 208, 0.9), rgba(126, 64, 91, 0.9)); }
+.garden-bonsai.pine .canopy { background: radial-gradient(circle at 50% 35%, rgba(95, 143, 86, 1), rgba(34, 88, 46, 0.95)); }
+.garden-bonsai.bamboo .canopy { background: radial-gradient(circle at 50% 35%, rgba(116, 160, 96, 0.95), rgba(38, 84, 49, 0.95)); }
+
+.info-box, .list-box, .log-box, .crafting-stages {
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.info-box.empty, .list-box, .log-box, .crafting-stages {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.info-box { min-height: 80px; }
+
+.list-box {
+  min-height: 120px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.log-box {
+  min-height: 140px;
+  max-height: 220px;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+}
+
+.log-item {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+}
+
+.item-row {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.item-row:last-child { border-bottom: none; }
+
+.item-name { font-weight: 600; }
+.item-meta { color: var(--muted); font-size: 0.82rem; }
+
+@media (max-width: 1180px) {
+  #game-shell {
+    grid-template-columns: 1fr;
+  }
+
+  #viewport {
+    min-height: 540px;
+  }
+}

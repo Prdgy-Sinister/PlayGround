@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Way of the Samurai</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="game-shell">
+      <aside class="sidebar left-panel">
+        <div class="panel-header">Estate</div>
+        <div class="stat-grid">
+          <div><span>Money</span><strong id="moneyStat">¥0</strong></div>
+          <div><span>Reputation</span><strong id="reputationStat">0</strong></div>
+          <div><span>Season</span><strong id="seasonStat">Spring</strong></div>
+          <div><span>Day</span><strong id="dayStat">1</strong></div>
+          <div><span>Time</span><strong id="timeStat">09:00</strong></div>
+          <div><span>Workshop</span><strong id="workshopStat">1</strong></div>
+        </div>
+
+        <div class="panel-block">
+          <h3>Bonsai Care</h3>
+          <div class="button-row">
+            <button id="waterBtn">Water</button>
+            <button id="pruneBtn">Prune</button>
+          </div>
+          <div class="button-row">
+            <button id="wireBtn">Wire</button>
+            <button id="shapeBtn">Shape</button>
+          </div>
+          <div class="button-row single">
+            <button id="repotBtn">Repot</button>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <h3>Estate Upgrades</h3>
+          <div class="button-row single">
+            <button id="upgradeEstateBtn">Upgrade Estate</button>
+          </div>
+          <div class="button-row single">
+            <button id="hireAssistantBtn">Hire Assistant</button>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <h3>Selected Bonsai</h3>
+          <div id="bonsaiInfo" class="info-box empty">Select a tree in the garden.</div>
+        </div>
+      </aside>
+
+      <main id="viewport-wrap">
+        <div class="top-bar">
+          <div>
+            <span class="subtitle">The Way of the Samurai</span>
+            <h1>Mountain Estate</h1>
+          </div>
+          <div class="button-row compact">
+            <button id="advanceDayBtn">Advance Day</button>
+            <button id="nightMarketBtn">Open Oni Market</button>
+          </div>
+        </div>
+        <div id="viewport"></div>
+      </main>
+
+      <aside class="sidebar right-panel">
+        <div class="panel-header">Workshop</div>
+        <div class="panel-block">
+          <h3>Crafting</h3>
+          <div id="craftingStages" class="crafting-stages">No active work.</div>
+          <div class="button-row single">
+            <button id="craftWeaponBtn">Craft Weapon</button>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <h3>Inventory</h3>
+          <div id="inventoryList" class="list-box"></div>
+        </div>
+
+        <div class="panel-block">
+          <h3>Market</h3>
+          <div id="auctionPanel" class="info-box empty">No auction in progress.</div>
+          <div class="button-row single">
+            <button id="auctionBtn">Run Auction</button>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <h3>Log</h3>
+          <div id="eventLog" class="log-box"></div>
+        </div>
+      </aside>
+    </div>
+
+    <script type="module" src="game.js"></script>
+  </body>
+</html>
