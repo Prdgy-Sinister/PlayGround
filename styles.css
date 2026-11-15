@@ -69,3 +69,70 @@
   .mc-pedals button{width:86px;min-width:86px}
   .mc-pedals button[data-control=gas]{height:62px}
 }
+
+/* ---- pit stop mini game ---- */
+.hud-left>div,.hud-right{background:#111710ee;backdrop-filter:none}
+.pit-modal{background:#070a07e8;backdrop-filter:none}
+.pit-card{width:min(430px,92vw);max-height:92vh;overflow:auto;border:1px solid #ffffff38;background:#151b14;padding:26px 28px 24px;box-shadow:0 20px 90px #0009}
+.pit-card h2{font:800 48px/.86 var(--display);margin:12px 0 4px;letter-spacing:-.02em}
+.pit-sub{color:#a4ad99;font-size:10px;line-height:1.7;margin:0 0 4px}
+.pit-car{position:relative;width:190px;height:206px;margin:2px auto 0}
+.pit-chassis{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56px;height:146px;border-radius:30px 30px 18px 18px;background:linear-gradient(90deg,#252d23,#63725d 48%,#1f2720);border:1px solid #ffffff26;display:grid;place-items:center;box-shadow:0 0 26px #d5f66a12}
+.pit-chassis:before,.pit-chassis:after{content:'';position:absolute;left:50%;transform:translateX(-50%);background:#394335;border:1px solid #ffffff1f}
+.pit-chassis:before{top:-23px;width:34px;height:26px;border-radius:4px}
+.pit-chassis:after{bottom:-27px;width:52px;height:24px;border-radius:4px}
+.pit-chassis span{font:900 22px var(--display);color:#d5f66a;opacity:.75;transform:skew(-8deg);font-style:italic}
+.pit-wheel{position:absolute;width:46px;height:56px;border:1px solid #ffffff33;background:#20271e;display:grid;place-items:center;font:600 9px var(--mono);color:#aeb6a5;transition:background .18s,border .18s,color .18s,box-shadow .18s}
+.pit-wheel b{font-weight:500}
+#pitWheelFL{left:0;top:22px}
+#pitWheelFR{right:0;top:22px}
+#pitWheelRL{left:0;bottom:22px}
+#pitWheelRR{right:0;bottom:22px}
+.pit-wheel.active{border-color:var(--acid);color:var(--acid);animation:pitPulse .62s infinite alternate}
+.pit-wheel.done{background:var(--acid);border-color:var(--acid);color:#151a12;animation:none;box-shadow:0 0 18px #d5f66a44}
+.pit-wheel.done b:after{content:' ✓';font-size:8px}
+.pit-nozzle{position:absolute;right:-8px;top:50%;transform:translateY(-50%);border:1px solid #ffffff33;background:#20271e;padding:7px 6px;display:grid;gap:3px;font:600 8px var(--mono);color:#aeb6a5;text-align:center;min-width:42px;transition:background .18s,border .18s,color .18s,box-shadow .18s}
+.pit-nozzle small{font:500 7px var(--mono);color:#8f9984}
+.pit-nozzle.active{border-color:var(--acid);color:var(--acid);animation:pitPulse .62s infinite alternate}
+.pit-nozzle.done{background:var(--acid);border-color:var(--acid);color:#151a12}
+.pit-nozzle.done small{color:#3f4a2b}
+.pit-nozzle.off{opacity:.28}
+@keyframes pitPulse{from{box-shadow:0 0 0 2px #d5f66a22,0 0 10px #d5f66a33}to{box-shadow:0 0 0 4px #d5f66a44,0 0 26px #d5f66a77}}
+.pit-stage{text-align:center;font:600 11px var(--mono);letter-spacing:.12em;color:var(--acid);margin:2px 0 10px}
+.pit-stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #ffffff20;border-bottom:1px solid #ffffff20;padding:9px 0;margin-bottom:12px}
+.pit-stats div{display:grid;gap:3px}
+.pit-stats div+div{border-left:1px solid #ffffff18;padding-left:12px}
+.pit-stats b{font:600 19px var(--display);color:#eef1e4}
+.pit-stats small{font:400 7px var(--mono);color:#929b8a;letter-spacing:.06em}
+.pit-meter{position:relative;height:28px;margin:0 0 8px;background:#0d120c;border:1px solid #ffffff26;overflow:hidden}
+.pit-zone{position:absolute;left:39%;width:22%;top:0;bottom:0;background:linear-gradient(90deg,#d5f66a12,#d5f66a55,#d5f66a12);border-left:1px solid #d5f66a88;border-right:1px solid #d5f66a88}
+#pitNeedle{position:absolute;top:0;bottom:0;left:50%;width:3px;background:#fff;box-shadow:0 0 12px #fff}
+.pit-feedback{min-height:26px;font:500 8px/1.6 var(--mono);letter-spacing:.05em;color:#a9b29f;margin-bottom:6px}
+.pit-feedback.ok{color:var(--acid)}
+.pit-feedback.warn{color:#f39a78}
+.pit-card .button{width:100%;text-align:left}
+.pit-result{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #ffffff22;margin-top:12px;padding-top:12px;gap:8px}
+.pit-result div{display:grid;gap:3px}
+.pit-result b{font:600 22px var(--display);color:var(--acid)}
+.pit-result small{font:400 7px var(--mono);color:#929b8a}
+.pit-result.hidden{display:none}
+.pit-service{font:400 8px/1.7 var(--mono);color:#9aa38f;margin:8px 0 0;text-align:center}
+@media(max-width:650px){
+  .hud-left>div,.hud-right{background:#111710f5;backdrop-filter:none}
+  .mobile-controls button{backdrop-filter:none;background:#111710ee}
+  .pit-card{padding:20px 20px 18px}
+  .pit-card h2{font-size:38px}
+  .pit-card .eyebrow{font-size:8px}
+  .pit-car{width:172px;height:178px}
+  .pit-chassis{width:48px;height:122px}
+  .pit-chassis:before{top:-19px;width:30px;height:22px}
+  .pit-chassis:after{bottom:-22px;width:46px;height:20px}
+  .pit-wheel{width:42px;height:48px;font-size:8px}
+  #pitWheelFL{top:16px}
+  #pitWheelFR{top:16px}
+  #pitWheelRL{bottom:16px}
+  #pitWheelRR{bottom:16px}
+  .pit-nozzle{right:-6px;min-width:38px;padding:6px 4px}
+  .pit-stage{font-size:10px;margin-bottom:7px}
+  .pit-stats b{font-size:17px}
+}
