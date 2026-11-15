@@ -28,6 +28,11 @@ export class Race3D {
     this.frameAcc = 0;
     this.frameCount = 0;
     this.autoSteps = 0;
+    this.dprScale = 1;
+    this.shadowTick = 0;
+    this._up = new THREE.Vector3(0, 1, 0);
+    this._forward = new THREE.Vector3();
+    this._fillOffset = new THREE.Vector3(0, 6, 0);
 
     this.camera = new THREE.PerspectiveCamera(60, 1, .07, 2900);
     this.scene = new THREE.Scene();
@@ -58,7 +63,8 @@ export class Race3D {
     const rect = this.canvas.getBoundingClientRect();
     const w = Math.max(2, Math.round(rect.width));
     const h = Math.max(2, Math.round(rect.height));
-    const dpr = Math.min(window.devicePixelRatio || 1, this.quality === 'low' ? 1 : (w < 760 ? 1.35 : 1.5));
+    const base = this.quality === 'low' ? 1 : (w < 760 ? 1.25 : 1.35);
+    const dpr = Math.max(.8, Math.min(window.devicePixelRatio || 1, base) * this.dprScale);
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
@@ -316,8 +322,7 @@ export class Race3D {
       this.lookYaw *= k;
       this.lookPitch *= k;
     }
-    const up = new THREE.Vector3(0, 1, 0);
-    const forward = pose.tangent.clone().applyAxisAngle(up, this.lookYaw).normalize();
+    const forward = this._forward.copy(pose.tangent).applyAxisAngle(this._up, this.lookYaw).normalize();
 
     const cam = this.camera;
     this.playerRig.helmet.visible = mode !== 1;
@@ -429,32 +434,38 @@ export class Race3D {
       this.sun.position.copy(pos).addScaledVector(this.sunDir, 130);
       this.sun.target.position.copy(pos);
       this.sun.target.updateMatrixWorld();
-      this.fill.position.copy(cam.position).add(new THREE.Vector3(0, 6, 0));
+      this.fill.position.copy(cam.position).add(this._fillOffset);
       this.fill.target.position.copy(pos);
       this.fill.target.updateMatrixWorld();
     }
   }
 
   watchPerformance(step) {
-    if (this.autoSteps >= 2) return;
+    if (this.autoSteps >= 4) return;
     this.frameAcc += step; this.frameCount++;
-    if (this.frameCount < 45) return;
+    if (this.frameCount < 40) return;
     const avg = this.frameAcc / this.frameCount;
     this.frameAcc = 0; this.frameCount = 0;
-    if (avg < .038) { this.autoSteps = 2; return; }
+    if (avg < .022) { this.autoSteps = 4; return; }
     this.autoSteps++;
-    if (this.autoSteps === 1) {
-      this.quality = 'low';
+    if (this.autoSteps <= 2 && this.dprScale > .78) {
+      this.dprScale = Math.max(.78, this.dprScale - .1);
       this.resize();
-      if (this.sun && this.sun.shadow.map) {
-        this.sun.shadow.mapSize.set(512, 512);
-        this.sun.shadow.map.dispose();
-        this.sun.shadow.map = null;
-      }
-    } else {
+      return;
+    }
+    this.quality = 'low';
+    this.resize();
+    if (this.sun && this.sun.shadow.map) {
+      this.sun.shadow.mapSize.set(512, 512);
+      this.sun.shadow.map.dispose();
+      this.sun.shadow.map = null;
+    }
+    if (this.autoSteps >= 4) {
       this.renderer.shadowMap.enabled = false;
       if (this.rain) this.rain.visible = false;
       if (this.road) { this.road.asphalt.roughness = .9; }
+    } else {
+      this.renderer.shadowMap.enabled = true;
     }
   }
 
@@ -467,6 +478,12 @@ export class Race3D {
     this.updateCars(game, step);
     this.updateCamera(game, step);
     this.updateEffects(game, step);
+    if (this.quality === 'low') {
+      this.renderer.shadowMap.enabled = false;
+    } else {
+      this.renderer.shadowMap.autoUpdate = false;
+      this.renderer.shadowMap.needsUpdate = (this.shadowTick++ % 2) === 0;
+    }
     this.renderer.render(this.scene, this.camera);
   }
 }

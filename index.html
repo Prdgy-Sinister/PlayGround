@@ -47,7 +47,7 @@
         <div class="era-strip"><div class="strip-heading"><span>THE NINE ERAS</span><small>A SPORT IN CONSTANT MOTION</small></div><div id="eraCards" class="era-cards"></div></div>
         <section class="weekend-panel">
           <div class="weekend-intro"><div class="eyebrow"><i></i>YOUR NEXT CHALLENGE</div><h2>A NEW CHAPTER<br>STARTS HERE.</h2><p>Pick your era, make the grid, and take on a full race weekend.</p><button id="weekendButton" class="button light">BUILD A RACE WEEKEND <span>↗</span></button></div>
-          <div class="weekend-controls"><label>CHOOSE YOUR GENERATION<select id="eraSelect"></select></label><label>RACE WEEKEND<select id="sessionSelect"><option value="race">Race Day · 3 laps</option><option value="practice">Practice 1 · Free running</option><option value="qualifying">Qualifying · One-shot shootout</option><option value="championship">Historic Championship · 3 rounds</option><option value="timetrial">Time Trial · Beat the clock</option></select></label><label>CIRCUIT<select id="trackSelect"></select></label><div class="weekend-facts"><div><b id="selectedYear">1950</b><small>SEASON</small></div><div><b id="selectedCar">FRONT-ENGINE</b><small>CAR PHILOSOPHY</small></div><div><b id="selectedPower">V12</b><small>ENGINE NOTE</small></div></div></div>
+          <div class="weekend-controls"><label>CHOOSE YOUR GENERATION<select id="eraSelect"></select></label><label>RACE WEEKEND<select id="sessionSelect"><option value="race">Race Day · 5 laps</option><option value="practice">Practice 1 · Free running</option><option value="qualifying">Qualifying · One-shot shootout</option><option value="championship">Historic Championship · 5 laps / 3 rounds</option><option value="timetrial">Time Trial · Beat the clock</option></select></label><label>CIRCUIT<select id="trackSelect"></select></label><div class="weekend-facts"><div><b id="selectedYear">1950</b><small>SEASON</small></div><div><b id="selectedCar">FRONT-ENGINE</b><small>CAR PHILOSOPHY</small></div><div><b id="selectedPower">V12</b><small>ENGINE NOTE</small></div></div></div>
         </section>
         <div class="footer-line"><span>FORMULA ONE: THROUGH THE GENERATIONS</span><span>AN UNOFFICIAL HISTORICAL TRIBUTE · 2026</span></div>
       </section>
@@ -59,13 +59,42 @@
     <section id="raceScreen" class="race-screen hidden">
       <canvas id="raceCanvas" aria-label="3D Formula racing circuit"></canvas>
       <div class="race-vignette"></div>
-      <div class="race-header"><div class="race-brand"><b>F1</b><span>THROUGH THE<br>GENERATIONS</span></div><div class="race-event"><span id="raceRound">ROUND 01</span><b id="raceTitle">MONACO GRAND PRIX</b><small id="raceSubtitle">1950 · RACE DAY</small></div><button id="rotateButton" class="icon-button" aria-label="Rotate camera automatically" title="Rotate view">↻</button><button id="pauseRace" class="icon-button" aria-label="Pause race">Ⅱ</button></div>
+      <div class="race-header"><div class="race-brand"><b>F1</b><span>THROUGH THE<br>GENERATIONS</span></div><div class="race-event"><span id="raceRound">ROUND 01</span><b id="raceTitle">MONACO GRAND PRIX</b><small id="raceSubtitle">1950 · RACE DAY</small><div class="elapsed-clock"><span>RACE TIME</span><b id="elapsedValue">00:00.000</b></div></div><button id="rotateButton" class="icon-button" aria-label="Rotate camera automatically" title="Rotate view">↻</button><button id="pauseRace" class="icon-button" aria-label="Pause race">Ⅱ</button></div>
       <div id="countdownLights" class="countdown-lights hidden"><span></span><span></span><span></span><span></span><span></span><small>LIGHTS OUT AND AWAY WE GO</small></div>
-      <div class="race-hud"><div class="hud-left"><div class="position-box"><b id="positionValue">P 08</b><small>POSITION</small></div><div class="lap-box"><b id="lapValue">01<span>/03</span></b><small>LAP</small></div><div class="time-box"><b id="timeValue">00:00.000</b><small>LAP TIME <i id="deltaValue">—</i></small></div></div><div class="hud-right"><div class="speed-box"><b id="speedValue">000</b><span>KM/H</span><div class="rpm-bar"><i id="rpmBar"></i></div><small id="gearValue">GEAR N</small></div><div class="telemetry"><div><span>TYRE</span><b id="tyreValue">SOFT · 100%</b></div><div><span>FUEL</span><b id="fuelValue">48 L</b></div><div><span>ENGINE</span><b id="engineValue">92°</b></div><div><span>CONDITION</span><b id="conditionValue">100%</b></div></div></div></div>
+      <div class="race-hud"><div class="hud-left"><div class="position-box"><b id="positionValue">P 08</b><small>POSITION</small></div><div class="lap-box"><b id="lapValue">01<span>/05</span></b><small>LAP</small></div><div class="time-box"><b id="timeValue">00:00.000</b><small>LAP TIME <i id="deltaValue">—</i></small></div></div><div class="hud-right"><div class="speed-box"><b id="speedValue">000</b><span>KM/H</span><div class="rpm-bar"><i id="rpmBar"></i></div><small id="gearValue">GEAR N</small></div><div class="telemetry"><div><span>TYRE</span><b id="tyreValue">SOFT · 100%</b></div><div><span>FUEL</span><b id="fuelValue">48 L</b></div><div><span>ENGINE</span><b id="engineValue">92°</b></div><div><span>CONDITION</span><b id="conditionValue">100%</b></div></div></div></div>
       <div class="race-message" id="raceMessage">WELCOME TO THE GRID</div>
       <div class="race-bottom"><div class="race-controls-hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>DRIVE</span><kbd>C</kbd><span>CAMERA</span><kbd>1-5</kbd><span>ANGLES</span><span>DRAG TO LOOK</span><kbd>P</kbd><span>PIT</span></div><div class="race-bottom-actions"><button id="cameraButton" class="race-action">CAM <b>CHASE</b></button><button id="weatherButton" class="race-action">WEATHER <b>DRY</b></button><button id="tyreButton" class="race-action">TYRE <b>SOFT</b></button><button id="pitButton" class="race-action">PIT <b>REQUEST</b></button><button id="exitRace" class="race-action exit">EXIT SESSION ↗</button></div></div>
       <div class="mobile-controls"><div class="mc-steer"><button data-control="left" aria-label="Steer left">◀</button><button data-control="right" aria-label="Steer right">▶</button></div><div class="mc-pedals"><button data-control="brake" aria-label="Brake">BRAKE</button><button data-control="gas" aria-label="Throttle">THROTTLE</button></div></div>
       <div id="pauseModal" class="modal hidden"><div class="modal-card"><span class="eyebrow"><i></i>RACE CONTROL</span><h2>SESSION PAUSED</h2><p>Take a breath. Your race is right where you left it.</p><button id="resumeRace" class="button primary">RESUME RACE <span>→</span></button><button id="pauseExit" class="button ghost">END SESSION</button></div></div>
+      <div id="pitModal" class="modal pit-modal hidden">
+        <div class="pit-card">
+          <span class="eyebrow"><i></i>PIT LANE • CREW READY</span>
+          <h2>BOX BOX.</h2>
+          <p class="pit-sub" id="pitSub">Hit the green zone as the crew services each wheel.</p>
+          <div class="pit-car">
+            <div class="pit-chassis"><span>F1</span></div>
+            <div class="pit-wheel" id="pitWheelFL"><b>FL</b></div>
+            <div class="pit-wheel" id="pitWheelFR"><b>FR</b></div>
+            <div class="pit-wheel" id="pitWheelRL"><b>RL</b></div>
+            <div class="pit-wheel" id="pitWheelRR"><b>RR</b></div>
+            <div class="pit-nozzle" id="pitFuel"><b>FUEL</b><small id="pitFuelLabel">+0 L</small></div>
+          </div>
+          <div class="pit-stage" id="pitStage">FRONT LEFT TYRE</div>
+          <div class="pit-stats">
+            <div><small>TYRES</small><b id="pitTyreStage">0 / 4</b></div>
+            <div><small>FUEL</small><b id="pitFuelStage">—</b></div>
+            <div><small>STOP TIME</small><b id="pitStopTime">0.0s</b></div>
+          </div>
+          <div class="pit-meter"><div class="pit-zone"></div><i id="pitNeedle"></i></div>
+          <div class="pit-feedback" id="pitFeedback">TIME YOUR TAP IN THE GREEN</div>
+          <button id="pitAction" class="button primary">HIT THE ZONE <span>SPACE</span></button>
+          <div class="pit-result hidden" id="pitResult">
+            <div><b id="pitResultTime">—</b><small>STOP TIME</small></div>
+            <div><b id="pitPenalty">—</b><small>TIME LOST</small></div>
+          </div>
+          <p class="pit-service" id="pitService"></p>
+        </div>
+      </div>
       <div id="resultModal" class="modal hidden"><div class="modal-card result-card"><span class="eyebrow"><i></i>CHEQUERED FLAG</span><h2 id="resultTitle">PODIUM FINISH</h2><p id="resultCopy">A brilliant drive through the streets of Monaco.</p><div class="result-stats"><div><b id="resultPosition">P 01</b><small>FINISH</small></div><div><b id="resultTime">03:42.991</b><small>BEST LAP</small></div><div><b id="resultXP">+120</b><small>REPUTATION</small></div></div><div id="podiumCars" class="podium-cars"></div><button id="continueAfterRace" class="button primary">BACK TO THE PADDOCK <span>↗</span></button></div></div>
     </section>
     <div id="toast" class="toast"></div>
