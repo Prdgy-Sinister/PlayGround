@@ -37,8 +37,13 @@ export class Race3D {
     this.camInit = false;
     this.camMode = -1;
     this.playerPose = null;
+    this.speedProfile = null;
+    this.lookYaw = 0;
+    this.lookPitch = 0;
+    this.lookActive = false;
     this.ownedTextures = [];
     this.resize();
+    this.bindLookControls();
 
     this.textures = {
       asphalt: texAsphalt(), grass: texGrass(), kerb: texKerb(), crowd: texCrowd(),
@@ -87,6 +92,11 @@ export class Race3D {
     this.game = game;
     this.style = CAR_STYLES[clamp(game.eraIndex, 0, 8)];
     this.layout = buildLayout(game.track, game.eraIndex);
+    /* The 3D circuit and the race clock must agree on one lap length. */
+    game.lapLength = this.layout.length;
+    this.speedProfile = this.buildSpeedProfile(game);
+    game.speedCapAt = u => this.speedCapAt(u);
+    game.turnAt = u => this.layout.turnAt(u);
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0xa9c8d8, 120, 1050);
@@ -245,6 +255,51 @@ export class Race3D {
     });
   }
 
+  buildSpeedProfile(game) {
+    const era = game.era;
+    /* Grip is the arcade archetype, mapped onto a believable lateral-g range.
+       The profile already includes braking anticipation for the next corner. */
+    const latG = .9 + (era.grip / 100) * 2.6;
+    const decel = Math.max(6, era.braking * 1.95 / 3.6);
+    return this.layout.buildSpeedProfile(latG, decel, era.max / 3.6, this.layout.custom ? 1.8 : 4.0);
+  }
+
+  speedCapAt(u) {
+    const prof = this.speedProfile;
+    if (!prof) return 200;
+    const S = this.layout.S;
+    let f = u * S; f = ((f % S) + S) % S;
+    const i = Math.floor(f), t = f - i;
+    return (prof[i] * (1 - t) + prof[(i + 1) % S] * t) * 3.6;
+  }
+
+  bindLookControls() {
+    const el = this.canvas;
+    let sx = 0, sy = 0, active = false;
+    const down = e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      active = true;
+      this.lookActive = true;
+      sx = e.clientX; sy = e.clientY;
+      el.setPointerCapture && el.setPointerCapture(e.pointerId);
+    };
+    const move = e => {
+      if (!active) return;
+      this.lookYaw = clamp(this.lookYaw + (e.clientX - sx) * .006, -1.5, 1.5);
+      this.lookPitch = clamp(this.lookPitch + (e.clientY - sy) * .004, -.5, .5);
+      sx = e.clientX; sy = e.clientY;
+    };
+    const up = () => {
+      active = false;
+      this.lookActive = false;
+    };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
+  }
+
   updateCamera(game, dt) {
     const pose = this.playerPose;
     if (!pose) return;
@@ -253,6 +308,17 @@ export class Race3D {
     const mode = game.camera | 0;
     if (mode !== this.camMode) { this.camMode = mode; this.camInit = false; }
 
+    if (game.lookAuto) {
+      this.lookYaw += dt * .42;
+      if (this.lookYaw > Math.PI * 2) this.lookYaw -= Math.PI * 2;
+    } else if (!this.lookActive) {
+      const k = Math.exp(-dt * 1.7);
+      this.lookYaw *= k;
+      this.lookPitch *= k;
+    }
+    const up = new THREE.Vector3(0, 1, 0);
+    const forward = pose.tangent.clone().applyAxisAngle(up, this.lookYaw).normalize();
+
     const cam = this.camera;
     this.playerRig.helmet.visible = mode !== 1;
     let fov = 60;
@@ -260,7 +326,11 @@ export class Race3D {
     if (mode === 1) {
       this.playerRig.root.updateMatrixWorld(true);
       const eye = this.playerRig.root.localToWorld(this.playerRig.eye.clone());
-      const look = this.playerRig.root.localToWorld(new THREE.Vector3(0, this.playerRig.eye.y - .08, 34));
+      const look = this.playerRig.root.localToWorld(new THREE.Vector3(
+        Math.sin(this.lookYaw) * 34,
+        this.playerRig.eye.y - .08 + this.lookPitch * 14,
+        Math.cos(this.lookYaw) * 34
+      ));
       cam.position.copy(eye);
       cam.lookAt(look);
       fov = 74;
@@ -280,10 +350,10 @@ export class Race3D {
       this.camInit = false;
     } else if (mode === 3) {
       const desired = pose.pos.clone()
-        .addScaledVector(pose.tangent, -17)
+        .addScaledVector(forward, -17)
         .addScaledVector(pose.side, 13);
-      desired.y += 26;
-      const look = pose.pos.clone().addScaledVector(pose.tangent, 9);
+      desired.y += 26 + this.lookPitch * 10;
+      const look = pose.pos.clone().addScaledVector(forward, 9);
       look.y += 1.2;
       if (!this.camInit) { this.camPos = desired.clone(); this.camLook = look.clone(); this.camInit = true; }
       const k = 1 - Math.exp(-dt * 3.2), kl = 1 - Math.exp(-dt * 4.2);
@@ -292,12 +362,28 @@ export class Race3D {
       cam.position.copy(this.camPos);
       cam.lookAt(this.camLook);
       fov = 46;
+    } else if (mode === 4) {
+      const angle = this.time * .20 + this.lookYaw;
+      const radius = 15 + ratio * 6;
+      const desired = pose.pos.clone().add(new THREE.Vector3(
+        Math.sin(angle) * radius,
+        6.5 + this.lookPitch * 12,
+        Math.cos(angle) * radius
+      ));
+      const look = pose.pos.clone();
+      look.y += .85;
+      if (!this.camInit) { this.camPos = desired.clone(); this.camLook = look.clone(); this.camInit = true; }
+      const k = 1 - Math.exp(-dt * 2.8), kl = 1 - Math.exp(-dt * 4);
+      this.camPos.lerp(desired, k);
+      this.camLook.lerp(look, kl);
+      cam.position.copy(this.camPos);
+      cam.lookAt(this.camLook);
+      fov = 50;
     } else {
-      const back = 6.1 + ratio * 2.6;
-      const desired = pose.pos.clone()
-        .addScaledVector(pose.tangent, -back);
-      desired.y += 2.15 + ratio * .45;
-      const look = pose.pos.clone().addScaledVector(pose.tangent, 8.5 + ratio * 5);
+      const back = 7.4 + ratio * 3.4;
+      const desired = pose.pos.clone().addScaledVector(forward, -back);
+      desired.y += 2.35 + ratio * .5 + this.lookPitch * 3.2;
+      const look = pose.pos.clone().addScaledVector(forward, 9.5 + ratio * 6);
       look.y += 1.0;
       if (!this.camInit) { this.camPos = desired.clone(); this.camLook = look.clone(); this.camInit = true; }
       const k = 1 - Math.exp(-dt * 5.5), kl = 1 - Math.exp(-dt * 7.5);
@@ -308,7 +394,7 @@ export class Race3D {
       cam.position.x += Math.sin(this.time * 47.3) * shake;
       cam.position.y += Math.cos(this.time * 39.7) * shake * .7;
       cam.lookAt(this.camLook);
-      fov = 56 + ratio * 12;
+      fov = 54 + ratio * 9;
     }
 
     if (Math.abs(cam.fov - fov) > .05) {

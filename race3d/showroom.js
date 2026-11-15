@@ -48,6 +48,7 @@ export class Showroom {
     this.time = 0;
     this.yaw = -.62;
     this.dragging = false;
+    this.autoSpin = true;
     this.idle = 0;
     this.lastX = 0;
     this.running = false;
@@ -223,6 +224,16 @@ export class Showroom {
     el.addEventListener('pointerleave', up);
   }
 
+  rotateBy(delta) {
+    this.yaw += delta;
+    this.idle = 0;
+  }
+
+  setAuto(on) {
+    this.autoSpin = !!on;
+    this.idle = 0;
+  }
+
   resize() {
     const w = Math.max(2, Math.round(this.canvas.clientWidth));
     const h = Math.max(2, Math.round(this.canvas.clientHeight));
@@ -257,7 +268,7 @@ export class Showroom {
     this.time += dt;
     if (!this.dragging) {
       this.idle += dt;
-      if (this.idle > .4) this.yaw += dt * .085;
+      if (this.autoSpin && this.idle > .4) this.yaw += dt * .085;
     }
     this.stage.rotation.y = this.yaw;
     if (this.rig) {
