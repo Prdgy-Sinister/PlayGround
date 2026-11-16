@@ -27,6 +27,8 @@ export class Preview3D {
     this.renderer.toneMappingExposure = 1.15;
 
     this.scene = new THREE.Scene();
+    this.scene.environment = this.makeStudioEnv();
+    this.scene.environmentIntensity = 0.9;
     this.camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
     this.camera.position.set(0, 2.3, 6.0);
     this.camera.lookAt(0, 1.2, 0);
@@ -74,6 +76,29 @@ export class Preview3D {
     this.resize();
   }
 
+  makeStudioEnv() {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 128;
+    const ctx = c.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, 128);
+    g.addColorStop(0, '#d8c7a4');
+    g.addColorStop(0.42, '#7d705e');
+    g.addColorStop(0.55, '#3b332b');
+    g.addColorStop(1, '#14100c');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 128);
+    const glow = ctx.createRadialGradient(188, 48, 2, 188, 48, 52);
+    glow.addColorStop(0, 'rgba(255,240,206,.95)');
+    glow.addColorStop(1, 'rgba(255,240,206,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, 256, 128);
+    const tex = new THREE.CanvasTexture(c);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
   attach(host) {
     this.ensure();
     this.host = host;
@@ -98,7 +123,8 @@ export class Preview3D {
     this.item = item;
     while (this.itemGroup.children.length) this.itemGroup.remove(this.itemGroup.children[0]);
     if (!item) return;
-    const seasonId = window.GAME ? seasonOf(window.GAME.state.day).id : 'spring';
+    const game = window.SAMURAI?.game;
+    const seasonId = game ? seasonOf(game.state.day).id : 'spring';
     let obj;
     if (item.kind === 'tree') {
       obj = createBonsai(item, seasonId, { scale: 1.15, castShadow: true });

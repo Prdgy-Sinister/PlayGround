@@ -9,7 +9,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const smooth = (t) => t * t * (3 - 2 * t);
 
 export const LOCATIONS = {
-  estate: { id: 'estate', name: 'Your Estate', jp: '山荘', kanji: '宅', x: 0, z: 0, radius: 34, spawn: { x: 0, z: 13 }, blurb: 'House, bonsai garden and forge.', color: '#b33a2b' },
+  estate: { id: 'estate', name: 'Your Estate', jp: '山荘', kanji: '宅', x: 0, z: 0, radius: 34, spawn: { x: 0, z: 10.5 }, blurb: 'House, bonsai garden and forge.', color: '#b33a2b' },
   auction: { id: 'auction', name: 'Mountain Auction Grounds', jp: '競り市', kanji: '競', x: 96, z: 52, radius: 26, spawn: { x: 96, z: 38 }, blurb: 'Where the mountain gathers to bid.', color: '#b33a2b' },
   village: { id: 'village', name: 'Kagaribi Village', jp: '篝火村', kanji: '村', x: -98, z: 86, radius: 30, spawn: { x: -98, z: 70 }, blurb: 'Merchants, seeds and village gossip.', color: '#8b6825' },
   temple: { id: 'temple', name: 'Temple of the Quiet Bell', jp: '静鐘寺', kanji: '寺', x: -110, z: -82, radius: 28, spawn: { x: -110, z: -63 }, blurb: 'Incense, blessings and old commissions.', color: '#6b5a38' },
@@ -148,9 +148,12 @@ export class World {
     this.keys = { w: false, a: false, s: false, d: false };
     this.joystick = { x: 0, y: 0 };
     this.camYaw = 0.2;
-    this.camPolar = 0.92;
-    this.camDist = 26;
+    this.camPolar = 0.44;
+    this.camDist = 22;
     this.camTarget = new V3(0, 1.7, 8);
+    this.cameraBlockers = [];
+    this.camRay = new THREE.Raycaster();
+    this.camRay.near = 0.2;
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 900);
     this.player = null;
     this.walkTime = 0;
@@ -173,7 +176,7 @@ export class World {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.98;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.fog = new THREE.Fog(0xc7d0c2, 80, 310);
 
@@ -577,6 +580,14 @@ export class World {
     return geo;
   }
 
+  registerCameraBlockers(group) {
+    group.traverse((o) => {
+      if (!o.isMesh || !o.geometry) return;
+      o.geometry.computeBoundingSphere();
+      if ((o.geometry.boundingSphere?.radius || 0) > 1.1) this.cameraBlockers.push(o);
+    });
+  }
+
   makeHouse({ w = 11, d = 8, h = 3.2, roofMat = null, color = 0xe8ddc4 } = {}) {
     const g = new THREE.Group();
     const foundation = new THREE.Mesh(new THREE.BoxGeometry(w + 1.2, 0.5, d + 1.2), MAT.stone());
@@ -666,6 +677,7 @@ export class World {
       g.add(lan);
     }
     g.userData.width = w; g.userData.depth = d;
+    this.registerCameraBlockers(g);
     return g;
   }
 
@@ -1079,15 +1091,17 @@ export class World {
   makeGate() {
     const g = new THREE.Group();
     for (const sx of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.28, 2.8, 0.28), MAT.darkWood());
-      post.position.set(sx * 2.1, 1.4, 0);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.32, 2.7, 0.32), MAT.darkWood());
+      post.position.set(sx * 2.3, 1.35, 0);
+      post.castShadow = true;
       g.add(post);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, 0.52), MAT.wood());
+      cap.position.set(sx * 2.3, 2.78, 0);
+      g.add(cap);
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.34, 0.22), new THREE.MeshStandardMaterial({ color: 0xd9c295, emissive: 0xffb264, emissiveIntensity: 0.15, roughness: 0.9 }));
+      lamp.position.set(sx * 2.3, 3.02, 0);
+      g.add(lamp);
     }
-    const top = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.28, 0.4), MAT.wood());
-    top.position.y = 2.8; g.add(top);
-    const roof = new THREE.Mesh(this.roofGeometry(5.2, 1.2, 0.7, 0.6, 0.35), MAT.roof());
-    roof.position.y = 2.95;
-    g.add(roof);
     return g;
   }
 
@@ -1200,6 +1214,7 @@ export class World {
     sign.position.set(0, 0, 4.2);
     sign.scale.setScalar(0.8);
     g.add(sign);
+    this.registerCameraBlockers(g);
     return g;
   }
 
@@ -1364,6 +1379,7 @@ export class World {
     const noren = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.8), new THREE.MeshStandardMaterial({ map: bannerTexture(kanji, '#2c3545', '#efe3c9'), side: THREE.DoubleSide }));
     noren.position.set(0, 2.5, 0.75);
     g.add(noren);
+    this.registerCameraBlockers(g);
     return g;
   }
 
@@ -1376,8 +1392,8 @@ export class World {
     this.villageGroup = g;
 
     const houses = [
-      [-14, -6, 0.2, 7, 6, 0x4d4038], [-2, -12, -0.1, 8, 7, 0x3c4148],
-      [11, -7, -0.2, 7, 6, 0x4a3d35], [-9, 10, 0.5, 6, 5, 0x353b42],
+      [-14, -6, 0.2, 7, 6, 0x4d4038], [14, -7, -0.2, 7, 6, 0x4a3d35],
+      [-13, 10, 0.5, 6, 5, 0x353b42], [14, 10, -0.35, 7, 6, 0x3c4148],
     ];
     houses.forEach(([x, z, ry, w, d, roof], i) => {
       const h = this.makeHouse({ w, d, h: 2.7, roofMat: new THREE.MeshStandardMaterial({ color: roof, roughness: 0.8, side: THREE.DoubleSide, flatShading: true }) });
@@ -1599,6 +1615,7 @@ export class World {
       ring.position.y = y - 0.2 + i * 0.35;
       g.add(ring);
     }
+    this.registerCameraBlockers(g);
     return g;
   }
 
@@ -2116,7 +2133,8 @@ export class World {
 
   buildPlayer() {
     this.player = this.makePerson('you');
-    this.player.position.set(0, 0, 13);
+    const spawn = LOCATIONS.estate.spawn;
+    this.player.position.set(spawn.x, 0, spawn.z);
     this.player.rotation.y = Math.PI;
     this.scene.add(this.player);
     this.player.userData.armL.baseRot = this.player.userData.armL.rotation.z;
@@ -2530,21 +2548,40 @@ export class World {
     this.queued = null;
     const angleToCenter = Math.atan2(loc.x - loc.spawn.x, loc.z - loc.spawn.z);
     this.camYaw = angleToCenter + Math.PI + 0.2;
-    this.camPolar = 0.9;
-    this.camDist = locId === 'estate' ? 26 : 24;
+    this.camPolar = 0.44;
+    this.camDist = locId === 'estate' ? 22 : 21;
     this.snapCamera();
     this.currentZone = null;
   }
 
+  clampCamera(desired) {
+    const dir = desired.clone().sub(this.camTarget);
+    const dist = dir.length();
+    if (dist > 0.001) {
+      dir.divideScalar(dist);
+      this.camRay.set(this.camTarget, dir);
+      this.camRay.far = dist;
+      const hits = this.camRay.intersectObjects(this.cameraBlockers, false);
+      if (hits.length) {
+        const safe = Math.max(2.4, hits[0].distance - 0.7);
+        if (safe < dist) desired.copy(this.camTarget).addScaledVector(dir, safe);
+      }
+    }
+    desired.y = Math.max(2.2, desired.y);
+    return desired;
+  }
+
   snapCamera() {
-    const target = new V3(this.player.position.x, 1.7, this.player.position.z);
+    const target = new V3(this.player.position.x, 2.0, this.player.position.z);
     this.camTarget.copy(target);
     const off = new V3(
       Math.sin(this.camYaw) * Math.cos(this.camPolar) * this.camDist,
       Math.sin(this.camPolar) * this.camDist,
       Math.cos(this.camYaw) * Math.cos(this.camPolar) * this.camDist,
     );
-    this.camera.position.copy(target).add(off);
+    const desired = target.clone().add(off);
+    this.clampCamera(desired);
+    this.camera.position.copy(desired);
     this.camera.lookAt(target);
   }
 
@@ -2589,7 +2626,7 @@ export class World {
     this.skyUniforms.sunStrength.value = 0.15 + dayF * 0.9;
 
     // lights
-    const sunInt = 0.15 + dayF * 1.7;
+    const sunInt = 0.15 + dayF * 1.55;
     this.sun.intensity = sunInt;
     this.sun.color.setHex(night > 0.6 ? 0x8fa8d0 : dusk > 0.4 || dawn > 0.4 ? 0xffc394 : 0xfff2db);
     const lightDir = isNightTime ? new V3(-0.4, 0.8, 0.3).normalize() : sunDir;
@@ -2840,15 +2877,14 @@ export class World {
   }
 
   updateCamera(dt) {
-    const target = new V3(this.player.position.x, 1.6, this.player.position.z);
+    const target = new V3(this.player.position.x, 2.0, this.player.position.z);
     this.camTarget.lerp(target, 1 - Math.exp(-8 * dt));
     const off = new V3(
       Math.sin(this.camYaw) * Math.cos(this.camPolar) * this.camDist,
       Math.sin(this.camPolar) * this.camDist,
       Math.cos(this.camYaw) * Math.cos(this.camPolar) * this.camDist,
     );
-    const desired = this.camTarget.clone().add(off);
-    desired.y = Math.max(2.2, desired.y);
+    const desired = this.clampCamera(this.camTarget.clone().add(off));
     this.camera.position.lerp(desired, 1 - Math.exp(-6 * dt));
     this.camera.lookAt(this.camTarget);
   }

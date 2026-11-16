@@ -94,7 +94,9 @@ export class Game {
   }
   focus(n) { this.state.focus = clamp(this.state.focus + n, 0, this.state.maxFocus); this.ui?.refreshFocus(); }
   saveGame() {
+    if (this.noSave) return false;
     if (save(this.state)) this.ui?.flashSaved();
+    return true;
   }
 
   checkRank() {
@@ -898,6 +900,7 @@ export class Game {
 
   // ————— offline/state persistence —————
   reset() {
+    this.noSave = true;
     clearSave();
     location.reload();
   }

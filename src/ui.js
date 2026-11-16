@@ -221,6 +221,7 @@ export class UI {
     this.refreshHUD();
     this.game.audio?.setMood('estate');
     this.showZone(LOCATIONS.estate);
+    this.world.snapCamera();
     const save = this.game.state;
     if (save.stats.sold > 0 || save.rep > 0) {
       this.toast(`Welcome back, ${rankFor(save.rep).name}. The mountain has waited.`, 'good');
@@ -1058,10 +1059,12 @@ export class UI {
     if (this.liveAuction) return this.auctionLiveView();
     if (this.auctionResult) return this.auctionResultView();
     const tab = this.tabs.auction;
+    const canStart = tab === 'sell' && this.auctionItems().length > 0;
     const body = this.tabsHTML('auction') + (tab === 'commissions' ? this.commissionsView() : tab === 'patrons' ? this.patronsView() : this.auctionSellView());
     return this.sheet({
       title: 'The Mountain Auction', sub: 'AUCTION GROUNDS · 競り市', seal: '競', body,
       footer: `<div class="tiny muted grow">Auction fee 7%. Reputation and relationships raise final prices.</div>
+        ${canStart ? '<button class="btn btn-primary" data-act="auction-start">Open the bidding</button>' : ''}
         <button class="btn btn-ghost" data-act="goto" data-panel="map" data-tab="map">Go to the grounds</button>
         <button class="btn" data-act="close">Back to the mountain</button>`,
     });
@@ -1077,7 +1080,7 @@ export class UI {
     const supernatural = item ? itemSupernatural(item) : false;
     const itemPreview = item ? `
       <div class="card" style="padding:14px">
-        <div class="preview-wrap tall">
+        <div class="preview-wrap" style="height:230px">
           <div data-preview style="position:absolute;inset:0"></div>
           <div class="preview-caption"><span class="jp">${item.kind === 'tree' ? SPECIES[item.sp]?.jp : WEAPON_TYPES[item.type]?.jp}</span><span>${money(appraised)}</span></div>
         </div>
@@ -1091,23 +1094,25 @@ export class UI {
           ${item.kind === 'tree' ? `<dt>Age</dt><dd>${item.age.toFixed(1)} years</dd><dt>Style</dt><dd>${Math.round(item.style)}</dd>` : `<dt>Material</dt><dd>${MATERIALS[item.material]?.name || item.material}</dd><dt>Durability</dt><dd>${item.durability}</dd>`}
           <dt>Fee</dt><dd>7% of final bid</dd>
         </div>
-        <div class="rule"></div>
-        <div class="section-label">Opening bid</div>
-        <div class="start-price">
-          ${[[0.55, 'Cautious'], [0.75, 'Balanced'], [1.0, 'Confident']].map(([m, label]) => `
-            <button class="${this.startMult === m ? 'active' : ''}" data-act="auction-mult" data-mult="${m}">
-              <b>${money(Math.round(appraised * m / 10) * 10)}</b><small>${label} · ${Math.round(m * 100)}% of appraisal</small>
-            </button>`).join('')}
-        </div>
-        <button class="btn btn-primary mt16" style="width:100%" data-act="auction-start">Open the bidding</button>
-        <div class="tiny muted center mt6">${supernatural && night ? 'The Oni are abroad tonight. Supernatural lots attract strange buyers.' : seasonalTag(s)}</div>
+        <div class="tiny muted mt10">${supernatural && night ? 'The Oni are abroad tonight. Supernatural lots attract strange buyers.' : seasonalTag(s)}</div>
       </div>` : `<div class="empty"><span class="big">競</span>Nothing to sell. Craft a blade or raise a bonsai first.</div>`;
+    const startBlock = item ? `
+      <div class="rule"></div>
+      <div class="row between"><div class="section-label" style="margin:0">Opening bid</div><span class="tiny muted">${supernatural && night ? 'Night auction' : 'Daylight auction'}</span></div>
+      <div class="start-price">
+        ${[[0.55, 'Cautious'], [0.75, 'Balanced'], [1.0, 'Confident']].map(([m, label]) => `
+          <button class="${this.startMult === m ? 'active' : ''}" data-act="auction-mult" data-mult="${m}">
+            <b>${money(Math.round(appraised * m / 10) * 10)}</b><small>${label} · ${Math.round(m * 100)}% of appraisal</small>
+          </button>`).join('')}
+      </div>
+      <div class="tiny muted mt6">Choose a starting price, then open the bidding.</div>` : '';
     return `<div class="split-wide">
       <div>
         <div class="section-label">Your consignment</div>
         ${items.length ? `<div class="panel-grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr));max-height:480px;overflow-y:auto;padding-right:2px">${items.map((i) => itemCard(i, i.id === this.selectedAuctionId)).join('')}</div>` : `<div class="empty"><span class="big">空</span>Your storehouse is empty.</div>`}
         <div class="rule"></div>
         <div class="tiny muted">Heirlooms are marked 宝 and never appear here. ${night ? 'Night auction: Oni may bid on supernatural works.' : 'Daylight auction: samurai, monks, merchants and nobles gather.'}</div>
+        ${startBlock}
       </div>
       <div>${itemPreview}</div>
     </div>`;
@@ -1253,7 +1258,9 @@ export class UI {
             <button class="btn" data-act="close">Return to the mountain</button>
           </div>
         </div>`,
-        footer: `<div class="tiny muted grow">The auctioneer bows and moves to the next lot.</div>`,
+        footer: `<div class="tiny muted grow">The auctioneer bows and moves to the next lot.</div>
+          <button class="btn" data-act="close">Return</button>
+          <button class="btn btn-primary" data-act="auction-reset">Try another lot</button>`,
       });
     }
     const st = r.settlement;
@@ -1280,7 +1287,9 @@ export class UI {
           <button class="btn" data-act="close">Return to the mountain</button>
         </div>
       </div>`,
-      footer: `<div class="tiny muted grow">A good sale is a small story the mountain tells for years.</div>`,
+      footer: `<div class="tiny muted grow">A good sale is a small story the mountain tells for years.</div>
+        <button class="btn" data-act="close">Return</button>
+        <button class="btn btn-primary" data-act="auction-reset">Sell another</button>`,
     });
   }
 
@@ -1579,9 +1588,19 @@ export class UI {
       ${this.tabsHTML('oni')}
       ${tab === 'lot' ? this.oniLotView() : this.oniWaresView()}
     `;
+    const lot = s.oniLot;
+    let bidActions = '';
+    if (tab === 'lot' && lot?.status === 'open') {
+      const inc = Math.max(300, Math.round(lot.currentBid * 0.08 / 50) * 50);
+      const next = lot.currentBid + inc;
+      bidActions = `<span class="small" style="color:#c8b3ab">Next bid <b class="gold">${money(next)}</b></span>
+        <button class="btn btn-ghost" style="color:#d9b9b1;border-color:rgba(190,100,110,.3)" data-act="oni-withdraw">Withdraw</button>
+        <button class="btn btn-primary" data-act="oni-bid" ${s.money < next ? 'disabled' : ''}>Raise the bid</button>`;
+    }
     return this.sheet({
       title: 'The Night Market', sub: 'FORBIDDEN WARES · 鬼市', seal: '鬼', dark: true, body,
       footer: `<div class="tiny muted grow" style="color:#a88784">“We do not lie. We simply do not explain.”</div>
+        ${bidActions}
         <button class="btn btn-ghost" data-act="close">Step back into the mist</button>`,
     });
   }
