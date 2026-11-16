@@ -76,7 +76,9 @@ export class Duel {
     this.loadout = (state.loadout || []).filter(id => state.learned[id]).slice(0, 4)
     if (!this.loadout.length) this.loadout = ['stupefy']
 
-    const center = this.world.arenaCenter ? this.world.arenaCenter.clone() : new THREE.Vector3(24, 0, -4)
+    const center = (opts.arena === 'academy' && this.world.academyArenaCenter)
+      ? this.world.academyArenaCenter.clone()
+      : (this.world.arenaCenter ? this.world.arenaCenter.clone() : new THREE.Vector3(24, 0, -4))
     this.arenaCenter = center
     this.world.setPlayer(center.x, center.z + 4.8, Math.PI)
     this.world.cameraYaw = 0

@@ -8,11 +8,14 @@ import {
   refreshCustomers, buyUpgrade, categoryUnlocked, nextLessonSpell, completeLesson,
   toggleLoadout, masteryRank, masteryOf, activeQuests, questProgress, addMat,
   spendGold, maxHealth, maxMana, rankTitle, repProgress, save, addRep, checkQuests,
-  tournamentRanks, resetGame, woodById, coreById, matById,
+  tournamentRanks, resetGame, woodById, coreById, matById, schoolMetricValue,
+  assignmentProgress, assignmentReady, academyYearTitle, canBrew, brewPotion,
+  claimAssignment,
 } from './state.js'
 import {
   WOODS, CORES, FLEXIBILITIES, CATEGORIES, SPELLS, SPELL_BY_ID, CATEGORY_SPELLS,
   QUESTS, RANKS, ZONES, NODES, DUELISTS, TOURNAMENT, COMBOS, RARITIES, BENCH_UPGRADES,
+  ACADEMY_ASSIGNMENTS, POTIONS, ACADEMY_CLUES,
 } from './data.js'
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -125,19 +128,15 @@ export class UI {
   renderQuestTracker() {
     const active = activeQuests()
     const done = QUESTS.filter(q => state.quests[q.id]?.complete).length
-    const rows = active.map(q => [q.id, questProgress(q), q.target])
-    const sig = rows.map(r => r.join(':')).join('|') + '#' + done
-    if (sig === this._questSig) return
-    this._questSig = sig
     if (!active.length) {
       this.el.quests.innerHTML = `<div class="quest-item"><div class="quest-line"><span>Every pursuit complete</span></div><div class="quest-more">The world remembers your name.</div></div>`
       return
     }
-    this.el.quests.innerHTML = active.map((q, i) => {
-      const [_, prog, target] = rows[i]
+    this.el.quests.innerHTML = active.map(q => {
+      const prog = questProgress(q)
       return `<div class="quest-item">
-        <div class="quest-line"><span>${esc(q.title)}</span><span class="qprog">${prog}/${target}</span></div>
-        <div class="quest-bar"><div style="width:${(prog / target) * 100}%"></div></div>
+        <div class="quest-line"><span>${esc(q.title)}</span><span class="qprog">${prog}/${q.target}</span></div>
+        <div class="quest-bar"><div style="width:${(prog / q.target) * 100}%"></div></div>
       </div>`
     }).join('') + `<div class="quest-more">${done} of ${QUESTS.length} pursuits complete</div>`
   }
@@ -304,8 +303,7 @@ export class UI {
 
   tick(dt) {
     this._minimapAcc += dt
-    const minimapInterval = document.body.classList.contains('touch') ? 0.28 : 0.18
-    if (this._minimapAcc > minimapInterval) { this._minimapAcc = 0; this.drawMinimap() }
+    if (this._minimapAcc > 0.12) { this._minimapAcc = 0; this.drawMinimap() }
     if (this.panelName === 'wand' && this.previewCtx) {
       this._previewTime += dt
       this.drawWandPreview(this._previewTime)
@@ -392,6 +390,8 @@ export class UI {
       case 'journal': this.el.panel.innerHTML = this.journalPanel(); break
       case 'tournament': this.el.panel.innerHTML = this.tournamentPanel(); break
       case 'duelpick': this.el.panel.innerHTML = this.duelPickPanel(); break
+      case 'school': this.el.panel.innerHTML = this.schoolPanel(); break
+      case 'potions': this.el.panel.innerHTML = this.potionsPanel(); break
       default: this.closePanel(); return
     }
     this.bindPanel()
@@ -513,6 +513,24 @@ export class UI {
         this.hooks.onReset?.()
         break
       }
+      case 'claim-assignment': {
+        const res = claimAssignment(data.id)
+        if (!res.ok) { this.toast('Not yet', res.error, 'bad', '❧'); this.hooks.onSfx?.('deny'); return }
+        this.hooks.onSfx?.('quest')
+        this.toast('Assignment complete', `${res.assignment.title} · +${res.assignment.gold}g · +${res.assignment.rep} rep`, 'good', '✓')
+        this.rerender(); this.updateHUD()
+        break
+      }
+      case 'brew': {
+        const res = brewPotion(data.id)
+        if (!res.ok) { this.toast('The cauldron refuses', res.error, 'bad', '☠'); this.hooks.onSfx?.('deny'); return }
+        this.hooks.onSfx?.('magic')
+        this.toast(res.potion.name, res.effect, 'magic', res.potion.glyph)
+        this.rerender(); this.updateHUD()
+        break
+      }
+      case 'open-spells': this.openPanel('spells', data.cat || 'offensive'); break
+      case 'open-potions': this.openPanel('potions'); break
       case 'toggle-sound': this.el.sound.click(); break
     }
   }
@@ -980,6 +998,119 @@ export class UI {
       if (!sel || !sel.value) { this.toast('Choose a wand first', 'The customer is tapping their foot.', 'bad', '!'); return }
       this.panelAction('sell', { wand: sel.value, customer: btn.dataset.sellBtn })
     }))
+  }
+
+  /* ------------------------------------------------------ ACADEMY PANEL */
+  schoolPanel() {
+    const points = state.school?.points || 0
+    const year = academyYearTitle()
+    const house = state.school?.house || 'Ravenwood'
+    const clues = state.school?.clues || []
+    const assignments = ACADEMY_ASSIGNMENTS.map(a => {
+      const done = !!state.school?.assignments?.[a.id]
+      const prog = assignmentProgress(a)
+      const ready = assignmentReady(a)
+      return `<div class="assignment-card ${done ? 'done' : ready ? 'ready' : ''}">
+        <div class="asg-glyph">${done ? '✓' : ready ? '✦' : '❧'}</div>
+        <div class="asg-main">
+          <div class="asg-title">${esc(a.title)}</div>
+          <div class="asg-desc">${esc(a.desc)}</div>
+          <div class="asg-meta"><span>${esc(a.where)}</span><span class="asg-reward">◉ ${a.gold} · ✦ ${a.rep} · ✶ ${a.xp}</span><span>${prog}/${a.target}</span></div>
+          <div class="asg-progress"><span style="width:${(prog / a.target) * 100}%"></span></div>
+        </div>
+        ${done ? '<span class="asg-btn" style="font-family:Cinzel,serif;font-size:9px;color:#9be8d8;letter-spacing:.14em">MARKED</span>'
+          : `<button class="btn ${ready ? 'violet' : ''} asg-btn" data-paction="claim-assignment" data-id="${a.id}" ${ready ? '' : 'disabled'}>${ready ? 'CLAIM' : 'IN PROGRESS'}</button>`}
+      </div>`
+    }).join('')
+
+    const faculty = [
+      ['Professor Isolde Marrow', 'Charms', '#7b5ea7'],
+      ['Professor Alaric Feld', 'Defence Against the Dark Arts', '#3f5e7a'],
+      ['Professor Cinder Voss', 'Potions & Elemental Magic', '#8a4f2f'],
+      ['Professor Mirabel Crowe', 'Transfiguration', '#6a4a9a'],
+      ['Matron Elowen Ash', 'Healing', '#4f7a64'],
+      ['Archivist Wren', 'Library & Restricted Archive', '#5a4a3a'],
+      ['Professor Jasper Hollis', 'Wand Studies', '#6b5a3a'],
+      ['Headmistress Ophelia Vane', 'Headmistress', '#3f5e8a'],
+    ].map(([name, role, color]) => `<div class="faculty-row"><span class="faculty-dot" style="background:${color}"></span><div><b>${esc(name)}</b><span>${esc(role)}</span></div></div>`).join('')
+
+    const clueRows = ACADEMY_CLUES.map(c => {
+      const found = clues.includes(c.id)
+      return `<div class="clue-card ${found ? 'found' : ''}">
+        <div class="clue-title">${found ? '✦' : '◇'} ${esc(c.title)} <span>${esc(c.place)}</span></div>
+        <div class="clue-text">${found ? esc(c.fragment) : 'An Academy secret, still hidden. The faculty will not say where.'}</div>
+      </div>`
+    }).join('')
+
+    return `${this.panelHead('Arcanum Academy', 'The School Ledger', `${year} · ${house} · house points ${points}`, '✦')}
+      <div class="panel-body">
+        <div class="school-hero">
+          <div class="school-crest">✦</div>
+          <div style="flex:1;min-width:0">
+            <h3>${esc(year)} of Arcanum</h3>
+            <p>You are enrolled as a new student of wandcraft. Attend lessons, brew in the laboratory, duel in the indoor arena and uncover what the school has buried beneath its Great Hall.</p>
+            <div class="school-tags">
+              <span class="school-tag">${esc(house)} House</span>
+              <span class="school-tag">${state.school?.clues?.length || 0} / ${ACADEMY_CLUES.length} secrets</span>
+              <span class="school-tag">${state.metrics.spellsLearned} spells learned</span>
+              <span class="school-tag">${state.metrics.potionsBrewed} potions brewed</span>
+            </div>
+          </div>
+          <div class="house-points"><b>${points}</b><span>points</span></div>
+        </div>
+        <div class="school-grid">
+          <div>
+            <div class="j-section-title">Assignments</div>
+            ${assignments}
+            <div class="j-section-title" style="margin-top:18px">The Shattered Wand at Arcanum</div>
+            <div class="clue-strip">${clueRows}</div>
+            ${state.flags.academyFragment ? '<div class="prof-note" style="margin-top:10px;line-height:1.55">Three secrets, one answer: a fragment of the Elder Wand was carried into Arcanum and hidden beneath the school. The fragment is warm to the touch. It is waiting for a decision.</div>' : ''}
+          </div>
+          <div>
+            <div class="j-section-title">Faculty</div>
+            <div class="faculty-list">${faculty}</div>
+            <div class="j-section-title" style="margin-top:16px">Study</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <button class="btn violet full" data-paction="open-spells" data-cat="offensive">Attend a Lesson</button>
+              <button class="btn full" data-paction="open-potions">Enter the Potion Laboratory</button>
+            </div>
+            <div class="prof-note" style="margin-top:10px;line-height:1.55">The Academy rewards curiosity, not recklessness. Assignments pay in galleons, reputation and house points; every completed piece of work is recorded in the school ledger.</div>
+            <div class="j-section-title" style="margin-top:16px">School Rules</div>
+            <div class="prof-note" style="line-height:1.55">No dark magic in the corridors. No duels without a witness. The bookcase on the library’s east wall bites, and the Undercroft is not a shortcut.</div>
+          </div>
+        </div>
+      </div>`
+  }
+
+  /* ------------------------------------------------------ POTION PANEL */
+  potionsPanel() {
+    const cards = POTIONS.map(p => {
+      const ready = canBrew(p.id)
+      const cost = Object.entries(p.cost).map(([id, qty]) => {
+        const have = countMat(id) >= qty
+        return `<span class="${have ? 'have' : 'lack'}">${have ? '✓' : '×'} ${esc(matById[id]?.name || id)} ${countMat(id)}/${qty}</span>`
+      }).join('')
+      const owned = state.school?.potions?.[p.id] || 0
+      return `<div class="potion-card ${ready ? 'ready' : ''}">
+        <div class="potion-head">
+          <div class="potion-glyph" style="color:${p.color}">${p.glyph}</div>
+          <div><div class="potion-name">${esc(p.name)}</div><div class="potion-sub">${esc(p.flavor)}</div></div>
+        </div>
+        <div class="potion-desc">${esc(p.desc)}</div>
+        <div class="potion-cost">${cost}</div>
+        <div class="potion-foot">
+          <span class="potion-owned">${owned ? `${owned} brewed` : 'not yet brewed'}</span>
+          <button class="btn ${ready ? 'violet' : ''}" data-paction="brew" data-id="${p.id}" ${ready ? '' : 'disabled'}>${ready ? 'BREW' : 'MISSING INGREDIENTS'}</button>
+        </div>
+      </div>`
+    }).join('')
+    return `${this.panelHead('Potion Laboratory', 'Professor Voss’s Recipe Book', 'Mind the cauldron. It has opinions.', '☤')}
+      <div class="panel-body">
+        <div class="prof-note" style="margin-bottom:16px;line-height:1.6">“A potion is a promise made in liquid,” says Voss. “Keep the promise and it will keep you.” Gather ingredients from the Academy gardens, the wood, the ruins and the cavern. Every brew counts toward your assignments and house points.</div>
+        <div class="potion-grid">${cards}</div>
+        <div class="j-section-title" style="margin-top:18px">Laboratory Notes</div>
+        <div class="prof-note" style="line-height:1.6">Brewed ${state.metrics.potionsBrewed || 0} potions. The Academy assignment “Something That Bubbles” asks for two. The pursuit “A Useful Education” asks for three.</div>
+      </div>`
   }
 
   /* ------------------------------------------------------ MAP PANEL */

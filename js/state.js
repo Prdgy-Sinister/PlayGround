@@ -7,7 +7,7 @@ import {
   WOODS, CORES, FLEXIBILITIES, COMBOS, QUESTS, RANKS,
   BENCH_UPGRADES, STARTING_WAND, CUSTOMER_NAMES, CUSTOMER_PERSONAS,
   CUSTOMER_PREFS, CATEGORIES, SPELLS, SPELL_BY_ID, CATEGORY_SPELLS, RARITIES,
-  DUELISTS,
+  DUELISTS, ACADEMY_ASSIGNMENTS, POTIONS, ACADEMY_CLUES, LORE,
 } from './data.js'
 
 const SAVE_KEY = 'wandlore-legacy-v1'
@@ -32,6 +32,18 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 const rand = (a, b) => a + Math.random() * (b - a)
 const pick = arr => arr[Math.floor(Math.random() * arr.length)]
 
+export function newSchool() {
+  return {
+    year: 1,
+    house: 'Ravenwood',
+    points: 0,
+    assignments: {},
+    potions: {},
+    clues: [],
+    metrics: { lessons: 0, potions: 0, academyDuelsWon: 0, wands: 0, secrets: 0 },
+  }
+}
+
 export function newState() {
   return {
     version: 1,
@@ -52,8 +64,10 @@ export function newState() {
       wandsCrafted: 0, spellsLearned: 0, duelsWon: 0, duelsLost: 0, wandsSold: 0,
       rareGathered: 0, combosDiscovered: 1, tournamentsWon: 0, bossDefeated: 0,
       goldEarned: 0, damageDealt: 0, materialsGathered: 0, duelsTotal: 0,
+      academySecrets: 0, potionsBrewed: 0,
     },
-    flags: { started: false, bossDefeated: false, bossLootGiven: false, tournamentComplete: false, blessing: false },
+    school: newSchool(),
+    flags: { started: false, bossDefeated: false, bossLootGiven: false, tournamentComplete: false, blessing: false, academyFragment: false },
     lore: [{ title: 'The Firstlight', text: 'Your first wand was oak and unicorn hair, eleven inches, supple. It was not beautiful. It was yours. That counts for more than the world admits.' }],
     creatures: [],
     tournament: { round: 0, complete: false, score: 0 },
@@ -92,6 +106,12 @@ export function load() {
     state.metrics = Object.assign(newState().metrics, data.metrics || {})
     state.upgrades = Object.assign(newState().upgrades, data.upgrades || {})
     state.flags = Object.assign(newState().flags, data.flags || {})
+    const freshSchool = newSchool()
+    state.school = Object.assign(freshSchool, data.school || {})
+    state.school.metrics = Object.assign(freshSchool.metrics, data.school?.metrics || {})
+    state.school.assignments = Object.assign({}, data.school?.assignments || {})
+    state.school.potions = Object.assign({}, data.school?.potions || {})
+    state.school.clues = Array.isArray(data.school?.clues) ? data.school.clues.slice() : []
     // repair equipped wand
     if (!state.wands.some(w => w.id === state.equipped)) state.equipped = state.wands[0]?.id || 'starter'
     state.loadout = (state.loadout || []).filter(id => state.learned[id])
@@ -301,6 +321,7 @@ export function craftWand({ woodId, coreId, length, flex }) {
   if (state.wands.length === 2) state.equipped = wand.id
   wand.equipped = wand.id === state.equipped
   state.metrics.wandsCrafted++
+  schoolMetric('wands', 1)
   addXp(18 + RARITIES[wand.rarity].order * 6)
 
   const key = `${woodId}:${coreId}`
@@ -446,6 +467,7 @@ export function completeLesson(cat, perfect = false) {
     state.learned[spell.id].mastery = Math.min(10, (state.learned[spell.id].mastery || 0) + bonus)
   }
   ensureLoadout()
+  schoolMetric('lessons', 1)
   addXp(isNew ? 35 : 12)
   addRep(isNew ? 2 : 0)
   checkQuests()
@@ -503,6 +525,133 @@ export function spellMana(spell, wand = getEquippedWand()) {
   if (wand.core === 'kelpie' && spell.cat === 'transformation') m *= 0.8
   if (wand.ability?.special === 'cosmic') m *= 0.85
   return Math.round(m)
+}
+
+/* ---------------------------------------------------- ARCANUM SCHOOL */
+export function schoolMetric(metric, n = 1) {
+  if (!state.school) state.school = newSchool()
+  if (!state.school.metrics) state.school.metrics = newSchool().metrics
+  state.school.metrics[metric] = (state.school.metrics[metric] || 0) + n
+  if (metric === 'lessons' || metric === 'potions' || metric === 'academyDuelsWon') state.school.points += n
+  emit('school', { metric })
+  emit('hud')
+}
+
+export function schoolMetricValue(metric) {
+  return Math.max(0, (state.school?.metrics?.[metric] || 0))
+}
+
+export function academyAssignment(id) {
+  return ACADEMY_ASSIGNMENTS.find(a => a.id === id)
+}
+
+export function assignmentProgress(a) {
+  return Math.min(a.target, schoolMetricValue(a.metric))
+}
+
+export function assignmentReady(a) {
+  return assignmentProgress(a) >= a.target
+}
+
+export function claimAssignment(id) {
+  const a = academyAssignment(id)
+  if (!a) return { ok: false, error: 'That assignment is not on the ledger.' }
+  if (state.school.assignments[id]) return { ok: false, error: 'Already marked complete.' }
+  if (!assignmentReady(a)) return { ok: false, error: 'The work is not finished yet.' }
+  state.school.assignments[id] = { at: Date.now() }
+  state.player.gold += a.gold
+  state.metrics.goldEarned += a.gold
+  state.school.points += 3
+  addXp(a.xp)
+  addRep(a.rep)
+  addLore(`Assignment: ${a.title}`, `Professor Vane marked your work complete: ${a.desc} The Academy notes that you keep your promises, which is rarer than talent.`)
+  emit('assignment', { assignment: a })
+  checkQuests()
+  save()
+  return { ok: true, assignment: a }
+}
+
+export function academyYearTitle() {
+  const points = state.school?.points || 0
+  if (points >= 42) return 'Seventh-Year Legend'
+  if (points >= 30) return 'Sixth-Year Adept'
+  if (points >= 20) return 'Fifth-Year Duelist'
+  if (points >= 12) return 'Fourth-Year Scholar'
+  if (points >= 6) return 'Third-Year Apprentice'
+  if (points >= 2) return 'Second-Year Student'
+  return 'First-Year Student'
+}
+
+export function canBrew(id) {
+  const recipe = POTIONS.find(p => p.id === id)
+  if (!recipe) return false
+  return Object.entries(recipe.cost).every(([mat, qty]) => countMat(mat) >= qty)
+}
+
+export function brewPotion(id) {
+  const recipe = POTIONS.find(p => p.id === id)
+  if (!recipe) return { ok: false, error: 'No such recipe.' }
+  for (const [mat, qty] of Object.entries(recipe.cost)) {
+    if (countMat(mat) < qty) return { ok: false, error: `You need more ${matById[mat]?.name || mat}.` }
+  }
+  for (const [mat, qty] of Object.entries(recipe.cost)) removeMat(mat, qty)
+  state.school.potions[id] = (state.school.potions[id] || 0) + 1
+  state.metrics.potionsBrewed++
+  schoolMetric('potions', 1)
+  let effect = ''
+  if (id === 'vitality') {
+    state.player.health = maxHealth()
+    effect = 'Health restored to full.'
+    addXp(20)
+  } else if (id === 'ember') {
+    addXp(55); addRep(1)
+    effect = 'Courage settles in your chest: +55 xp, +1 reputation.'
+  } else if (id === 'clarity') {
+    const unknown = Object.keys(COMBOS).filter(k => !state.discovered.includes(k))
+    if (unknown.length) {
+      const key = pick(unknown)
+      state.discovered.push(key)
+      state.metrics.combosDiscovered = state.discovered.length
+      effect = `A resonance reveals itself: ${COMBOS[key].name}.`
+      addXp(35)
+    } else {
+      effect = 'The page is blank; you already know every resonance. +35 xp.'
+      addXp(35)
+    }
+  } else if (id === 'foundation') {
+    addRep(1); addXp(30)
+    effect = 'The school feels a little more familiar: +1 reputation, +30 xp.'
+  }
+  emit('brew', { potion: recipe, effect })
+  checkQuests()
+  emit('hud')
+  save()
+  return { ok: true, potion: recipe, effect }
+}
+
+export function discoverClue(id) {
+  const clue = ACADEMY_CLUES.find(c => c.id === id)
+  if (!clue) return { ok: false, error: 'Unknown secret.' }
+  if (state.school.clues.includes(id)) return { ok: false, already: true }
+  state.school.clues.push(id)
+  state.metrics.academySecrets++
+  schoolMetric('secrets', 1)
+  const reward = clue.reward || {}
+  if (reward.mat) addMat(reward.mat, reward.qty || 1)
+  addXp(reward.xp || 40)
+  addRep(reward.rep || 1)
+  addLore(clue.title, clue.fragment)
+  let complete = null
+  if (state.school.clues.length >= ACADEMY_CLUES.length) {
+    state.flags.academyFragment = true
+    addLore('The Shattered Wand — Arcanum Fragment', LORE.fragment.text)
+    addXp(120)
+    addRep(4)
+    complete = { fragment: true }
+  }
+  checkQuests()
+  save()
+  return { ok: true, clue, complete }
 }
 
 /* ---------------------------------------------------------- QUESTS */
@@ -566,6 +715,7 @@ export function grantDuelRewards(enemyId, victory, opts = {}) {
   state.metrics.goldEarned += gold
   state.metrics.duelsWon++
   state.metrics.duelsTotal++
+  if (['elara', 'tobias', 'sable', 'marrow'].includes(enemyId)) schoolMetric('academyDuelsWon', 1)
   addXp(xp)
   addRep(rep)
   if (opts.tournament) state.tournament.score += 10 + rep * 2
