@@ -203,6 +203,21 @@ export class UI {
     window.addEventListener('beforeunload', () => this.game.saveGame());
   }
 
+  // Swap the presentation layer without rebuilding the UI (used when WebGL
+  // fails after startup and the game continues in the 2D scroll view).
+  attachWorld(world) {
+    this.world = world;
+    this.world.onNearbyChange = (inter) => this.setPrompt(inter);
+    this.world.onZoneChange = (zone) => this.showZone(zone);
+    this.preview.unavailable = true;
+    this.preview.host = null;
+    this.setPrompt(null);
+    if (this.started) {
+      this.world.snapCamera();
+      if (this.world.currentZone) this.showZone(LOCATIONS[this.world.currentZone]);
+    }
+  }
+
   startGame() {
     if (this.started) return;
     this.started = true;
@@ -234,6 +249,9 @@ export class UI {
     } else {
       this.toast('You have left the war behind. Water your trees, forge a blade, and find your first buyer.', 'good');
       setTimeout(() => this.toast('Tip: press M for the mountain map. The auction grounds lie east.', ''), 4200);
+    }
+    if (this.world.lite) {
+      setTimeout(() => this.toast('Scroll view active — this browser is using the 2D world. Every panel, journey and interaction still works.', 'good'), 1400);
     }
     this.game.saveGame();
   }
@@ -374,7 +392,7 @@ export class UI {
       cx = r.left + r.width / 2;
       cy = r.top + r.height / 2;
       radius = r.width * 0.38;
-      joy.setPointerCapture?.(e.pointerId);
+      try { joy.setPointerCapture?.(e.pointerId); } catch { /* stale pointer */ }
       e.preventDefault();
     };
     const move = (e) => {

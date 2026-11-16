@@ -15,10 +15,30 @@ export class Preview3D {
     this.item = null;
     this.rot = 0;
     this.time = 0;
+    this.unavailable = false;
   }
 
   ensure() {
-    if (this.renderer) return;
+    if (this.renderer) return true;
+    if (this.unavailable) return false;
+    if (window.SAMURAI?.boot?.mode === 'canvas2d') {
+      this.unavailable = true;
+      return false;
+    }
+    try {
+      this.build();
+    } catch (err) {
+      // Item previews are decoration; a machine that cannot make a WebGL
+      // context (see world2d.js) must still be able to open every panel.
+      console.warn('[samurai] 3D item preview unavailable:', err);
+      this.unavailable = true;
+      this.renderer = null;
+      return false;
+    }
+    return true;
+  }
+
+  build() {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(300, 300, false);
@@ -100,7 +120,11 @@ export class Preview3D {
   }
 
   attach(host) {
-    this.ensure();
+    if (!this.ensure()) {
+      this.host = null;
+      host.innerHTML = '<div class="preview-lite"><span>図</span><small>3D preview needs graphics acceleration — item details remain available below.</small></div>';
+      return;
+    }
     this.host = host;
     host.innerHTML = '';
     host.appendChild(this.canvas);
@@ -119,7 +143,7 @@ export class Preview3D {
   }
 
   show(item) {
-    this.ensure();
+    if (!this.ensure()) return;
     this.item = item;
     while (this.itemGroup.children.length) this.itemGroup.remove(this.itemGroup.children[0]);
     if (!item) return;
@@ -183,7 +207,7 @@ export class Preview3D {
   }
 
   render(dt) {
-    if (!this.renderer || !this.host || !this.host.isConnected) return;
+    if (!this.renderer || this.unavailable || !this.host || !this.host.isConnected) return;
     this.time += dt;
     this.rot += dt * 0.45;
     this.itemGroup.rotation.y = this.rot;

@@ -1,9 +1,10 @@
 import { Game } from './game.js';
 import { World } from './world.js';
+import { LiteWorld } from './world2d.js';
 import { UI } from './ui.js';
 import { audio } from './audio.js';
 
-const canvas = document.getElementById('scene');
+let canvas = document.getElementById('scene');
 
 const boot = {
   startedAt: performance.now(),
@@ -30,7 +31,7 @@ function notice(title, body, { sticky = true } = {}) {
           <button type="button" class="btn" data-boot-reload>Reload the page</button>
           <button type="button" class="btn btn-quiet" data-boot-dismiss>Dismiss</button>
         </div>
-        <small class="boot-hint">If this keeps happening, update your browser or enable hardware acceleration / WebGL&nbsp;2.</small>
+        <small class="boot-hint">If this keeps happening, reload the page or try a different browser.</small>
       </div>`;
     el.querySelector('[data-boot-reload]').addEventListener('click', () => location.reload());
     el.querySelector('[data-boot-dismiss]').addEventListener('click', () => el.remove());
@@ -56,7 +57,7 @@ function bootFailed(err) {
   const detail = err?.message || String(err);
   notice(
     'The mountain could not be drawn',
-    `The 3D view failed to start. ${detail} This is usually a browser or graphics limitation, not your save.`,
+    `The game could not start. ${detail} Your save is safe — reload to try again.`,
   );
 }
 
@@ -64,25 +65,92 @@ let game;
 let world;
 let ui;
 
+// A canvas that has been asked for WebGL can refuse a 2D context afterwards,
+// so the fallback always gets a brand-new element.
+function freshCanvas() {
+  const next = document.createElement('canvas');
+  next.id = canvas.id || 'scene';
+  if (canvas.className) next.className = canvas.className;
+  for (const attr of canvas.attributes) {
+    if (!['id', 'class'].includes(attr.name)) next.setAttribute(attr.name, attr.value);
+  }
+  canvas.replaceWith(next);
+  canvas = next;
+  return next;
+}
+
+function buildWorld(forceLite) {
+  if (!forceLite) {
+    try {
+      const w = new World(canvas, game);
+      boot.mode = 'webgl';
+      return w;
+    } catch (err) {
+      boot.webglError = err?.message || String(err);
+      record('webgl', err);
+    }
+  }
+  freshCanvas();
+  const w = new LiteWorld(canvas, game);
+  w.lite = true;
+  boot.mode = 'canvas2d';
+  return w;
+}
+
+// Used when WebGL dies after startup (driver reset, GPU process crash, tab
+// backgrounded on a low-memory phone). The game keeps playing in scroll view.
+function useLiteView(reason) {
+  if (!game || boot.mode === 'canvas2d') return false;
+  try {
+    const previous = world;
+    const lite = buildWorld(true);
+    lite.state = game.state;
+    world = lite;
+    game.world = lite;
+    boot.contextLost = false;
+    if (ui) {
+      ui.attachWorld(lite);
+      ui.toast?.('Graphics acceleration is unavailable. Switched to the 2D scroll view — all gameplay is safe.', 'warn');
+    }
+    if (window.SAMURAI) window.SAMURAI.world = lite;
+    try {
+      previous?.renderer?.dispose?.();
+      previous?.renderer?.forceContextLoss?.();
+    } catch { /* the context is already gone */ }
+    document.getElementById('boot-notice')?.remove();
+    return true;
+  } catch (err) {
+    record('canvas', err);
+    bootFailed(err);
+    return false;
+  }
+}
+
 try {
   game = new Game();
-  world = new World(canvas, game);
+  world = buildWorld(false);
   ui = new UI(game, world, audio);
   game.bind(ui, world, audio);
   ui.bind();
   boot.ready = true;
-  window.SAMURAI = { game, world, ui, boot, notice };
+  window.SAMURAI = { game, world, ui, boot, notice, useLiteView };
 } catch (err) {
   // A graphics failure should never leave a blank canvas behind a dead intro.
   bootFailed(err);
 }
 
-// A lost GL context is recoverable; tell the player instead of freezing silently.
+// A lost GL context is often recoverable; give it a moment, then fall back to
+// the 2D view rather than leaving the player with a frozen scene.
 canvas?.addEventListener('webglcontextlost', (event) => {
   event.preventDefault();
   boot.contextLost = true;
   if (world) world.contextLost = true;
-  notice('Graphics paused', 'The graphics context was lost. Tap reload if the scene does not return by itself.', { sticky: false });
+  notice('Graphics paused', 'The graphics context was lost. Trying to restore it…', { sticky: false });
+  setTimeout(() => {
+    if (boot.mode === 'webgl' && (boot.contextLost || world?.contextLost)) {
+      useLiteView('context lost');
+    }
+  }, 2200);
 });
 canvas?.addEventListener('webglcontextrestored', () => {
   boot.contextLost = false;

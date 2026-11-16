@@ -17,8 +17,6 @@ export const LOCATIONS = {
   cherry: { id: 'cherry', name: 'Sakura Valley', jp: '桜谷', kanji: '桜', x: -130, z: 20, radius: 26, spawn: { x: -114, z: 20 }, blurb: 'Petals, picnic blankets, and rare seeds.', color: '#a4556b' },
   waterfall: { id: 'waterfall', name: "Dragon's Tears Falls", jp: '龍涙の滝', kanji: '滝', x: 30, z: -142, radius: 26, spawn: { x: 30, z: -123 }, blurb: 'Cold mist and a clear mind.', color: '#4d7a8b' },
   mine: { id: 'mine', name: 'Iron Vein Cave', jp: '鉄脈洞', kanji: '鉱', x: 150, z: 6, radius: 24, spawn: { x: 137, z: 7 }, blurb: 'Iron, tamahagane, and things that glow.', color: '#6b6257' },
-  shrine: { id: 'shrine', name: 'Kitsune Shrine', jp: '狐社', kanji: '狐', x: -42, z: 120, radius: 20, spawn: { x: -42, z: 104 }, blurb: 'A quiet shrine where coins buy luck.', color: '#b35a2b' },
-  quarry: { id: 'quarry', name: 'Echo Quarry', jp: '響石切場', kanji: '石', x: 150, z: 94, radius: 22, spawn: { x: 136, z: 94 }, blurb: 'Silver, jade and fallen-star iron.', color: '#7c7f86' },
 };
 
 // ————— canvas texture helpers —————
@@ -156,7 +154,7 @@ export class World {
     this.cameraBlockers = [];
     this.camRay = new THREE.Raycaster();
     this.camRay.near = 0.2;
-    this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 900);
+    this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 220);
     this.player = null;
     this.walkTime = 0;
     this.clickTarget = null;
@@ -172,17 +170,15 @@ export class World {
     this.season = SEASONS[0];
     this.state = game.state;
 
-    this.contextLost = false;
-    this.coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
     this.renderer = this.createRenderer(canvas);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.coarsePointer ? 1.5 : 1.75));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.coarsePointer ? 1 : 1.25));
     this.renderer.setSize(window.innerWidth || 1, window.innerHeight || 1, false);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = !this.coarsePointer;
+    this.renderer.shadowMap.type = THREE.BasicShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.03;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.scene.fog = new THREE.Fog(0xc7d0c2, 74, 296);
+    this.scene.fog = new THREE.Fog(0xc7d0c2, 60, 180);
 
     this.buildEnvironment();
     this.buildLights();
@@ -198,19 +194,9 @@ export class World {
     this.buildCherryValley();
     this.buildWaterfall();
     this.buildMine();
-    this.buildShrine();
-    this.buildQuarry();
     this.buildAmbientParticles();
     this.buildPlayer();
     this.bindInput();
-    this.canvas.addEventListener('webglcontextlost', (event) => {
-      event.preventDefault();
-      this.contextLost = true;
-    });
-    this.canvas.addEventListener('webglcontextrestored', () => {
-      this.contextLost = false;
-      this.resize();
-    });
 
     this.state = game.state;
     this.rebuildBonsai();
@@ -223,13 +209,14 @@ export class World {
 
   createRenderer(canvas) {
     const attempts = [
-      { antialias: true, powerPreference: 'high-performance' },
-      { antialias: false, powerPreference: 'default' },
+      { antialias: false, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false },
+      { antialias: false, powerPreference: 'default', failIfMajorPerformanceCaveat: false },
+      { antialias: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: false },
     ];
     let lastError = null;
     for (const options of attempts) {
       try {
-        const renderer = new THREE.WebGLRenderer({ canvas, ...options, failIfMajorPerformanceCaveat: false });
+        const renderer = new THREE.WebGLRenderer({ canvas, ...options });
         const gl = renderer.getContext();
         if (!gl) throw new Error('No graphics context was returned.');
         return renderer;
@@ -238,7 +225,7 @@ export class World {
       }
     }
     const reason = lastError?.message ? `: ${lastError.message}` : '';
-    throw new Error(`WebGL 2 could not start${reason}. Enable hardware acceleration or use a current browser.`);
+    throw new Error(`The 3D view could not start${reason}.`);
   }
 
   // ————— environment, sky, lights —————
@@ -262,7 +249,7 @@ export class World {
       sunColor: { value: new THREE.Color(0xffd9a0) },
       sunStrength: { value: 1 },
     };
-    const skyGeo = new THREE.SphereGeometry(600, 32, 16);
+    const skyGeo = new THREE.SphereGeometry(600, 16, 8);
     const skyMat = new THREE.ShaderMaterial({
       uniforms: this.skyUniforms,
       side: THREE.BackSide, depthWrite: false, fog: false,
@@ -343,15 +330,14 @@ export class World {
   }
 
   buildLights() {
-    this.hemi = new THREE.HemisphereLight(0xcfe0ea, 0x5a5a42, 0.7);
+    this.hemi = new THREE.HemisphereLight(0xcfe0ea, 0x5a5a42, 0.75);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffe9c8, 1.75);
+    this.sun = new THREE.DirectionalLight(0xffe9c8, 1.6);
     this.sun.position.set(60, 100, 40);
-    this.sun.castShadow = true;
-    const shadowSize = this.coarsePointer ? 1024 : 2048;
-    this.sun.shadow.mapSize.set(shadowSize, shadowSize);
+    this.sun.castShadow = !this.coarsePointer;
+    this.sun.shadow.mapSize.set(512, 512);
     this.sun.shadow.camera.near = 1;
-    this.sun.shadow.camera.far = 300;
+    this.sun.shadow.camera.far = 180;
     this.sun.shadow.camera.left = -55;
     this.sun.shadow.camera.right = 55;
     this.sun.shadow.camera.top = 55;
@@ -367,7 +353,7 @@ export class World {
   }
 
   buildGround() {
-    const geo = new THREE.PlaneGeometry(520, 520, 80, 80);
+    const geo = new THREE.PlaneGeometry(520, 520, 40, 40);
     geo.rotateX(-Math.PI / 2);
     const colors = [];
     const pos = geo.attributes.position;
@@ -382,7 +368,7 @@ export class World {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geo.computeVertexNormals();
     this.groundMat = new THREE.MeshStandardMaterial({
-      map: grassTexture(), vertexColors: true, color: 0xa5b884, roughness: 1, metalness: 0,
+      map: grassTexture(), vertexColors: true, color: 0x9db07e, roughness: 1, metalness: 0,
     });
     const ground = new THREE.Mesh(geo, this.groundMat);
     ground.receiveShadow = true;
@@ -394,8 +380,6 @@ export class World {
     this.addGroundPatch(-98, 86, 25, 20, 0xb6aa8a, 0.018);
     this.addGroundPatch(-110, -82, 22, 16, 0xb7b2a1, 0.018);
     this.addGroundPatch(92, -88, 24, 22, 0x6e7d58, 0.014);
-    this.addGroundPatch(-42, 120, 20, 18, 0xc3b89c, 0.018);
-    this.addGroundPatch(150, 94, 24, 18, 0xa8a291, 0.018);
   }
 
   addGroundPatch(x, z, w, d, color, y = 0.02) {
@@ -420,8 +404,6 @@ export class World {
       [[-8, 12], [-40, 14], [-76, 18], [-114, 20]],
       [[12, 6], [18, -20], [24, -56], [27, -94], [30, -124]],
       [[18, 4], [52, 5], [92, 4], [124, 6], [138, 7]],
-      [[-98, 70], [-78, 88], [-60, 104], [-46, 116]],
-      [[138, 7], [144, 42], [148, 70], [150, 88]],
     ];
     const stoneGeo = new THREE.CylinderGeometry(0.42, 0.48, 0.09, 6);
     const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTexture(), color: 0xa8a090, roughness: 0.95, flatShading: true });
@@ -2050,158 +2032,6 @@ export class World {
     this.addInteraction({ id: 'mine-gather', label: 'Gather iron and tamahagane', kanji: '鉱', x: loc.x + 3, z: loc.z + 4, y: 2.4, group: nodeGroup, radius: 4.8 });
   }
 
-  // ————— kitsune shrine & echo quarry —————
-  buildShrine() {
-    const loc = LOCATIONS.shrine;
-    const g = new THREE.Group();
-    g.position.set(loc.x, 0, loc.z);
-    this.scene.add(g);
-    this.shrineGroup = g;
-
-    const torii = this.makeTorii(1.2, 0xa9362a, '狐');
-    torii.position.set(0, 0, -12);
-    g.add(torii);
-    const path = new THREE.CatmullRomCurve3([new V3(0, 0, -11), new V3(0, 0, -4), new V3(0, 0, 4)]);
-    g.add(this.makeRibbon(path, 2.4, 0xcdc2a8));
-
-    const hall = this.makeHouse({ w: 5.6, d: 4.4, h: 2.3 });
-    hall.position.set(0, 0, 9);
-    g.add(hall);
-    this.addCollider(loc.x, loc.z + 9, 4.2);
-
-    const sign = this.makeSign('狐 社', 'FOX SHRINE');
-    sign.position.set(-5.5, 0, -7);
-    g.add(sign);
-
-    const foxMat = MAT.stone();
-    const bibMat = new THREE.MeshStandardMaterial({ color: 0xa9362a, roughness: 0.85 });
-    const makeFox = () => {
-      const f = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.85, 7), foxMat);
-      body.position.y = 0.42; f.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 7), foxMat);
-      head.position.set(0, 0.98, 0.04); f.add(head);
-      for (const sx of [-1, 1]) {
-        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.26, 4), foxMat);
-        ear.position.set(sx * 0.13, 1.22, 0.02);
-        ear.rotation.z = sx * -0.2;
-        f.add(ear);
-      }
-      const snout = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.22, 5), foxMat);
-      snout.rotation.x = Math.PI / 2;
-      snout.position.set(0, 0.93, 0.22);
-      f.add(snout);
-      const bib = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.2, 0.05), bibMat);
-      bib.position.set(0, 0.8, 0.2);
-      f.add(bib);
-      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.75, 5), foxMat);
-      tail.position.set(0, 0.6, -0.34);
-      tail.rotation.x = -0.9;
-      f.add(tail);
-      return f;
-    };
-    for (const sx of [-1, 1]) {
-      const fox = makeFox();
-      fox.position.set(sx * 1.6, 0, -1.2);
-      fox.rotation.y = Math.PI + sx * -0.2;
-      fox.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-      g.add(fox);
-    }
-
-    const offering = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.6, 0.9), MAT.darkWood());
-    offering.position.set(0, 0.3, -3.4);
-    g.add(offering);
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.24, 0.18, 8), MAT.gold());
-    bowl.position.set(0, 0.7, -3.4);
-    g.add(bowl);
-    const votive = new THREE.PointLight(0xffa04a, 0.9, 9, 2);
-    votive.position.set(0, 1.7, 3.5);
-    g.add(votive);
-    const embers = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffb35e }));
-    embers.position.set(0, 0.78, -3.4);
-    g.add(embers);
-
-    for (const [x, z] of [[-5, -6], [5, -6], [-5, 5], [5, 5]]) {
-      const l = this.makeStoneLantern(0.8, true);
-      l.position.set(x, 0, z);
-      g.add(l);
-    }
-    for (const [x, z, s] of [[-9, -2, 0.9], [9, 2, 0.85], [-8, 10, 0.95]]) {
-      const t = this.makeTree('maple', s, this.season.id);
-      t.position.set(x, 0, z);
-      g.add(t);
-    }
-
-    this.addInteraction({ id: 'shrine-offer', label: 'Make an offering to the fox spirits', kanji: '狐', x: loc.x, z: loc.z - 3.4, y: 2.0, group: offering, radius: 4.4 });
-    this.addInteraction({ id: 'shrine-rest', label: 'Sit beneath the shrine maples', kanji: '憩', x: loc.x + 6, z: loc.z + 5, y: 2.2, radius: 3.8 });
-  }
-
-  buildQuarry() {
-    const loc = LOCATIONS.quarry;
-    const g = new THREE.Group();
-    g.position.set(loc.x, 0, loc.z);
-    this.scene.add(g);
-    this.quarryGroup = g;
-
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x7c7b73, roughness: 1, flatShading: true });
-    const lightRock = new THREE.MeshStandardMaterial({ color: 0x93928a, roughness: 1, flatShading: true });
-    // cut terraces
-    for (let i = 0; i < 4; i++) {
-      const step = new THREE.Mesh(new THREE.BoxGeometry(13 - i * 1.7, 1.25, 5.5), i % 2 ? rockMat : lightRock);
-      step.position.set(i % 2 ? 1.2 : -1.2, 0.62 + i * 1.1, -7 - i * 1.9);
-      step.rotation.y = (i % 2 ? 1 : -1) * 0.08;
-      step.castShadow = true;
-      step.receiveShadow = true;
-      g.add(step);
-      this.addCollider(loc.x + step.position.x, loc.z + step.position.z, 6.5);
-    }
-    // boulders
-    for (let i = 0; i < 12; i++) {
-      const s = 0.7 + Math.random() * 1.7;
-      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), i % 3 ? rockMat : lightRock);
-      rock.position.set(-9 + Math.random() * 18, s * 0.5, -5 + Math.random() * 10);
-      rock.rotation.set(Math.random(), Math.random(), Math.random());
-      rock.castShadow = true;
-      g.add(rock);
-    }
-    // silver and jade veins
-    const veinColors = [0xdfe7ea, 0x82c7a3, 0xb9c3c6];
-    for (let i = 0; i < 14; i++) {
-      const vein = new THREE.Mesh(
-        new THREE.ConeGeometry(0.16 + Math.random() * 0.16, 0.6 + Math.random() * 0.9, 5),
-        new THREE.MeshStandardMaterial({ color: veinColors[i % veinColors.length], metalness: 0.55, roughness: 0.35, emissive: 0x223330, emissiveIntensity: 0.25 }),
-      );
-      vein.position.set(-6 + Math.random() * 12, 0.35, -8 + Math.random() * 4);
-      vein.rotation.set((Math.random() - 0.5) * 0.7, Math.random() * 3, (Math.random() - 0.5) * 0.7);
-      g.add(vein);
-    }
-    // cutting stone and tools
-    const bench = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.5, 1.2), MAT.darkWood());
-    bench.position.set(7, 0.25, 2);
-    g.add(bench);
-    for (let i = 0; i < 3; i++) {
-      const chisel = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.75, 5), MAT.darkWood());
-      chisel.position.set(6.2 + i * 0.55, 0.62, 2);
-      chisel.rotation.z = Math.PI / 2;
-      g.add(chisel);
-    }
-    const sign = this.makeSign('響 石', 'ECHO QUARRY');
-    sign.position.set(-7, 0, 4);
-    g.add(sign);
-    for (const [x, z] of [[-5, 6], [5, 6], [9, -2]]) {
-      const l = this.makeStoneLantern(0.85, true);
-      l.position.set(x, 0, z);
-      g.add(l);
-    }
-    for (const [x, z, s] of [[-12, 4, 0.9], [12, 6, 0.8]]) {
-      const t = this.makeTree('pine', s, this.season.id);
-      t.position.set(x, 0, z);
-      g.add(t);
-    }
-
-    this.addInteraction({ id: 'quarry-gather', label: 'Split silver, jade and star-stone', kanji: '石', x: loc.x, z: loc.z + 1.5, y: 2.4, group: null, radius: 4.6 });
-  }
-
   // ————— player & npc —————
   makePerson(type = 'samurai') {
     const g = new THREE.Group();
@@ -2504,7 +2334,7 @@ export class World {
 
   // ————— ambient particles, smoke, weather —————
   buildAmbientParticles() {
-    const count = 420;
+    const count = 120;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     this.particleData = [];
@@ -2526,7 +2356,7 @@ export class World {
     this.scene.add(this.ambientParticles);
 
     // fireflies
-    const fCount = 70;
+    const fCount = 28;
     const fPos = new Float32Array(fCount * 3);
     this.fireflyData = [];
     for (let i = 0; i < fCount; i++) {
@@ -2542,7 +2372,7 @@ export class World {
     this.scene.add(this.fireflies);
 
     // smoke
-    const sCount = 80;
+    const sCount = 24;
     const sPos = new Float32Array(sCount * 3);
     this.smokeData = [];
     for (let i = 0; i < sCount; i++) {
@@ -2781,7 +2611,7 @@ export class World {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h, false);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.coarsePointer ? 1.5 : 1.75));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   }
 
   // ————— update —————
@@ -2882,7 +2712,7 @@ export class World {
 
     const isSnow = this.season.id === 'winter' || weather === 'snow';
     const isRain = weather === 'rain' || weather === 'storm';
-    const count = 420;
+    const count = 120;
     const positions = this.ambientParticles.geometry.attributes.position;
     const colors = this.ambientParticles.geometry.attributes.color;
     const c = new THREE.Color();
@@ -3111,7 +2941,6 @@ export class World {
   }
 
   render() {
-    if (this.contextLost) return;
     this.renderer.render(this.scene, this.camera);
   }
 }
