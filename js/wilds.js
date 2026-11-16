@@ -537,6 +537,14 @@ export function makeDuelEnemy(world, def) {
   }
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.8, 18), new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.32, depthWrite: false }))
   shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.02; g.add(shadow)
+  // A soft accent aura keeps the opponent readable against the dark arena.
+  const accent = def.accent || '#c9a6ff'
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.78, 1.0, 28),
+    new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.42, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+  )
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring)
+  addGlow(world, g, accent, 1.9, 0, 1.35, 0, 0.3)
   return g
 }
 

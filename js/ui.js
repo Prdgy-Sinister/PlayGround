@@ -125,15 +125,19 @@ export class UI {
   renderQuestTracker() {
     const active = activeQuests()
     const done = QUESTS.filter(q => state.quests[q.id]?.complete).length
+    const rows = active.map(q => [q.id, questProgress(q), q.target])
+    const sig = rows.map(r => r.join(':')).join('|') + '#' + done
+    if (sig === this._questSig) return
+    this._questSig = sig
     if (!active.length) {
       this.el.quests.innerHTML = `<div class="quest-item"><div class="quest-line"><span>Every pursuit complete</span></div><div class="quest-more">The world remembers your name.</div></div>`
       return
     }
-    this.el.quests.innerHTML = active.map(q => {
-      const prog = questProgress(q)
+    this.el.quests.innerHTML = active.map((q, i) => {
+      const [_, prog, target] = rows[i]
       return `<div class="quest-item">
-        <div class="quest-line"><span>${esc(q.title)}</span><span class="qprog">${prog}/${q.target}</span></div>
-        <div class="quest-bar"><div style="width:${(prog / q.target) * 100}%"></div></div>
+        <div class="quest-line"><span>${esc(q.title)}</span><span class="qprog">${prog}/${target}</span></div>
+        <div class="quest-bar"><div style="width:${(prog / target) * 100}%"></div></div>
       </div>`
     }).join('') + `<div class="quest-more">${done} of ${QUESTS.length} pursuits complete</div>`
   }
@@ -300,7 +304,8 @@ export class UI {
 
   tick(dt) {
     this._minimapAcc += dt
-    if (this._minimapAcc > 0.12) { this._minimapAcc = 0; this.drawMinimap() }
+    const minimapInterval = document.body.classList.contains('touch') ? 0.28 : 0.18
+    if (this._minimapAcc > minimapInterval) { this._minimapAcc = 0; this.drawMinimap() }
     if (this.panelName === 'wand' && this.previewCtx) {
       this._previewTime += dt
       this.drawWandPreview(this._previewTime)

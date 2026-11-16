@@ -7,6 +7,7 @@ import * as THREE from 'three'
 import { ZONES, NODES, NPCS, WOODS, CORES, RARITIES } from './data.js'
 import { buildVillage, buildAcademy, buildArena, glowTexture } from './props.js'
 import { buildForest, buildRuins, buildCavern, buildSpire, buildNPCs, buildCreatures, buildNodes } from './wilds.js'
+import { batchStatic } from './batch.js'
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 const lerp = (a, b, t) => a + (b - a) * t
@@ -16,12 +17,33 @@ const coreById = Object.fromEntries(CORES.map(c => [c.id, c]))
 export class World {
   constructor(canvas) {
     this.canvas = canvas
+    // Phones / coarse pointers get a lighter build: no MSAA, fewer lights,
+    // fewer particles and a lower resolution ceiling. `?quality=high|low`
+    // overrides detection for debugging or a user preference.
+    const params = new URLSearchParams(location.search)
+    const forced = params.get('quality')
+    const coarse = window.matchMedia?.('(pointer: coarse)').matches
+    const low = forced ? forced === 'low' : coarse
+    this.quality = {
+      low,
+      maxPixelRatio: low ? 1.25 : 1.6,
+      maxPointLights: low ? 4 : 8,
+      terrainSegments: low ? 84 : 120,
+      stars: low ? 700 : 1400,
+      motes: low ? 300 : 620,
+      fireflies: low ? 110 : 260,
+      foliage: low ? 0.66 : 1,
+    }
+    this.renderScale = 1
+    this._frameAvg = null
+    this._adaptAcc = 0
+
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color('#0c0918')
     this.scene.fog = new THREE.FogExp2(0x171129, 0.0072)
     this.camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 600)
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', alpha: false })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6))
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !low, powerPreference: 'high-performance', alpha: false })
+    this.applyPixelRatio()
     this.renderer.setSize(window.innerWidth, window.innerHeight)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -41,8 +63,10 @@ export class World {
     this.playerPos = new THREE.Vector3(0, 0, 16)
     this.velocity = new THREE.Vector3()
     this.cameraYaw = 0
-    this.cameraPitch = 0.34
-    this.cameraDist = 9.6
+    // Portrait screens see less horizontally, so sit the camera further back.
+    const portrait = window.innerHeight > window.innerWidth * 1.25
+    this.cameraPitch = portrait ? 0.42 : 0.34
+    this.cameraDist = portrait ? 11.4 : 9.6
     this.camTarget = new THREE.Vector3(0, 2, 16)
     this.shakeAmount = 0
     this.shakeTime = 0
@@ -74,6 +98,8 @@ export class World {
     this.buildParticles()
     this.buildPlayer()
     this.buildBarrier()
+    this.batchProps()
+    this.trimPointLights()
 
     this.setPlayer(0, 16, Math.PI)
     this.updateCamera(1, true)
@@ -132,7 +158,7 @@ export class World {
 
     const starGeo = new THREE.BufferGeometry()
     const starPos = []
-    for (let i = 0; i < 1400; i++) {
+    for (let i = 0; i < this.quality.stars; i++) {
       const r = 330 + Math.random() * 60
       const theta = Math.random() * Math.PI * 2
       const phi = Math.acos(Math.max(-1, Math.min(1, Math.random() * 1.15 - 0.1)))
@@ -174,7 +200,7 @@ export class World {
 
   /* ------------------------------------------------------- TERRAIN */
   buildTerrain() {
-    const size = 260, seg = 120
+    const size = 260, seg = this.quality.terrainSegments
     const geo = new THREE.PlaneGeometry(size, size, seg, seg)
     geo.rotateX(-Math.PI / 2)
     const pos = geo.attributes.position
@@ -315,18 +341,21 @@ export class World {
       if (kind === 'pine') pines.push({ x, y, z, s: 0.65 + Math.random() * 0.9, rot: Math.random() * Math.PI * 2 })
       else broad.push({ x, y, z, s: 0.7 + Math.random() * 0.8, rot: Math.random() * Math.PI * 2 })
     }
-    for (let i = 0; i < 150; i++) {
+    const forestN = Math.round(150 * this.quality.foliage)
+    const ringN = Math.round(55 * this.quality.foliage)
+    const scatterN = Math.round(40 * this.quality.foliage)
+    for (let i = 0; i < forestN; i++) {
       const a = Math.random() * Math.PI * 2, r = Math.random() * 37
       const x = -46 + Math.cos(a) * r, z = 16 + Math.sin(a) * r * 0.92
       if (Math.hypot(x + 31, z - 44) < 10) continue
       if (Math.hypot(x + 36, z - 27) < 6) continue
       tryPlace(x, z, Math.random() < 0.72 ? 'pine' : 'broad')
     }
-    for (let i = 0; i < 55; i++) {
+    for (let i = 0; i < ringN; i++) {
       const a = Math.random() * Math.PI * 2, r = 72 + Math.random() * 26
       tryPlace(Math.cos(a) * r, Math.sin(a) * r, Math.random() < 0.55 ? 'pine' : 'broad')
     }
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < scatterN; i++) {
       const a = Math.random() * Math.PI * 2, r = 28 + Math.random() * 50
       const x = -46 + Math.cos(a) * r, z = 16 + Math.sin(a) * r
       if (Math.hypot(x - 14, z - 58) < 20) continue
@@ -349,11 +378,9 @@ export class World {
     const m = new THREE.Matrix4(); const q = new THREE.Quaternion(); const sc = new THREE.Vector3(); const pos = new THREE.Vector3()
     const col = new THREE.Color()
     let ti = 0, pi = 0, bi = 0
-    const treeShadowMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.22, depthWrite: false })
-    const addShadow = (x, z, s) => {
-      const sh = new THREE.Mesh(new THREE.CircleGeometry(1.3 * s, 10), treeShadowMat)
-      sh.rotation.x = -Math.PI / 2; sh.position.set(x, this.heightAt(x, z) + 0.04, z); this.scene.add(sh)
-    }
+    // Collect tree shadows and draw them all in a single instanced call.
+    const shadowSpots = []
+    const addShadow = (x, z, s) => { shadowSpots.push({ x, z, s }) }
     for (const t of pines) {
       const th = (4.5 + t.s * 3) * 0.8
       pos.set(t.x, t.y + th * 0.5, t.z); sc.set(t.s, th, t.s); q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot)
@@ -392,13 +419,29 @@ export class World {
     if (pineFoliage.instanceColor) pineFoliage.instanceColor.needsUpdate = true
     if (broadFoliage.instanceColor) broadFoliage.instanceColor.needsUpdate = true
     this.scene.add(trunks, pineFoliage, broadFoliage)
+    if (shadowSpots.length) {
+      const shadowGeo = new THREE.CircleGeometry(1.3, 10)
+      shadowGeo.rotateX(-Math.PI / 2)
+      const shadowMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.22, depthWrite: false })
+      const shadows = new THREE.InstancedMesh(shadowGeo, shadowMat, shadowSpots.length)
+      for (let i = 0; i < shadowSpots.length; i++) {
+        const s = shadowSpots[i]
+        pos.set(s.x, this.heightAt(s.x, s.z) + 0.04, s.z)
+        sc.set(s.s, 1, s.s)
+        q.identity()
+        m.compose(pos, q, sc)
+        shadows.setMatrixAt(i, m)
+      }
+      shadows.instanceMatrix.needsUpdate = true
+      this.scene.add(shadows)
+    }
     this.treeCount = trunkCount
   }
 
   buildRocks() {
     const rockGeo = new THREE.DodecahedronGeometry(1, 0)
     const rockMat = new THREE.MeshStandardMaterial({ color: '#575260', roughness: 1, flatShading: true })
-    const count = 55
+    const count = Math.round(55 * this.quality.foliage)
     const rocks = new THREE.InstancedMesh(rockGeo, rockMat, count)
     const m = new THREE.Matrix4(); const q = new THREE.Quaternion(); const s = new THREE.Vector3(); const p = new THREE.Vector3()
     let placed = 0, guard = 0
@@ -431,12 +474,12 @@ export class World {
       this.scene.add(pts)
       return pts
     }
-    this.motes = makePoints(620, '#d8c6ff', 0.32, 105, 0.6, 7, 0.55)
-    this.firefliesMesh = makePoints(260, '#a6ffb0', 0.4, 34, 0.6, 3.5, 0.9)
+    this.motes = makePoints(this.quality.motes, '#d8c6ff', 0.32, 105, 0.6, 7, 0.55)
+    this.firefliesMesh = makePoints(this.quality.fireflies, '#a6ffb0', 0.4, 34, 0.6, 3.5, 0.9)
     this.firefliesMesh.position.set(-46, 0, 16)
-    this.cavernDust = makePoints(160, '#8fe6ff', 0.36, 22, 0.4, 5, 0.7)
+    this.cavernDust = makePoints(Math.round(this.quality.fireflies * 0.6), '#8fe6ff', 0.36, 22, 0.4, 5, 0.7)
     this.cavernDust.position.set(-62, 0, -44)
-    this.spireDust = makePoints(120, '#ff8aa8', 0.32, 18, 0.4, 5, 0.6)
+    this.spireDust = makePoints(Math.round(this.quality.fireflies * 0.45), '#ff8aa8', 0.32, 18, 0.4, 5, 0.6)
     this.spireDust.position.set(72, 0, 56)
   }
 
@@ -580,9 +623,11 @@ export class World {
     this.camTarget.set(x, this.playerPos.y + 1.55, z)
   }
 
-  rotateCamera(dx, dy) {
-    this.cameraYaw -= dx * 0.0045
-    this.cameraPitch = clamp(this.cameraPitch + dy * 0.0032, 0.06, 1.05)
+  rotateCamera(dx, dy, touch = false) {
+    // Fingers travel less than a mouse, so touch drags get a little extra yaw.
+    const k = touch ? 1.35 : 1
+    this.cameraYaw -= dx * 0.0045 * k
+    this.cameraPitch = clamp(this.cameraPitch + dy * 0.0032 * k, 0.06, 1.05)
   }
   zoomCamera(delta) { this.cameraDist = clamp(this.cameraDist + delta * 0.0035, 4.5, 15) }
 
@@ -822,13 +867,64 @@ export class World {
     this.updateCamera(dt)
   }
 
+  /* ------------------------------------------------------- PERF */
+  batchProps() {
+    const dynamicRoots = [
+      this.player,
+      this.arenaBarrier,
+      ...Object.values(this.npcs).map(n => n.group),
+      ...Object.values(this.creatures).map(c => c.group),
+      ...Object.values(this.nodes),
+      ...this.floating.map(f => f.obj),
+      ...this.fireflies.map(f => f.obj),
+    ]
+    this.batchStats = batchStatic(this.scene, dynamicRoots)
+  }
+
+  trimPointLights() {
+    const lights = []
+    this.scene.traverse(o => { if (o.isPointLight) lights.push(o) })
+    const max = this.quality.maxPointLights
+    if (lights.length <= max) { this.pointLightCount = lights.length; return }
+    // Keep the lamps around the village first: they matter most visually.
+    lights.sort((a, b) => {
+      const da = Math.hypot(a.position.x, a.position.z - 16)
+      const db = Math.hypot(b.position.x, b.position.z - 16)
+      return da - db
+    })
+    for (let i = max; i < lights.length; i++) lights[i].parent?.remove(lights[i])
+    this.pointLightCount = max
+  }
+
+  applyPixelRatio() {
+    const base = Math.min(window.devicePixelRatio || 1, this.quality.maxPixelRatio)
+    this.renderer.setPixelRatio(Math.max(0.6, base * this.renderScale))
+  }
+
+  /** Shrinks the render resolution when frames run long, restores it when there is headroom. */
+  adaptQuality(dt) {
+    if (dt <= 0 || dt > 0.25) return
+    this._frameAvg = this._frameAvg == null ? dt : this._frameAvg * 0.9 + dt * 0.1
+    this._adaptAcc += dt
+    if (this._adaptAcc < 0.8) return
+    this._adaptAcc = 0
+    let scale = this.renderScale
+    if (this._frameAvg > 1 / 45) scale -= 0.1
+    else if (this._frameAvg < 1 / 57) scale += 0.05
+    scale = clamp(scale, 0.6, 1)
+    if (Math.abs(scale - this.renderScale) > 0.005) {
+      this.renderScale = scale
+      this.applyPixelRatio()
+    }
+  }
+
   render() { this.renderer.render(this.scene, this.camera) }
 
   onResize() {
     const w = window.innerWidth, h = window.innerHeight
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6))
+    this.applyPixelRatio()
     this.renderer.setSize(w, h)
   }
 

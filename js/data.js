@@ -189,7 +189,7 @@ export const NPCS = [
     ],
   },
   {
-    id:'rook', name:'Sergeant Rook', role:'Dueling Master', pos:[25,-9], color:'#6b3f3f', accent:'#e0677a',
+    id:'rook', name:'Sergeant Rook', role:'Dueling Master', pos:[35.5,-3], color:'#6b3f3f', accent:'#e0677a',
     greeting:'A duel is a conversation. Most wizards shout. The good ones listen. Ready to say something worth hearing?',
     options:[
       { label:'Enter the tournament', action:'tournament' },
@@ -206,7 +206,7 @@ export const NPCS = [
     ],
   },
   {
-    id:'garrick', name:'Garrick Sloane', role:'Tournament Regular', pos:[20,-7], color:'#5c4a6e', accent:'#c79bff',
+    id:'garrick', name:'Garrick Sloane', role:'Tournament Regular', pos:[15,-13], color:'#5c4a6e', accent:'#c79bff',
     greeting:'Another wandmaker with a hero complex. Splendid. The arena has been dreadfully short of tragedy.',
     options:[
       { label:'Duel him', action:'duel', duel:'garrick' },

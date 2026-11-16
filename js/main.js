@@ -22,6 +22,13 @@ const $ = id => document.getElementById(id)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 const rand = (a, b) => a + Math.random() * (b - a)
 
+/* Touch detection: coarse pointers, real touch screens, or ?touch=1. */
+const params = new URLSearchParams(location.search)
+const touchMode = window.matchMedia?.('(pointer: coarse)').matches
+  || (navigator.maxTouchPoints || 0) > 0
+  || params.has('touch')
+if (touchMode) document.body.classList.add('touch')
+
 /* ---------------------------------------------------------- BOOT */
 const hadSave = hasSave()
 load()
@@ -153,10 +160,18 @@ $('start-btn').addEventListener('click', () => {
   refreshCustomers(3)
   ui.updateHUD()
   ui.drawMinimap()
+  updateTouchUI()
   save()
-  setTimeout(() => ui.toast(`Welcome to Hollowmere, ${state.player.name}`, 'Speak to Mira Goldwick at the shop, or Professor Marrow at the academy. Press C to craft.', 'magic', '✦'), 700)
-  setTimeout(() => ui.objective('Reach the academy and learn your first new spell'), 2600)
   setTimeout(() => {
+    if (document.body.classList.contains('in-duel')) return
+    ui.toast(`Welcome to Hollowmere, ${state.player.name}`, 'Speak to Mira Goldwick at the shop, or Professor Marrow at the academy. Press C to craft.', 'magic', '✦')
+  }, 700)
+  setTimeout(() => {
+    if (document.body.classList.contains('in-duel')) return
+    ui.objective('Reach the academy and learn your first new spell')
+  }, 2600)
+  setTimeout(() => {
+    if (document.body.classList.contains('in-duel')) return
     const q = QUESTS[0]
     if (!state.quests[q.id]?.complete) ui.toast('Pursuit — ' + q.title, q.hint, 'good', '❧')
   }, 4200)
@@ -164,6 +179,9 @@ $('start-btn').addEventListener('click', () => {
 
 $('sound-toggle').addEventListener('click', () => {
   audio.setEnabled(state.settings.sound)
+})
+$('interact-prompt').addEventListener('click', () => {
+  if (canInteract()) tryInteract()
 })
 /* ---------------------------------------------------------- INPUT */
 const PANEL_KEYS = { c: 'wand', g: 'spells', b: 'shop', m: 'map', j: 'journal' }
@@ -226,35 +244,142 @@ function canInteract() {
     && ui.el.resultRoot.classList.contains('hidden')
 }
 
-/* camera drag */
-let dragging = false, lastX = 0, lastY = 0
+/* camera drag (mouse and touch — tracks one pointer so a second finger can use the joystick) */
+let dragging = false, dragId = null, lastX = 0, lastY = 0
 canvas.addEventListener('pointerdown', e => {
-  if (e.button !== 0) return
-  dragging = true; lastX = e.clientX; lastY = e.clientY
+  if (e.pointerType === 'mouse' && e.button !== 0) return
+  dragging = true; dragId = e.pointerId; lastX = e.clientX; lastY = e.clientY
   canvas.setPointerCapture?.(e.pointerId)
 })
 canvas.addEventListener('pointermove', e => {
-  if (!dragging) return
-  world.rotateCamera(e.clientX - lastX, e.clientY - lastY)
+  if (!dragging || e.pointerId !== dragId) return
+  world.rotateCamera(e.clientX - lastX, e.clientY - lastY, e.pointerType !== 'mouse')
   lastX = e.clientX; lastY = e.clientY
 })
-window.addEventListener('pointerup', () => { dragging = false })
+const endDrag = e => { if (e.pointerId === dragId) { dragging = false; dragId = null } }
+window.addEventListener('pointerup', endDrag)
+window.addEventListener('pointercancel', endDrag)
 canvas.addEventListener('wheel', e => {
   world.zoomCamera(e.deltaY)
   e.preventDefault()
 }, { passive: false })
 canvas.addEventListener('contextmenu', e => e.preventDefault())
 
+/* ---------------------------------------------------------- TOUCH CONTROLS */
+const joy = { id: null, x: 0, y: 0, radius: 46 }
+let touchShield = false
+const joyEl = $('joystick')
+const joyThumb = $('joy-thumb')
+
+function resetJoystick() {
+  joy.id = null; joy.x = 0; joy.y = 0
+  if (joyThumb) joyThumb.style.transform = 'translate(-50%,-50%)'
+}
+
+if (touchMode) {
+  joyEl.addEventListener('pointerdown', e => {
+    e.preventDefault()
+    if (joy.id !== null) return
+    joy.id = e.pointerId
+    try { joyEl.setPointerCapture(e.pointerId) } catch {}
+    moveJoystick(e)
+  })
+  joyEl.addEventListener('pointermove', e => {
+    if (e.pointerId !== joy.id) return
+    e.preventDefault()
+    moveJoystick(e)
+  })
+  const endJoy = e => { if (e.pointerId === joy.id) resetJoystick() }
+  joyEl.addEventListener('pointerup', endJoy)
+  joyEl.addEventListener('pointercancel', endJoy)
+
+  const shieldBtn = $('touch-shield')
+  const dodgeBtn = $('touch-dodge')
+  shieldBtn.addEventListener('pointerdown', e => {
+    e.preventDefault(); touchShield = true
+    shieldBtn.classList.add('pressed')
+    shieldBtn.setPointerCapture?.(e.pointerId)
+  })
+  const releaseShield = () => { touchShield = false; shieldBtn.classList.remove('pressed') }
+  shieldBtn.addEventListener('pointerup', releaseShield)
+  shieldBtn.addEventListener('pointercancel', releaseShield)
+  shieldBtn.addEventListener('lostpointercapture', releaseShield)
+  window.addEventListener('pointerup', releaseShield)
+  window.addEventListener('blur', releaseShield)
+
+  dodgeBtn.addEventListener('pointerdown', e => {
+    e.preventDefault()
+    dodgeBtn.classList.add('pressed')
+    if (duel?.active) duel.dodge(moveVector())
+  })
+  const releaseDodge = () => dodgeBtn.classList.remove('pressed')
+  dodgeBtn.addEventListener('pointerup', releaseDodge)
+  dodgeBtn.addEventListener('pointercancel', releaseDodge)
+  dodgeBtn.addEventListener('pointerleave', releaseDodge)
+
+  $('touch-interact').addEventListener('pointerdown', e => {
+    e.preventDefault()
+    if (canInteract()) tryInteract()
+  })
+}
+
+function moveJoystick(e) {
+  const rect = joyEl.getBoundingClientRect()
+  const cx = rect.left + rect.width / 2
+  const cy = rect.top + rect.height / 2
+  const max = rect.width * 0.32
+  joy.radius = max
+  let dx = e.clientX - cx
+  let dy = e.clientY - cy
+  const len = Math.hypot(dx, dy)
+  if (len > max) { dx = dx / len * max; dy = dy / len * max }
+  // Dead zone near the centre, then a smooth analogue ramp to full speed.
+  const raw = Math.min(1, len / max)
+  const dead = 0.14
+  const mag = raw <= dead ? 0 : (raw - dead) / (1 - dead)
+  const nx = len ? dx / max : 0
+  const ny = len ? dy / max : 0
+  joy.x = nx * mag
+  joy.y = ny * mag
+  if (joyThumb) joyThumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`
+}
+
+function touchAllowed() {
+  if (!touchMode || !started || paused) return false
+  if (ui?.panelName) return false
+  if (!ui) return false
+  if (!ui.el.dialogue.classList.contains('hidden')) return false
+  if (!ui.el.lessonRoot.classList.contains('hidden')) return false
+  if (!ui.el.resultRoot.classList.contains('hidden')) return false
+  return true
+}
+
+let touchUiOn = false
+function updateTouchUI() {
+  if (!touchMode) return
+  const on = touchAllowed()
+  if (on === touchUiOn) return
+  touchUiOn = on
+  $('touch-ui').classList.toggle('on', on)
+  if (!on) {
+    resetJoystick()
+    touchShield = false
+    $('touch-shield').classList.remove('pressed')
+  }
+}
+
 /* ---------------------------------------------------------- MOVEMENT */
 function moveVector() {
   const yaw = world.cameraYaw
   const fx2 = -Math.sin(yaw), fz2 = -Math.cos(yaw)
   const rx = Math.cos(yaw), rz = -Math.sin(yaw)
-  let fwd = 0, side = 0
+  let fwd = -joy.y, side = joy.x
   if (keys.w || keys.arrowup) fwd += 1
   if (keys.s || keys.arrowdown) fwd -= 1
   if (keys.d || keys.arrowright) side += 1
   if (keys.a || keys.arrowleft) side -= 1
+  const len = Math.hypot(fwd, side)
+  if (len > 1) { fwd /= len; side /= len }
   return {
     x: fx2 * fwd + rx * side,
     z: fz2 * fwd + rz * side,
@@ -304,10 +429,17 @@ function findInteractable() {
 }
 
 function refreshInteract() {
-  if (!canInteract()) { ui.setInteract(null); interactTarget = null; return }
+  updateTouchUI()
+  if (!canInteract()) {
+    ui.setInteract(null)
+    interactTarget = null
+    $('touch-interact').classList.remove('ready')
+    return
+  }
   const t = findInteractable()
   interactTarget = t
   ui.setInteract(t ? t.label : null)
+  $('touch-interact').classList.toggle('ready', !!t)
 }
 
 function tryInteract() {
@@ -445,6 +577,7 @@ function beginDuel(enemyId, opts = {}) {
   clearKeys()
   if (ui.panelName) ui.closePanel()
   if (!ui.el.dialogue.classList.contains('hidden')) ui.closeDialogue()
+  $('toasts').innerHTML = ''
   ui.updateHUD()
   const ok = duel.start(enemyId, opts)
   if (!ok) {
@@ -524,25 +657,23 @@ const clock = new THREE.Clock()
 
 function frame() {
   requestAnimationFrame(frame)
-  let dt = clock.getDelta()
-  if (dt > 0.06) dt = 0.06
+  const rawDt = clock.getDelta()
+  const dt = Math.min(rawDt, 0.05)
   if (!world) return
 
   const allowMove = movementAllowed()
   if (allowMove) {
     const mv = moveVector()
     world.updateMovement(dt, mv)
-    if (!duel.active && world.moveAmount > 0.4 && Math.random() < dt * 1.6) {
-      // faint footstep shimmer
-    }
   } else {
     world.updateMovement(dt, { x: 0, z: 0 })
   }
 
   world.update(dt)
   fx.update(dt)
-  duel.update(dt, { shield: !!keys.q && allowMove })
+  duel.update(dt, { shield: (!!keys.q || touchShield) && allowMove })
   ui.tick(dt)
+  updateTouchUI()
 
   hudAcc += dt
   if (hudAcc > 0.5) {
@@ -553,7 +684,6 @@ function frame() {
       state.player.mana = Math.min(maxM, state.player.mana + 6)
       const maxH = maxHealth()
       if (state.player.health < maxH) state.player.health = Math.min(maxH, state.player.health + 1.2)
-      ui.drawMinimap()
       ui.updateHUD()
     }
     // node visibility
@@ -567,7 +697,7 @@ function frame() {
     // zone change
     const zone = world.zone()
     if (zone && zone.id !== lastZoneId) {
-      if (lastZoneId !== null && started) ui.toast(zone.name, zone.desc, 'magic', '⌖')
+      if (lastZoneId !== null && started && !duel.active) ui.toast(zone.name, zone.desc, 'magic', '⌖')
       lastZoneId = zone.id
     }
     state.position = { x: world.playerPos.x, z: world.playerPos.z }
@@ -584,7 +714,7 @@ function frame() {
     refreshInteract()
   }
 
-  // hide player during cutaway? no
+  world.adaptQuality(rawDt)
   world.render()
 }
 
