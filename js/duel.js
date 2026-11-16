@@ -76,17 +76,22 @@ export class Duel {
     this.loadout = (state.loadout || []).filter(id => state.learned[id]).slice(0, 4)
     if (!this.loadout.length) this.loadout = ['stupefy']
 
-    const center = this.world.arenaCenter ? this.world.arenaCenter.clone() : new THREE.Vector3(24, 0, -4)
+    const rawCenter = opts.center || this.world.arenaCenter || { x: 24, z: -4 }
+    const center = rawCenter.isVector3
+      ? rawCenter.clone()
+      : new THREE.Vector3(rawCenter.x, rawCenter.y ?? this.world.heightAt(rawCenter.x, rawCenter.z), rawCenter.z)
     this.arenaCenter = center
-    this.world.setPlayer(center.x, center.z + 4.8, Math.PI)
+    this.arenaRadius = opts.radius || 8.9
+    this.spawnOffset = this.arenaRadius * 0.54
+    this.world.setPlayer(center.x, center.z + this.spawnOffset, Math.PI)
     this.world.cameraYaw = 0
-    this.world.cameraPitch = 0.42
-    this.world.cameraDist = 11.2
-    this.world.setDuelArena(true, center)
+    this.world.cameraPitch = opts.radius ? 0.52 : 0.42
+    this.world.cameraDist = opts.radius ? Math.max(7.2, this.arenaRadius * 1.6) : 11.2
+    this.world.setDuelArena(true, center, this.arenaRadius)
 
     const group = makeDuelEnemy(this.world, def)
-    const ey = this.world.heightAt(center.x, center.z - 4.8)
-    group.position.set(center.x, ey, center.z - 4.8)
+    const ey = this.world.heightAt(center.x, center.z - this.spawnOffset)
+    group.position.set(center.x, ey, center.z - this.spawnOffset)
     group.rotation.y = 0
     this.world.scene.add(group)
     this.enemy = {
@@ -96,7 +101,7 @@ export class Duel {
       baseY: ey, dead: false,
     }
     this.shieldMesh.visible = false
-    this.shieldMesh.position.set(center.x, ey + 1.05, center.z + 4.8)
+    this.shieldMesh.position.set(center.x, ey + 1.05, center.z + this.spawnOffset)
     this.cb.onStart?.(def, this)
     this.cb.onMessage?.('DUEL', 1.6)
     this.cb.onSfx?.('duelStart')
@@ -131,7 +136,7 @@ export class Duel {
     if (this.telegraph) { this.world.scene.remove(this.telegraph.sprite); this.telegraph = null }
 
     const def = this.def
-    const rewards = grantDuelRewards(this.enemyId, victory, { tournament: !!this.opts.tournament })
+    const rewards = grantDuelRewards(this.enemyId, victory, { ...this.opts, tournament: !!this.opts.tournament })
     const loot = []
     let tournamentBonus = null
     let bossReward = null
@@ -139,6 +144,7 @@ export class Duel {
     if (victory) {
       const dropTable = {
         elara: ['unicorn'], garrick: ['veela'], tobias: ['troll'], marrow: ['phoenix'],
+        lysandra: ['silverlime'], feld: ['holly'],
         gloomfang: ['manticore'], warden: ['starglass'], morvane: ['voidheart'],
       }
       const drops = dropTable[this.enemyId] || []
@@ -626,7 +632,7 @@ export class Duel {
       const toPlayer = new THREE.Vector3(this.world.playerPos.x - ex, 0, this.world.playerPos.z - ez)
       const dist = toPlayer.length() || 1
       const speed = this.def.speed * (st.slow > 0 ? 0.55 : 1) * (st.stun > 0 ? 0 : 1)
-      const desired = this.def.boss ? 7.2 : 7.8
+      const desired = Math.min(this.def.boss ? 7.2 : 7.8, this.arenaRadius * 0.72)
       const radial = dist > desired ? 1 : (dist < desired - 1.4 ? -1 : 0)
       this.enemy.strafeTimer -= dt
       if (this.enemy.strafeTimer <= 0) { this.enemy.strafe *= -1; this.enemy.strafeTimer = rand(1.6, 3.2) }
@@ -636,9 +642,10 @@ export class Duel {
       let nx = ex + move.x, nz = ez + move.z
       const c = this.arenaCenter
       const away = new THREE.Vector3(nx - c.x, 0, nz - c.z)
-      if (away.length() > 7.8) { away.setLength(7.8); nx = c.x + away.x; nz = c.z + away.z }
+      const enemyBounds = Math.max(1.5, this.arenaRadius - 1)
+      if (away.length() > enemyBounds) { away.setLength(enemyBounds); nx = c.x + away.x; nz = c.z + away.z }
       const pd = Math.hypot(nx - this.world.playerPos.x, nz - this.world.playerPos.z)
-      if (pd > 2.6) {
+      if (pd > Math.min(2.6, this.arenaRadius * 0.55)) {
         this.enemy.position.x = nx; this.enemy.position.z = nz
         this.enemy.position.y = this.world.heightAt(nx, nz)
       }
@@ -756,7 +763,7 @@ export class Duel {
           this.activeProjectiles.splice(i, 1)
           continue
         }
-        if (Math.hypot(p.mesh.position.x - this.arenaCenter.x, p.mesh.position.z - this.arenaCenter.z) > 13) {
+        if (Math.hypot(p.mesh.position.x - this.arenaCenter.x, p.mesh.position.z - this.arenaCenter.z) > this.arenaRadius * 1.55) {
           this.fx.removeOrb(p.mesh); this.activeProjectiles.splice(i, 1)
         }
       }

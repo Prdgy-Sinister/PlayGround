@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Wandlore — Legacy of the Elder Grove</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23120d20'/%3E%3Cpath d='M46 10L26 40l-6 14 14-6 30-20z' fill='%23d9b978'/%3E%3Ccircle cx='45' cy='19' r='4' fill='%23f5dfa6'/%3E%3C/svg%3E" />
 <meta name="description" content="A magical fantasy RPG of wandcraft, spell school, exploration and wizard dueling." />
@@ -45,6 +45,7 @@
         <button class="hud-btn" data-panel="shop"><span class="hb-icon">⌂</span><span>Shop</span><kbd>B</kbd></button>
         <button class="hud-btn" data-panel="map"><span class="hb-icon">⌖</span><span>Map</span><kbd>M</kbd></button>
         <button class="hud-btn" data-panel="journal"><span class="hb-icon">❧</span><span>Journal</span><kbd>J</kbd></button>
+        <button class="hud-btn" data-panel="academy"><span class="hb-icon">⌂</span><span>Academy</span><kbd>U</kbd></button>
       </div>
       <div class="equipped-wand" id="equipped-wand">
         <div class="ew-swatch"></div>
@@ -53,6 +54,13 @@
     </div>
 
     <div id="quest-tracker">
+      <div id="mission-tracker">
+        <div class="mission-kicker"><span id="mission-act">Act I</span><span class="mission-sep">✦</span><span>Main Story</span></div>
+        <div class="mission-title" id="mission-title">The New Student</div>
+        <div class="mission-step" id="mission-step">Speak with Professor Marrow in the academy courtyard.</div>
+        <div class="mission-where" id="mission-where">Arcanum courtyard</div>
+        <div class="mission-bar"><div id="mission-fill"></div></div>
+      </div>
       <div class="qt-title"><span>❧</span> Active Pursuits</div>
       <div id="quest-list"></div>
     </div>
@@ -78,6 +86,30 @@
       <span class="keycap">E</span><span id="interact-text">Interact</span>
     </div>
 
+    <!-- Touch / mobile controls -->
+    <div id="touch-controls" class="hidden">
+      <div id="joystick-zone">
+        <div id="joystick-base">
+          <div id="joystick-knob"></div>
+        </div>
+        <div class="joy-label">MOVE</div>
+      </div>
+      <div id="touch-actions">
+        <div class="touch-mana"><span>MANA</span><div class="touch-mana-track"><div id="touch-mana-fill"></div></div></div>
+        <div id="touch-cast" class="touch-cast-row">
+          <button class="touch-btn cast category-offensive" data-touch-cast="0" aria-label="Cast spell 1"><span class="tb-icon">✦</span><span class="tb-key">1</span><span class="tb-cd"></span></button>
+          <button class="touch-btn cast category-defensive" data-touch-cast="1" aria-label="Cast spell 2"><span class="tb-icon">✦</span><span class="tb-key">2</span><span class="tb-cd"></span></button>
+          <button class="touch-btn cast category-healing" data-touch-cast="2" aria-label="Cast spell 3"><span class="tb-icon">✦</span><span class="tb-key">3</span><span class="tb-cd"></span></button>
+          <button class="touch-btn cast category-elemental" data-touch-cast="3" aria-label="Cast spell 4"><span class="tb-icon">✦</span><span class="tb-key">4</span><span class="tb-cd"></span></button>
+        </div>
+        <div class="touch-util-row">
+          <button class="touch-btn util" data-touch-action="interact" id="touch-interact" aria-label="Interact"><span class="tb-icon">✋</span><span class="tb-label">Use</span></button>
+          <button class="touch-btn util" data-touch-action="shield" id="touch-shield" aria-label="Hold to raise a ward"><span class="tb-icon">⛨</span><span class="tb-label">Ward</span></button>
+          <button class="touch-btn util" data-touch-action="dodge" id="touch-dodge" aria-label="Dodge"><span class="tb-icon">➤</span><span class="tb-label">Dodge</span></button>
+        </div>
+      </div>
+    </div>
+
     <div id="objective-toast"></div>
 
     <div id="duel-ui" class="hidden">
@@ -98,23 +130,6 @@
     <div id="crosshair" class="hidden"><span></span></div>
     <div id="toasts"></div>
     <div id="sound-toggle" title="Toggle sound">♪</div>
-
-    <!-- Touch controls (shown on phones / tablets and with ?touch=1) -->
-    <div id="touch-ui">
-      <div id="joystick" aria-label="Movement joystick">
-        <div class="joy-ring"></div>
-        <div class="joy-tick joy-up">▲</div>
-        <div class="joy-tick joy-down">▼</div>
-        <div class="joy-tick joy-left">◀</div>
-        <div class="joy-tick joy-right">▶</div>
-        <div id="joy-thumb"></div>
-      </div>
-      <div id="touch-buttons">
-        <button id="touch-shield" class="touch-btn" aria-label="Hold to shield">⛨<small>Shield</small></button>
-        <button id="touch-dodge" class="touch-btn" aria-label="Dodge">»<small>Dodge</small></button>
-        <button id="touch-interact" class="touch-btn interact" aria-label="Interact">E<small>Use</small></button>
-      </div>
-    </div>
   </div>
 
   <!-- Dialogue -->
@@ -170,12 +185,10 @@
       <div class="start-divider"><span></span>✦<span></span></div>
       <p class="start-blurb">Craft wands from rare woods and living cores. Master the six schools of magic. Out-duel the dark, and build a legend that outlasts you.</p>
       <button id="start-btn">Enter the Wizarding World</button>
-      <div class="start-controls start-controls-keys">
+      <div class="start-controls">
         <span><kbd>W A S D</kbd> move</span><span><kbd>E</kbd> interact</span><span><kbd>1–4</kbd> cast</span><span><kbd>Q</kbd> shield</span><span><kbd>Shift</kbd> dodge</span><span><kbd>C</kbd> wandcraft</span><span><kbd>G</kbd> grimoire</span>
       </div>
-      <div class="start-controls start-controls-touch">
-        <span>Left thumb — move</span><span>Drag the world — look</span><span>Tap a spell — cast</span><span>⛨ hold — shield</span><span>» — dodge</span><span>E — use</span>
-      </div>
+      <div class="start-touch-hint">Left stick to move · drag the world to look · right buttons to cast, ward, dodge and interact</div>
       <div class="start-note">Your wand, your spells, your choices — they determine your legacy.</div>
     </div>
     <div class="start-credit">An original fantasy inspired by the wizarding world · WebGL</div>

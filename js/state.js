@@ -7,7 +7,7 @@ import {
   WOODS, CORES, FLEXIBILITIES, COMBOS, QUESTS, RANKS,
   BENCH_UPGRADES, STARTING_WAND, CUSTOMER_NAMES, CUSTOMER_PERSONAS,
   CUSTOMER_PREFS, CATEGORIES, SPELLS, SPELL_BY_ID, CATEGORY_SPELLS, RARITIES,
-  DUELISTS,
+  DUELISTS, ACADEMY_ROOMS, ACADEMY_ASSIGNMENTS, SHATTERED_WAND, MISSIONS,
 } from './data.js'
 
 const SAVE_KEY = 'wandlore-legacy-v1'
@@ -52,8 +52,28 @@ export function newState() {
       wandsCrafted: 0, spellsLearned: 0, duelsWon: 0, duelsLost: 0, wandsSold: 0,
       rareGathered: 0, combosDiscovered: 1, tournamentsWon: 0, bossDefeated: 0,
       goldEarned: 0, damageDealt: 0, materialsGathered: 0, duelsTotal: 0,
+      academyLessons: 0, academyRooms: 0, potionsBrewed: 0, academyDuels: 0,
+      wandShards: 0, academySecrets: 0, beastsDefeated: 0, academyAssignments: 0,
     },
-    flags: { started: false, bossDefeated: false, bossLootGiven: false, tournamentComplete: false, blessing: false },
+    flags: { started: false, bossDefeated: false, bossLootGiven: false, tournamentComplete: false, blessing: false, enrolled: true },
+    story: {
+      missionIndex: 0,
+      step: 0,
+      flags: {},
+      completed: [],
+      startedAt: Date.now(),
+    },
+    academy: {
+      year: 1,
+      housePoints: 0,
+      rooms: ['courtyard'],
+      clues: [],
+      secrets: [],
+      classes: {},
+      completed: [],
+      potions: 0,
+      restedAt: 0,
+    },
     lore: [{ title: 'The Firstlight', text: 'Your first wand was oak and unicorn hair, eleven inches, supple. It was not beautiful. It was yours. That counts for more than the world admits.' }],
     creatures: [],
     tournament: { round: 0, complete: false, score: 0 },
@@ -92,6 +112,56 @@ export function load() {
     state.metrics = Object.assign(newState().metrics, data.metrics || {})
     state.upgrades = Object.assign(newState().upgrades, data.upgrades || {})
     state.flags = Object.assign(newState().flags, data.flags || {})
+    state.story = Object.assign(newState().story, data.story || {})
+    state.story.flags = Object.assign({}, data.story?.flags || {})
+    state.story.completed = Array.from(new Set(
+      (Array.isArray(data.story?.completed) ? data.story.completed : []).filter(id => MISSIONS.some(m => m.id === id)),
+    ))
+    const savedMissionIndex = Math.max(0, Math.min(MISSIONS.length, Number(data.story?.missionIndex) || 0))
+    const completedMissions = new Set(state.story.completed)
+    let completedPrefix = 0
+    while (completedPrefix < MISSIONS.length && completedMissions.has(MISSIONS[completedPrefix].id)) completedPrefix++
+    state.story.missionIndex = Math.max(savedMissionIndex, completedPrefix)
+    for (let i = 0; i < state.story.missionIndex; i++) completedMissions.add(MISSIONS[i].id)
+    state.story.completed = MISSIONS.filter(m => completedMissions.has(m.id)).map(m => m.id)
+    const currentMission = MISSIONS[state.story.missionIndex]
+    state.story.step = currentMission
+      ? Math.max(0, Math.min(currentMission.steps.length, Number(data.story?.step) || 0))
+      : 0
+    state.academy = Object.assign(newState().academy, data.academy || {})
+    state.academy.rooms = Array.from(new Set(['courtyard', ...(data.academy?.rooms || []), ...(data.academy?.secrets?.includes('vault') ? ['vault'] : [])]))
+    state.academy.clues = Array.from(new Set(data.academy?.clues || []))
+    state.academy.secrets = Array.from(new Set(data.academy?.secrets || []))
+    state.academy.completed = Array.from(new Set(data.academy?.completed || []))
+    // Keep the derived counters in step with the actual collection so mission
+    // steps that watch them do not stall on saves from before they existed.
+    state.metrics.wandShards = Math.max(state.metrics.wandShards || 0, state.academy.clues.length)
+    state.metrics.academyRooms = Math.max(state.metrics.academyRooms || 0, state.academy.rooms.length)
+    state.metrics.academySecrets = Math.max(state.metrics.academySecrets || 0, state.academy.secrets.length)
+    // Old saves pre-date the main story. Reconstruct the objective flags that
+    // their progress already proves, so returning players are not asked to
+    // repeat rooms, lessons or bosses they have finished.
+    const storyFlags = state.story.flags
+    if (state.academy.rooms.includes('grand_hall')) storyFlags.entered_halls = true
+    if (state.academy.rooms.includes('vault') || state.academy.secrets.includes('vault')) {
+      storyFlags.found_vault = true
+      if (state.academy.clues.length >= 4) storyFlags.echoes_delivered = true
+    }
+    if ((state.metrics.academyLessons || 0) > 0) storyFlags.attended_lesson = true
+    if (state.academy.clues.includes('clue_lake')) {
+      storyFlags.visited_lake = true
+      storyFlags.echo_lake = true
+    }
+    if (state.academy.clues.includes('clue_observatory')) {
+      storyFlags.visited_observatory = true
+      storyFlags.echo_observatory = true
+    }
+    if (state.academy.clues.length >= 2) storyFlags.echoes_2 = true
+    if (state.flags.bossDefeated || state.metrics.bossDefeated) storyFlags.beat_morvane = true
+    // Reports are only valid after their story events, even if an older build
+    // allowed the player to select them early.
+    if (!storyFlags.beat_lysandra) delete storyFlags.reported_feld
+    if (!storyFlags.beat_morvane || !storyFlags.echoes_delivered) delete storyFlags.reported_marrow
     // repair equipped wand
     if (!state.wands.some(w => w.id === state.equipped)) state.equipped = state.wands[0]?.id || 'starter'
     state.loadout = (state.loadout || []).filter(id => state.learned[id])
@@ -446,9 +516,15 @@ export function completeLesson(cat, perfect = false) {
     state.learned[spell.id].mastery = Math.min(10, (state.learned[spell.id].mastery || 0) + bonus)
   }
   ensureLoadout()
+  state.metrics.academyLessons = (state.metrics.academyLessons || 0) + 1
+  state.academy.classes[cat] = (state.academy.classes[cat] || 0) + 1
+  state.academy.housePoints = (state.academy.housePoints || 0) + 2
+  state.story.flags.attended_lesson = true
   addXp(isNew ? 35 : 12)
   addRep(isNew ? 2 : 0)
   checkQuests()
+  checkAcademyAssignments()
+  checkMissionProgress()
   emit('lesson', { spell, isNew, perfect })
   emit('hud')
   save()
@@ -529,6 +605,110 @@ export function activeQuests() {
   return QUESTS.filter(q => !state.quests[q.id]?.complete).slice(0, 3)
 }
 
+/* ---------------------------------------------------------- MAIN STORY */
+export function storyFlag(flag) {
+  return !!(flag && state.story?.flags?.[flag])
+}
+
+export function missionAt(index = state.story?.missionIndex || 0) {
+  return MISSIONS[index] || null
+}
+
+export function currentMission() {
+  return missionAt()
+}
+
+export function currentMissionStep() {
+  const m = currentMission()
+  return m ? m.steps[state.story.step] || null : null
+}
+
+export function missionStepProgress(step) {
+  if (!step) return { cur: 0, target: 1 }
+  if (step.flag) return { cur: storyFlag(step.flag) ? 1 : 0, target: 1 }
+  if (step.metric) return { cur: Math.min(step.target, state.metrics[step.metric] || 0), target: step.target }
+  if (step.rep) return { cur: Math.min(step.target, state.player.rep || 0), target: step.target }
+  if (step.quest) return { cur: state.quests[step.quest]?.complete ? step.target : 0, target: step.target }
+  return { cur: 0, target: 1 }
+}
+
+export function storySummary() {
+  const mission = currentMission()
+  const stepIndex = state.story?.step || 0
+  const step = mission?.steps[stepIndex] || null
+  return {
+    mission,
+    step,
+    stepIndex,
+    stepCount: mission?.steps.length || 0,
+    progress: step ? missionStepProgress(step) : { cur: 0, target: 1 },
+    completed: state.story?.completed || [],
+    missionIndex: state.story?.missionIndex || 0,
+    totalMissions: MISSIONS.length,
+    finished: !mission,
+  }
+}
+
+export function setStoryFlag(flag) {
+  if (!flag) return false
+  if (!state.story) state.story = newState().story
+  const prerequisites = {
+    reported_feld: ['beat_lysandra'],
+    reported_marrow: ['beat_morvane', 'echoes_delivered'],
+  }[flag]
+  if (prerequisites?.some(required => !state.story.flags[required])) return false
+  if (state.story.flags[flag]) return false
+  state.story.flags[flag] = true
+  state.title = rankTitle()
+  emit('storyFlag', { flag })
+  const advanced = checkMissionProgress()
+  if (!advanced) emit('hud')
+  save()
+  return true
+}
+
+export function checkMissionProgress() {
+  if (!state.story) state.story = newState().story
+  let changed = false
+  for (let guard = 0; guard < 16; guard++) {
+    const mission = MISSIONS[state.story.missionIndex]
+    if (!mission) break
+    const step = mission.steps[state.story.step]
+    if (step) {
+      const p = missionStepProgress(step)
+      if (p.cur < p.target) break
+      state.story.step++
+      changed = true
+      emit('missionStep', { mission, step, stepIndex: state.story.step - 1 })
+      continue
+    }
+    if (!state.story.completed.includes(mission.id)) {
+      state.story.completed.push(mission.id)
+      const reward = mission.reward || {}
+      state.player.gold += reward.gold || 0
+      state.metrics.goldEarned += reward.gold || 0
+      addXp(reward.xp || 0)
+      addRep(reward.rep || 0)
+      state.story.missionIndex++
+      state.story.step = 0
+      changed = true
+      emit('missionComplete', { mission, reward })
+      continue
+    }
+    state.story.missionIndex++
+    state.story.step = 0
+    changed = true
+  }
+  if (changed) { save(); emit('hud') }
+  return changed
+}
+
+export function visitZone(zoneId) {
+  if (!zoneId) return
+  if (zoneId === 'observatory') setStoryFlag('visited_observatory')
+  if (zoneId === 'lake') setStoryFlag('visited_lake')
+}
+
 /* ---------------------------------------------------------- LORE */
 export function addLore(title, text) {
   if (state.lore.some(l => l.title === title)) return false
@@ -545,6 +725,163 @@ export function addCreature(name, where) {
   addRep(1)
   save()
   return true
+}
+
+/* ---------------------------------------------------------- ACADEMY */
+export function academyMetric(metric) {
+  return state.metrics[metric] || 0
+}
+
+export function academyAssignmentProgress(a) {
+  return Math.min(a.target, academyMetric(a.metric))
+}
+
+export function academyRoomById(id) {
+  return ACADEMY_ROOMS.find(r => r.id === id)
+}
+
+export function academyCompleteCount() {
+  return state.academy?.completed?.length || 0
+}
+
+export function checkAcademyAssignments() {
+  if (!state.academy) state.academy = newState().academy
+  let changed = false
+  for (const a of ACADEMY_ASSIGNMENTS) {
+    if (state.academy.completed.includes(a.id)) continue
+    if (academyAssignmentProgress(a) < a.target) continue
+    state.academy.completed.push(a.id)
+    state.player.gold += a.gold
+    state.metrics.goldEarned += a.gold
+    state.academy.housePoints += 10
+    addXp(a.xp)
+    addRep(a.rep)
+    emit('academyAssignment', a)
+    changed = true
+  }
+  const year = Math.min(7, 1 + Math.floor((state.academy.completed.length || 0) / 2))
+  state.metrics.academyAssignments = state.academy.completed.length
+  if (year > (state.academy.year || 1)) {
+    state.academy.year = year
+    emit('academyYear', year)
+    changed = true
+  }
+  if (changed) { emit('hud'); save(); checkMissionProgress() }
+  return changed
+}
+
+export function discoverRoom(id, { silent = false } = {}) {
+  if (!state.academy) state.academy = newState().academy
+  if (!id || state.academy.rooms.includes(id)) return false
+  const room = academyRoomById(id)
+  if (!room) return false
+  state.academy.rooms.push(id)
+  state.metrics.academyRooms = state.academy.rooms.length
+  state.academy.housePoints += 2
+  if (id === 'grand_hall') state.story.flags.entered_halls = true
+  addXp(18)
+  addRep(1)
+  checkAcademyAssignments()
+  checkQuests()
+  checkMissionProgress()
+  emit('academyRoom', room)
+  if (!silent) emit('hud')
+  save()
+  return true
+}
+
+export function discoverSecret(id) {
+  if (!state.academy) state.academy = newState().academy
+  if (!id || state.academy.secrets.includes(id)) return false
+  state.academy.secrets.push(id)
+  state.metrics.academySecrets = state.academy.secrets.length
+  if (id === 'vault') {
+    state.story.flags.found_vault = true
+    if (state.academy.clues.length >= 4) state.story.flags.echoes_delivered = true
+    discoverRoom('vault')
+  }
+  state.academy.housePoints += 5
+  addXp(35)
+  addRep(3)
+  checkAcademyAssignments()
+  checkQuests()
+  checkMissionProgress()
+  emit('academySecret', { id })
+  emit('hud')
+  save()
+  return true
+}
+
+export function addWandShard(id) {
+  if (!state.academy) state.academy = newState().academy
+  if (!id || state.academy.clues.includes(id)) return false
+  if (!state.story) state.story = newState().story
+  state.academy.clues.push(id)
+  state.metrics.wandShards = state.academy.clues.length
+  state.story.flags['echo_' + id] = true
+  // The lake and observatory echoes use short story flags because their
+  // mission steps are written as "ring the bell" and "use the telescope".
+  if (id === 'clue_lake') state.story.flags.echo_lake = true
+  if (id === 'clue_observatory') state.story.flags.echo_observatory = true
+  if (state.academy.clues.length >= 2) state.story.flags.echoes_2 = true
+  state.academy.housePoints += 4
+  addXp(30)
+  addRep(2)
+  checkAcademyAssignments()
+  checkQuests()
+  checkMissionProgress()
+  emit('academyClue', { id })
+  emit('hud')
+  save()
+  return true
+}
+
+export function shardProgress() {
+  return {
+    found: state.academy?.clues?.length || 0,
+    total: 6,
+    target: 4,
+    title: SHATTERED_WAND.title,
+    intro: SHATTERED_WAND.intro,
+    final: SHATTERED_WAND.final,
+  }
+}
+
+export function brewPotion() {
+  if (!state.academy) state.academy = newState().academy
+  if (countMat('willow') < 1 || countMat('unicorn') < 1) {
+    return { ok: false, error: 'You need one willow switch and one unicorn hair. The cauldron refuses to improvise.' }
+  }
+  removeMat('willow', 1)
+  removeMat('unicorn', 1)
+  state.player.health = maxHealth()
+  state.player.mana = maxMana()
+  state.metrics.potionsBrewed++
+  state.academy.potions = (state.academy.potions || 0) + 1
+  state.academy.housePoints += 1
+  addXp(18)
+  addRep(1)
+  checkAcademyAssignments()
+  checkQuests()
+  emit('academyPotion', { count: state.academy.potions })
+  emit('hud')
+  save()
+  return { ok: true, health: maxHealth(), mana: maxMana() }
+}
+
+export function restAtDorm() {
+  if (!state.academy) state.academy = newState().academy
+  const healed = maxHealth() - state.player.health
+  const mana = maxMana() - state.player.mana
+  state.player.health = maxHealth()
+  state.player.mana = maxMana()
+  state.academy.restedAt = Date.now()
+  state.academy.housePoints += 1
+  addXp(6)
+  checkAcademyAssignments()
+  emit('hud')
+  save()
+  return { healed: Math.round(healed), mana: Math.round(mana) }
 }
 
 /* ---------------------------------------------------------- DUEL REWARDS */
@@ -566,10 +903,21 @@ export function grantDuelRewards(enemyId, victory, opts = {}) {
   state.metrics.goldEarned += gold
   state.metrics.duelsWon++
   state.metrics.duelsTotal++
+  state.story.flags['beat_' + enemyId] = true
+  if (enemyId === 'gloomfang' || enemyId === 'warden') {
+    state.metrics.beastsDefeated = (state.metrics.beastsDefeated || 0) + 1
+  }
   addXp(xp)
   addRep(rep)
+  if (opts.academy) {
+    state.metrics.academyDuels = (state.metrics.academyDuels || 0) + 1
+    state.academy.housePoints = (state.academy.housePoints || 0) + 3
+    checkAcademyAssignments()
+  }
+  if (opts.boss) state.story.flags.beat_morvane = true
   if (opts.tournament) state.tournament.score += 10 + rep * 2
   checkQuests()
+  checkMissionProgress()
   emit('hud')
   save()
   return { gold, rep, xp }

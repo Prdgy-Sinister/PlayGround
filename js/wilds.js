@@ -5,7 +5,7 @@
    ============================================================ */
 import * as THREE from 'three'
 import { NPCS, NODES, WOODS, CORES, RARITIES } from './data.js'
-import { std, addGlow, lamp } from './props.js'
+import { std, addGlow, lamp, signTexture } from './props.js'
 
 const woodById = Object.fromEntries(WOODS.map(w => [w.id, w]))
 const coreById = Object.fromEntries(CORES.map(c => [c.id, c]))
@@ -33,7 +33,7 @@ export function buildForest(world) {
     const reed = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.04, 1.2 + Math.random(), 4), std('#5c7a4a'))
     reed.position.set(px + Math.cos(a) * r, h + 0.6, pz + Math.sin(a) * r); scene.add(reed)
   }
-  const pl = new THREE.PointLight(0x5fd8c4, 20, 26, 2); pl.position.set(px, 2, pz); scene.add(pl)
+  world.addLightSource(px, 2, pz, 0x5fd8c4, 20, 26, 2)
   addGlow(world, scene, '#5fd8c4', 12, px, 0.4, pz, 0.18)
 
   // giant elder tree
@@ -210,8 +210,8 @@ export function buildCavern(world) {
     const spike = new THREE.Mesh(new THREE.ConeGeometry(0.7 + Math.random() * 0.7, hh, 6), std('#565062', { rough: 1 }))
     spike.position.set(px, h + hh / 2, pz); scene.add(spike)
   }
-  const light1 = new THREE.PointLight(0x7ad8e8, 30, 30, 2); light1.position.set(cx - 4, base + 4, cz); scene.add(light1)
-  const light2 = new THREE.PointLight(0xb79aff, 22, 26, 2); light2.position.set(cx + 8, base + 3, cz - 6); scene.add(light2)
+  world.addLightSource(cx - 4, base + 4, cz, 0x7ad8e8, 30, 30, 2)
+  world.addLightSource(cx + 8, base + 3, cz - 6, 0xb79aff, 22, 26, 2)
   addGlow(world, scene, '#7ad8e8', 20, cx, base + 3, cz, 0.1)
 }
 
@@ -247,7 +247,7 @@ export function buildSpire(world) {
     addGlow(world, scene, '#ff5f7a', 1.8, win.position.x, win.position.y, win.position.z, 0.45)
   }
   addGlow(world, scene, '#ff5f7a', 18, cx, base + 17, cz, 0.12)
-  const light = new THREE.PointLight(0xff5f7a, 34, 34, 2); light.position.set(cx, base + 8, cz); scene.add(light)
+  world.addLightSource(cx, base + 8, cz, 0xff5f7a, 34, 34, 2)
   world.addCollider(cx, cz, 5.8)
 
   // obsidian shards
@@ -373,6 +373,260 @@ function golemModel(world, accent) {
     shard.position.set(0, 0.8 + i * 0.2, 0.3 + i * 0.2); g.add(shard)
   }
   return g
+}
+
+/* ============================================================
+   MOONMERE LAKE
+   A shallow, levelled basin with a chapel island, dock and reeds.
+   ============================================================ */
+export function buildLake(world) {
+  const scene = world.scene
+  const cx = -34, cz = 70
+  const waterY = 0.66, islandY = 0.82
+  const water = new THREE.Mesh(new THREE.CircleGeometry(16.2, 56), new THREE.MeshStandardMaterial({ color: '#173f4a', roughness: 0.12, metalness: 0.5, transparent: true, opacity: 0.9, emissive: '#0b2832', emissiveIntensity: 0.9 }))
+  water.rotation.x = -Math.PI / 2; water.position.set(cx, waterY, cz); scene.add(water)
+  const waterRing = new THREE.Mesh(new THREE.RingGeometry(15.9, 16.6, 56), std('#536a62', { rough: 1 }))
+  waterRing.rotation.x = -Math.PI / 2; waterRing.position.set(cx, waterY + 0.01, cz); scene.add(waterRing)
+
+  // shore stones and reeds
+  for (let i = 0; i < 34; i++) {
+    const a = (i / 34) * Math.PI * 2 + Math.random() * 0.1
+    const r = 16.5 + Math.random() * 3.2
+    const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r
+    if (Math.abs(x - cx) < 2.4 && z < cz) continue
+    const h = world.heightAt(x, z)
+    const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.24 + Math.random() * 0.42, 0), std('#4d5651', { rough: 1 }))
+    stone.position.set(x, h + 0.12, z); stone.rotation.set(Math.random(), Math.random() * 6, Math.random()); scene.add(stone)
+  }
+  for (let i = 0; i < 46; i++) {
+    const a = Math.random() * Math.PI * 2, r = 5 + Math.random() * 10
+    const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r
+    if (Math.abs(x - cx) < 2.2 && z < cz + 4) continue
+    const h = world.heightAt(x, z)
+    const reed = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.035, 0.8 + Math.random() * 0.9, 4), std('#5b7556'))
+    reed.position.set(x, h + 0.45, z); reed.rotation.z = (Math.random() - 0.5) * 0.16; scene.add(reed)
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.035, 4, 4), std('#8a7a4a'))
+    tip.position.set(x, h + 0.9, z); scene.add(tip)
+  }
+  // lily pads and drifting lights
+  for (let i = 0; i < 16; i++) {
+    const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 8
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(0.24 + Math.random() * 0.25, 7), std('#3f6b48'))
+    pad.rotation.x = -Math.PI / 2
+    pad.position.set(cx + Math.cos(a) * r, waterY + 0.012, cz + Math.sin(a) * r); scene.add(pad)
+  }
+
+  // dock from the south shore
+  for (let i = 0; i < 9; i++) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.09, 0.72), std(i % 2 ? '#5a412b' : '#4b3524'))
+    plank.position.set(cx, 0.7, cz - 13.5 + i * 1.18); scene.add(plank)
+  }
+  for (const x of [cx - 1.15, cx + 1.15]) for (let i = 0; i < 5; i++) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.1, 5), std('#3a2b22'))
+    post.position.set(x, 0.5, cz - 13.2 + i * 2.7); scene.add(post)
+  }
+  lamp(world, cx - 2.2, cz - 13.6, '#ffcf83', 2.8, 13, 12)
+  lamp(world, cx + 2.2, cz - 8.4, '#ffcf83', 2.8, 13, 12)
+
+  // chapel island
+  const island = new THREE.Mesh(new THREE.BoxGeometry(10.6, 0.34, 12.4), std('#4b4a46', { rough: 1 }))
+  island.position.set(cx, islandY - 0.16, cz + 4); scene.add(island)
+  const islandEdge = new THREE.Mesh(new THREE.BoxGeometry(11.1, 0.12, 12.9), std('#5e5c55', { rough: 1 }))
+  islandEdge.position.set(cx, islandY - 0.02, cz + 4); scene.add(islandEdge)
+  const chapel = new THREE.Group(); chapel.position.set(cx, islandY, cz + 4.5); scene.add(chapel)
+  const stone = '#575562', stoneDark = '#3a3843'
+  const cbox = (w, h, d, color, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), std(color, { rough: 0.98 })); m.position.set(x, y, z); chapel.add(m); return m }
+  // broken walls with a clear entrance to the south
+  cbox(10.2, 0.5, 0.45, stone, 0, 0.25, -5.9)
+  cbox(0.45, 3.4, 0.45, stoneDark, -4.9, 1.7, -5.9)
+  cbox(0.45, 3.4, 0.45, stoneDark, 4.9, 1.7, -5.9)
+  cbox(0.45, 2.4, 10.4, stone, -5.0, 1.2, 0)
+  cbox(0.45, 3.1, 10.4, stone, 5.0, 1.55, 0)
+  cbox(2.2, 0.5, 0.45, stone, -3.9, 0.25, 5.7)
+  cbox(2.2, 0.5, 0.45, stone, 3.9, 0.25, 5.7)
+  cbox(1.0, 2.3, 0.45, stoneDark, -4.5, 1.15, 5.7)
+  cbox(1.0, 2.3, 0.45, stoneDark, 4.5, 1.15, 5.7)
+  // roofless arches
+  for (const [ax, az] of [[-5.0, -5.0], [5.0, -5.0], [-5.0, 4.8], [5.0, 4.8]]) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.44, 4.4, 8), std(stone))
+    col.position.set(ax, 2.2, az); chapel.add(col)
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.24, 1.0), std(stoneDark))
+    cap.position.set(ax, 4.5, az); chapel.add(cap)
+    world.addCollider(cx + ax, cz + 4.5 + az, 0.55)
+  }
+  const archTop = new THREE.Mesh(new THREE.BoxGeometry(10.6, 0.45, 0.5), std(stone))
+  archTop.position.set(0, 4.3, -5.9); chapel.add(archTop)
+  const archTop2 = new THREE.Mesh(new THREE.BoxGeometry(10.6, 0.45, 0.5), std(stone))
+  archTop2.position.set(0, 4.3, 5.7); chapel.add(archTop2)
+
+  // bell frame and altar
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.24, 0.35), std('#4b3524'))
+  beam.position.set(0, 3.5, -4.0); chapel.add(beam)
+  for (const sx of [-1.25, 1.25]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.24, 3.5, 0.35), std('#4b3524'))
+    post.position.set(sx, 1.75, -4.0); chapel.add(post)
+  }
+  const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.52, 0.72, 12, 1, true), std('#b9a06a', { metal: 0.7, rough: 0.35, side: THREE.DoubleSide }))
+  bell.position.set(0, 3.0, -4.0); chapel.add(bell)
+  const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), std('#6b5a3a', { metal: 0.6 }))
+  clapper.position.set(0, 2.55, -4.0); chapel.add(clapper)
+  addGlow(world, chapel, '#ffd08a', 2.6, 0, 3.0, -4.0, 0.5)
+  const altar = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.95, 1.0), std(stoneDark))
+  altar.position.set(0, 0.48, -2.2); chapel.add(altar)
+  const altarTop = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.16, 1.25), std(stone))
+  altarTop.position.set(0, 1.03, -2.2); chapel.add(altarTop)
+  const altarGlow = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), new THREE.MeshStandardMaterial({ color: '#e6c987', emissive: '#c9a6ff', emissiveIntensity: 1.2, roughness: 0.2, metalness: 0.4 }))
+  altarGlow.position.set(0, 1.45, -2.2); chapel.add(altarGlow)
+  addGlow(world, chapel, '#c9a6ff', 3.2, 0, 1.45, -2.2, 0.6)
+  world.floating.push({ obj: altarGlow, baseY: 1.45, phase: 1.2, spin: 0.7, sway: 0.16, local: true })
+  // pews
+  for (const pz of [0.2, 1.8, 3.4]) {
+    const pew = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.16, 0.5), std('#4b3524'))
+    pew.position.set(-2.8, 0.55, pz); chapel.add(pew)
+    const pew2 = pew.clone(); pew2.position.x = 2.8; chapel.add(pew2)
+  }
+  // grave markers and candles
+  for (const [gx, gz] of [[-3.8, 4.4], [3.6, 4.6], [-2.6, -4.8]]) {
+    const grave = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.18), std('#4c4a52'))
+    grave.position.set(gx, 0.55, gz); grave.rotation.z = (Math.random() - 0.5) * 0.2; chapel.add(grave)
+  }
+  for (const [lx, lz] of [[-4.2, -3.0], [4.2, -3.0], [-4.2, 3.6], [4.2, 3.6]]) {
+    const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.4, 6), std('#ded3b6'))
+    candle.position.set(lx, 0.2 + islandY, lz + cz + 4.5 - islandY); chapel.add(candle)
+  }
+  world.addLightSource(cx, islandY + 2.6, cz + 0.5, 0x9a7be0, 16, 14, 2)
+  const chapelLabel = world.makeLabel('DROWNED CHAPEL', '#9fd8ff')
+  chapelLabel.position.set(cx, islandY + 5.2, cz + 4.5); chapelLabel.scale.set(4.2, 0.9, 1); scene.add(chapelLabel)
+
+  // glowing water wisps
+  for (let i = 0; i < 8; i++) {
+    const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * 9
+    const wisp = addGlow(world, scene === null ? null : scene, '#8fe6ff', 0.6 + Math.random() * 0.4, cx + Math.cos(a) * r, waterY + 0.5 + Math.random() * 0.8, cz + Math.sin(a) * r, 0.55)
+    wisp.userData.wisp = true
+  }
+
+  if (!world.interactables) world.interactables = []
+  world.interactables.push(
+    { id: 'lake_bell', label: 'Ring the drowned chapel bell', pos: [cx, cz + 2.3], r: 2.6, action: 'bell' },
+    { id: 'lake_altar', label: 'Read the chapel altar', pos: [cx, cz + 2.7], r: 2.4, action: 'lore', title: 'The Drowned Bell', text: 'The altar is worn smooth by hands that came to ask the lake for something. The inscription is almost gone: “What is given is not lost. It is only waiting.”' },
+  )
+}
+
+/* ============================================================
+   SUNKEN OBSERVATORY
+   A broken hilltop dome, a great telescope and a working orrery.
+   ============================================================ */
+export function buildObservatory(world) {
+  const scene = world.scene
+  const cx = 50, cz = 8, base = 2.0
+  const stone = '#5a5a70', stoneDark = '#3e3e50', brass = '#b99a5a'
+  const platform = new THREE.Mesh(new THREE.CylinderGeometry(10.4, 11.2, 0.5, 28), std(stone, { rough: 0.97 }))
+  platform.position.set(cx, base - 0.2, cz); scene.add(platform)
+  const inlay = new THREE.Mesh(new THREE.RingGeometry(7.9, 8.3, 48), std('#8a7a5a', { metal: 0.4 }))
+  inlay.rotation.x = -Math.PI / 2; inlay.position.set(cx, base + 0.06, cz); scene.add(inlay)
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2
+    const tick = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 1.1), std('#a9d8ff', { emissive: '#3f6a9a', ei: 0.7 }))
+    tick.position.set(cx + Math.cos(a) * 8.1, base + 0.08, cz + Math.sin(a) * 8.1)
+    tick.rotation.y = -a; scene.add(tick)
+  }
+  // broad steps to the south
+  for (let i = 0; i < 4; i++) {
+    const step = new THREE.Mesh(new THREE.BoxGeometry(4.6 + i * 0.7, 0.22, 0.9), std(i % 2 ? stone : stoneDark))
+    step.position.set(cx, base - 0.16 - i * 0.2, cz + 10.5 + i * 0.85); scene.add(step)
+  }
+  // ring of pillars and broken arches
+  for (let i = 0; i < 7; i++) {
+    if (i === 1) continue
+    const a = (i / 7) * Math.PI * 2
+    const px = cx + Math.cos(a) * 8.2, pz = cz + Math.sin(a) * 8.2
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.52, 5.8 - (i % 2) * 1.1, 8), std(stone))
+    col.position.set(px, base + 2.9 - (i % 2) * 0.55, pz); scene.add(col)
+    world.addCollider(px, pz, 0.7)
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.3, 1.3), std(stoneDark))
+    cap.position.set(px, base + 5.6 - (i % 2) * 1.1, pz); scene.add(cap)
+    if (i % 2 === 0) {
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 0.9), std(stone))
+      brace.position.set(px + Math.cos(a + Math.PI) * 1.6, base + 5.3, pz + Math.sin(a + Math.PI) * 1.6); scene.add(brace)
+    }
+  }
+  // broken dome shell (a partial sphere sitting high, open to the sky)
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(9.8, 22, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), std('#34344a', { side: THREE.DoubleSide, rough: 0.92 }))
+  dome.position.set(cx, base + 2.0, cz); dome.rotation.y = 0.3; scene.add(dome)
+  // jagged broken edge
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2
+    const shard = new THREE.Mesh(new THREE.TetrahedronGeometry(0.7 + Math.random() * 0.7, 0), std('#43435a', { flatShading: true }))
+    shard.position.set(cx + Math.cos(a) * 9.1, base + 6.6 + Math.random() * 0.9, cz + Math.sin(a) * 9.1)
+    shard.rotation.set(Math.random(), Math.random() * 6, Math.random()); scene.add(shard)
+  }
+  // great telescope
+  const mount = new THREE.Group(); mount.position.set(cx - 0.4, base, cz - 0.8); scene.add(mount)
+  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.25, 1.4, 10), std(stoneDark))
+  pedestal.position.y = 0.7; mount.add(pedestal)
+  for (const sx of [-0.65, 0.65]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 3.4, 0.4), std(brass, { metal: 0.7, rough: 0.35 }))
+    arm.position.set(sx, 2.5, 0); arm.rotation.z = sx > 0 ? -0.18 : 0.18; mount.add(arm)
+  }
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.72, 7.4, 14), std('#3d4a68', { metal: 0.55, rough: 0.32 }))
+  tube.position.set(0, 4.3, -0.3); tube.rotation.x = -0.82; mount.add(tube)
+  const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.56, 0.55, 14), std(brass, { metal: 0.8, rough: 0.25 }))
+  eye.position.set(0, 6.7, -2.9); eye.rotation.x = -0.82; mount.add(eye)
+  const lensGlow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: '#9fd8ff', transparent: true, opacity: 0.7, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+  lensGlow.position.set(0, 6.85, -3.18); lensGlow.rotation.x = -0.82; mount.add(lensGlow)
+  addGlow(world, mount, '#9fd8ff', 4.2, 0, 6.85, -3.18, 0.55)
+  world.addCollider(cx - 0.4, cz - 0.8, 1.5)
+  world.addLightSource(cx, base + 4.2, cz - 1.4, 0x9fd8ff, 18, 16, 2)
+
+  // orrery
+  const orrery = new THREE.Group(); orrery.position.set(cx + 4.2, base, cz + 3.6); scene.add(orrery)
+  const oBase = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.95, 0.8, 10), std(brass, { metal: 0.65 }))
+  oBase.position.y = 0.4; orrery.add(oBase)
+  const oPost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 1.8, 6), std(brass, { metal: 0.7 }))
+  oPost.position.y = 1.6; orrery.add(oPost)
+  for (let i = 0; i < 3; i++) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.9 + i * 0.55, 0.025, 4, 36), std(brass, { metal: 0.8 }))
+    ring.rotation.x = Math.PI / 2.3 + i * 0.2; ring.rotation.z = i * 0.7; ring.position.y = 2.4; orrery.add(ring)
+    const planet = new THREE.Mesh(new THREE.SphereGeometry(0.1 + i * 0.03, 8, 6), new THREE.MeshBasicMaterial({ color: ['#ffd08a', '#9fd8ff', '#c9a6ff'][i], toneMapped: false }))
+    planet.position.set((0.9 + i * 0.55) * Math.cos(i * 2.1), 2.4, (0.9 + i * 0.55) * Math.sin(i * 2.1)); orrery.add(planet)
+    world.floating.push({ obj: planet, baseY: 2.4, phase: i * 1.7, spin: 0.5, sway: 0.1, local: true })
+  }
+  addGlow(world, orrery, '#d9b978', 2.6, 0, 2.4, 0, 0.45)
+  world.addCollider(cx + 4.2, cz + 3.6, 0.9)
+
+  // star charts and lectern
+  const lectern = new THREE.Group(); lectern.position.set(cx + 2.8, base, cz - 3.4); scene.add(lectern)
+  const lectBase = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 1.1, 7), std(stoneDark))
+  lectBase.position.y = 0.55; lectern.add(lectBase)
+  const chart = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.15), new THREE.MeshBasicMaterial({ map: signTexture(['THE DARK STAR', 'it moves against the sky'], { bg: '#111a2a', fg: '#a8d8ff', sub: '#6f8fb8' }), toneMapped: false, side: THREE.DoubleSide }))
+  chart.position.set(0, 1.35, 0); chart.rotation.x = -0.62; lectern.add(chart)
+  addGlow(world, lectern, '#9fd8ff', 1.4, 0, 1.35, 0, 0.4)
+
+  // banner poles and lamps
+  for (const [bx, bz, color] of [[cx - 7.2, cz + 6.2, '#3f5e8a'], [cx + 7.2, cz + 6.2, '#6a4a9a']]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 4.4, 5), std('#4b3524'))
+    pole.position.set(bx, base + 2.2, bz); scene.add(pole)
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.4), std(color, { side: THREE.DoubleSide, emissive: '#1b2440', ei: 0.6 }))
+    banner.position.set(bx + 0.65, base + 3.2, bz); scene.add(banner)
+    addGlow(world, scene, '#9fd8ff', 1.1, bx + 0.65, base + 4.3, bz, 0.35)
+  }
+  lamp(world, cx - 9.4, cz + 9.0, '#9fd8ff', 3.0, 16, 14)
+  lamp(world, cx + 9.4, cz + 9.0, '#9fd8ff', 3.0, 16, 14)
+  const label = world.makeLabel('SUNKEN OBSERVATORY', '#a8d8ff')
+  label.position.set(cx, base + 8.2, cz + 8.4); label.scale.set(5.2, 1.0, 1); scene.add(label)
+
+  // floating star motes
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * Math.PI * 2, r = 2 + Math.random() * 6
+    const mote = addGlow(world, scene, '#a8d8ff', 0.4 + Math.random() * 0.4, cx + Math.cos(a) * r, base + 1 + Math.random() * 4, cz + Math.sin(a) * r, 0.5)
+    world.floating.push({ obj: mote, baseY: mote.position.y, phase: i * 0.8, spin: 0, sway: 0.12 })
+  }
+
+  if (!world.interactables) world.interactables = []
+  world.interactables.push(
+    { id: 'observatory_scope', label: 'Look through the great telescope', pos: [cx - 0.4, cz - 2.6], r: 3.0, action: 'scope' },
+    { id: 'observatory_chart', label: 'Study the dark-star chart', pos: [cx + 2.8, cz - 3.4], r: 2.4, action: 'lore', title: 'The Dark Star', text: 'Every hundred nights the dark star passes over Arcanum. Vela has marked each passing in red. Beneath the marks, in older ink: “It is not a star. It is a wand deciding.”' },
+  )
 }
 
 export function buildNPCs(world) {
@@ -537,14 +791,6 @@ export function makeDuelEnemy(world, def) {
   }
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.8, 18), new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.32, depthWrite: false }))
   shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.02; g.add(shadow)
-  // A soft accent aura keeps the opponent readable against the dark arena.
-  const accent = def.accent || '#c9a6ff'
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.78, 1.0, 28),
-    new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.42, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
-  )
-  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring)
-  addGlow(world, g, accent, 1.9, 0, 1.35, 0, 0.3)
   return g
 }
 
@@ -594,6 +840,18 @@ export function buildNodes(world) {
       lock.position.set(0, 0.42, 0.4); g.add(lock)
       addGlow(world, g, '#e9c874', 1.8, 0, 0.7, 0, 0.35)
       color = '#e9c874'
+    } else if (node.type === 'clue') {
+      const shard = new THREE.Mesh(new THREE.TetrahedronGeometry(0.36, 0), new THREE.MeshStandardMaterial({ color: '#e6c987', emissive: '#c9a6ff', emissiveIntensity: 1.1, roughness: 0.2, metalness: 0.45, flatShading: true }))
+      shard.position.y = 1.25; shard.rotation.z = 0.3; g.add(shard)
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.015, 4, 28), new THREE.MeshBasicMaterial({ color: '#c9a6ff', transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }))
+      ring.rotation.x = Math.PI / 2.3; ring.position.y = 1.25; g.add(ring)
+      addGlow(world, g, '#c9a6ff', 2.8, 0, 1.25, 0, 0.62)
+      world.floating.push({ obj: shard, baseY: 1.25, phase: Math.random() * 6, spin: 0.8, sway: 0.18, local: true })
+      world.floating.push({ obj: ring, baseY: 1.25, phase: Math.random() * 6, spin: 0.55, sway: 0.1, local: true })
+      const marker = addGlow(world, g, '#e6c987', 1.1, 0, 2.2, 0, 0.75)
+      marker.userData.baseY = 2.2
+      g.userData.marker = marker
+      color = '#c9a6ff'
     } else {
       const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.48, 1.8, 4), std('#5f6470', { rough: 1 }))
       stone.position.y = 0.9; stone.rotation.y = 0.4; g.add(stone)
@@ -606,6 +864,6 @@ export function buildNodes(world) {
     g.userData.baseY = y
     world.scene.add(g)
     world.nodes[node.id] = g
-    if (node.type === 'lore' || node.type === 'chest') world.addCollider(node.pos[0], node.pos[1], 0.6)
+    if (node.type === 'lore' || node.type === 'chest' || node.type === 'clue') world.addCollider(node.pos[0], node.pos[1], 0.6)
   }
 }
