@@ -380,15 +380,19 @@ export class Game {
     if (!type) return {};
     if (type.supernatural) return { ...type.mats };
     const needs = {};
-    if (type.matClass === 'wood') {
-      needs[materialId] = materialId === 'wood' ? (type.mats.wood || 2) : 2;
-      needs.charcoal = type.mats.charcoal || 1;
-    } else {
-      const baseCount = type.mats.iron || 2;
-      needs[materialId] = materialId === 'iron' ? baseCount : 2;
-      needs.charcoal = type.mats.charcoal || 1;
+    const primary = type.matClass === 'wood' ? 'wood' : type.matClass === 'fine' ? 'lacquer' : 'iron';
+    for (const [k, n] of Object.entries(type.mats || {})) {
+      if (k === 'charcoal' || k === primary) continue;
+      needs[k] = n;
     }
+    const baseCount = type.mats[primary] || 2;
+    needs[materialId] = materialId === primary ? baseCount : Math.max(2, baseCount - (baseCount > 2 ? 1 : 0));
+    needs.charcoal = type.mats.charcoal || 1;
     return needs;
+  }
+
+  materialFamily(materialId) {
+    return MATERIALS[materialId]?.family || (materialId === 'wood' ? 'wood' : 'metal');
   }
 
   canCraft(typeId, materialId) {
@@ -398,10 +402,11 @@ export class Game {
     const reqLevel = Math.max(0, type.tier - 1);
     if (s.workshopLevel < reqLevel) return { ok: false, reason: `Requires workshop level ${reqLevel + 1}` };
     if (type.blueprint && !s.blueprints.includes(type.blueprint)) return { ok: false, reason: 'Forbidden blueprint not yet found' };
-    if (type.matClass === 'wood') {
-      if (!['wood', 'spiritwood'].includes(materialId)) return { ok: false, reason: 'Bows require hinoki or spirit wood' };
-    } else if (!['iron', 'tamahagane', 'folded', 'onisteel'].includes(materialId)) {
-      return { ok: false, reason: 'Choose a metal' };
+    const fam = this.materialFamily(materialId);
+    if (!type.supernatural) {
+      if (type.matClass === 'wood' && fam !== 'wood') return { ok: false, reason: 'Bows require wood' };
+      if (type.matClass === 'fine' && fam !== 'fine') return { ok: false, reason: 'This design requires a fine material' };
+      if (type.matClass !== 'wood' && type.matClass !== 'fine' && fam !== 'metal') return { ok: false, reason: 'Choose a metal' };
     }
     if (materialId === 'onisteel' && !type.supernatural) return { ok: false, reason: 'Enchanted oni steel refuses ordinary designs' };
     if (materialId === 'spiritwood' && type.matClass !== 'wood') return { ok: false, reason: 'Spirit wood is for bows alone' };
@@ -469,17 +474,35 @@ export class Game {
       if (Math.random() < 0.7) give('seed', 'bamboo', 1);
       give('mat', 'charcoal', 1 + Math.floor(Math.random() * 2));
       if (Math.random() < 0.14) give('seed', 'wisteria', 1);
+      if (Math.random() < 0.2) give('seed', 'cedar', 1);
+      if (Math.random() < 0.16) give('seed', 'ginkgo', 1);
+      if (Math.random() < 0.08) give('seed', 'katsura', 1);
       this.sfx('water');
     } else if (node === 'cherry') {
       if (Math.random() < 0.65) give('seed', 'cherry', 1);
       if (Math.random() < 0.25) give('seed', 'azalea', 1);
       if (Math.random() < 0.2) give('seed', 'maple', 1);
+      if (Math.random() < 0.18) give('seed', 'plum', 1);
+      if (Math.random() < 0.12) give('seed', 'camellia', 1);
       this.sfx('click');
     } else if (node === 'mine') {
       give('mat', 'iron', 2 + Math.floor(Math.random() * 3));
       if (Math.random() < 0.35) give('mat', 'tamahagane', 1);
       if (Math.random() < 0.12) give('mat', 'folded', 1);
+      if (Math.random() < 0.16) give('mat', 'bronze', 1);
       if (isNight(s.hour) && Math.random() < 0.16) give('mat', 'onisteel', 1);
+      this.sfx('hammer');
+    } else if (node === 'kiln') {
+      give('mat', 'porcelain', 1 + Math.floor(Math.random() * 2));
+      if (Math.random() < 0.55) give('mat', 'lacquer', 1);
+      if (Math.random() < 0.4) give('mat', 'bronze', 1);
+      if (Math.random() < 0.25) give('mat', 'keyaki', 1);
+      this.sfx('hammer');
+    } else if (node === 'quarry') {
+      give('mat', 'silver', 1 + Math.floor(Math.random() * 2));
+      if (Math.random() < 0.35) give('mat', 'keyaki', 1);
+      if (Math.random() < 0.14) give('mat', 'meteor', 1);
+      if (Math.random() < 0.2) give('mat', 'jade', 1);
       this.sfx('hammer');
     }
     this.addRep(1);
@@ -504,6 +527,35 @@ export class Game {
     this.sfx('success');
     this.audio?.bell(220, 0, 0.03);
     this.saveGame();
+    return true;
+  }
+
+  foxOffering() {
+    const s = this.state;
+    if (s.money < 150) { this.toast('The fox statues want a coin. An offering of 150 ryō would do.', 'warn'); return false; }
+    this.addMoney(-150);
+    const roll = Math.random();
+    if (roll < 0.3) {
+      this.focus(999);
+      this.toast('A white fox circles the shrine and vanishes. Your mind is clear again.', 'good');
+    } else if (roll < 0.56) {
+      const seed = pick(['ginkgo', 'plum', 'camellia', 'katsura', 'cedar']);
+      s.seeds[seed] = (s.seeds[seed] || 0) + 1;
+      this.toast(`The offering bowl holds a ${SPECIES[seed].name} seed when you return.`, 'good');
+    } else if (roll < 0.82) {
+      const gift = pick([['silver', 1], ['lacquer', 2], ['silk', 2], ['porcelain', 2], ['bronze', 2]]);
+      s.materials[gift[0]] = (s.materials[gift[0]] || 0) + gift[1];
+      this.toast(`A small bundle waits at the shrine: ${gift[1]}× ${MATERIALS[gift[0]].name}.`, 'good');
+    } else {
+      s.flags.shrineBlessing = s.day + 1;
+      this.addRep(10);
+      this.toast('Fox fire clings to your sleeves. Your next blade will be touched by luck (+8 quality).', 'good');
+    }
+    this.sfx('success');
+    this.addRep(2);
+    this.log('Made an offering at the Kitsune Shrine.');
+    this.saveGame();
+    this.ui?.refreshHUD();
     return true;
   }
 
