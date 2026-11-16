@@ -19,12 +19,13 @@ function radialTexture() {
 }
 
 export class FX {
-  constructor(scene) {
+  constructor(scene, lowPower = false) {
     this.scene = scene
     this.tex = radialTexture()
     this.active = []
     this.pool = []
     this.time = 0
+    this.density = lowPower ? 0.55 : 1
   }
 
   sprite(color, size = 1, opacity = 1) {
@@ -67,6 +68,7 @@ export class FX {
   }
 
   burst(pos, color, count = 18, spread = 5, size = 0.5, life = 0.7) {
+    count = Math.max(4, Math.round(count * this.density))
     for (let i = 0; i < count; i++) {
       const sp = this.sprite(color, size * (0.5 + Math.random()), 0.95)
       sp.position.copy(pos)
@@ -117,6 +119,7 @@ export class FX {
   }
 
   implosion(pos, color, count = 12) {
+    count = Math.max(4, Math.round(count * this.density))
     for (let i = 0; i < count; i++) {
       const sp = this.sprite(color, 0.32 + Math.random() * 0.3, 0.9)
       const ang = Math.random() * Math.PI * 2

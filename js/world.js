@@ -5,29 +5,163 @@
    ============================================================ */
 import * as THREE from 'three'
 import { ZONES, NODES, NPCS, WOODS, CORES, RARITIES } from './data.js'
-import { buildVillage, buildAcademy, buildArena, glowTexture } from './props.js'
-import { buildForest, buildRuins, buildCavern, buildSpire, buildNPCs, buildCreatures, buildNodes } from './wilds.js'
+import { buildVillage, buildAcademy, buildAcademyInterior, buildArena, glowTexture } from './props.js'
+import { buildForest, buildRuins, buildCavern, buildSpire, buildLake, buildObservatory, buildNPCs, buildCreatures, buildNodes } from './wilds.js'
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 const lerp = (a, b, t) => a + (b - a) * t
 const woodById = Object.fromEntries(WOODS.map(w => [w.id, w]))
 const coreById = Object.fromEntries(CORES.map(c => [c.id, c]))
 
+const coarsePointer = typeof window !== 'undefined' && (
+  window.matchMedia?.('(pointer: coarse)').matches || (navigator.maxTouchPoints || 0) > 0
+)
+const forceLow = typeof location !== 'undefined' && new URLSearchParams(location.search).has('low')
+const LOW_POWER = forceLow || coarsePointer || (navigator.hardwareConcurrency || 8) <= 4
+
+function materialSignature(m) {
+  return [
+    m.type, m.color?.getHexString?.() || '', m.roughness ?? '', m.metalness ?? '',
+    m.emissive?.getHexString?.() || '', m.emissiveIntensity ?? '', m.opacity ?? 1,
+    m.side ?? 0, m.flatShading ? 1 : 0, m.vertexColors ? 1 : 0, m.fog === false ? 0 : 1,
+    m.map?.uuid || '', m.alphaTest || 0, m.depthWrite === false ? 0 : 1,
+  ].join('|')
+}
+
+/* Merge same-material world-space triangles into one buffer. */
+function mergeMeshes(meshes, material) {
+  const geoms = []
+  let hasNormal = true
+  let hasUv = true
+  let total = 0
+  for (const mesh of meshes) {
+    const src = mesh.geometry
+    const geo = src.index ? src.toNonIndexed() : src.clone()
+    geo.applyMatrix4(mesh.matrixWorld)
+    if (!geo.attributes.position) { geo.dispose?.(); return null }
+    if (!geo.attributes.normal) hasNormal = false
+    if (!geo.attributes.uv) hasUv = false
+    total += geo.attributes.position.count
+    geoms.push(geo)
+  }
+  if (!hasNormal || total === 0) { geoms.forEach(g => g.dispose?.()); return null }
+
+  const useUv = hasUv && !!material.map
+  const position = new Float32Array(total * 3)
+  const normal = new Float32Array(total * 3)
+  const uv = useUv ? new Float32Array(total * 2) : null
+  let offset = 0
+  for (const geo of geoms) {
+    const p = geo.attributes.position.array
+    position.set(p, offset * 3)
+    const n = geo.attributes.normal.array
+    normal.set(n, offset * 3)
+    if (uv) uv.set(geo.attributes.uv.array, offset * 2)
+    offset += geo.attributes.position.count
+    geo.dispose?.()
+  }
+
+  const merged = new THREE.BufferGeometry()
+  merged.setAttribute('position', new THREE.BufferAttribute(position, 3))
+  merged.setAttribute('normal', new THREE.BufferAttribute(normal, 3))
+  if (uv) merged.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+  merged.computeBoundingSphere()
+  merged.computeBoundingBox()
+  return merged
+}
+
+/* One draw call for every static point-glow in the world. */
+function buildGlowBatch(texture, sprites) {
+  if (!sprites.length) return null
+  const base = new THREE.PlaneGeometry(1, 1)
+  const geo = new THREE.InstancedBufferGeometry()
+  geo.index = base.index
+  geo.setAttribute('position', base.attributes.position)
+  geo.setAttribute('uv', base.attributes.uv)
+  const n = sprites.length
+  const pos = new Float32Array(n * 3)
+  const col = new Float32Array(n * 4)
+  const size = new Float32Array(n)
+  const v = new THREE.Vector3()
+  sprites.forEach((sp, i) => {
+    sp.updateWorldMatrix(true, false)
+    v.setFromMatrixPosition(sp.matrixWorld)
+    pos[i * 3] = v.x; pos[i * 3 + 1] = v.y; pos[i * 3 + 2] = v.z
+    const c = sp.material.color
+    col[i * 4] = c.r; col[i * 4 + 1] = c.g; col[i * 4 + 2] = c.b
+    col[i * 4 + 3] = sp.material.opacity ?? 1
+    size[i] = Math.max(sp.scale.x, sp.scale.y)
+  })
+  geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(pos, 3))
+  geo.setAttribute('iColor', new THREE.InstancedBufferAttribute(col, 4))
+  geo.setAttribute('iSize', new THREE.InstancedBufferAttribute(size, 1))
+  geo.instanceCount = n
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uMap: { value: texture } },
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    fog: false,
+    vertexShader: `
+      attribute vec3 iPos;
+      attribute vec4 iColor;
+      attribute float iSize;
+      varying vec2 vUv;
+      varying vec4 vColor;
+      void main() {
+        vUv = uv;
+        vColor = iColor;
+        vec4 mv = modelViewMatrix * vec4(iPos, 1.0);
+        mv.xy += position.xy * iSize;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      varying vec2 vUv;
+      varying vec4 vColor;
+      vec3 toSrgb(vec3 c) {
+        return mix(c * 12.92, 1.055 * pow(c, vec3(0.4166667)) - 0.055, step(vec3(0.0031308), c));
+      }
+      void main() {
+        vec4 tex = texture2D(uMap, vUv);
+        gl_FragColor = vec4(toSrgb(vColor.rgb * tex.rgb), vColor.a * tex.a);
+      }`,
+  })
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.frustumCulled = false
+  mesh.renderOrder = 2
+  return mesh
+}
+
 export class World {
   constructor(canvas) {
     this.canvas = canvas
+    this.lowPower = LOW_POWER
     this.scene = new THREE.Scene()
     this.scene.background = new THREE.Color('#0c0918')
     this.scene.fog = new THREE.FogExp2(0x171129, 0.0072)
     this.camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 600)
-    this.isMobile = (window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth < 820)
-    this.pixelCap = this.isMobile ? 1.2 : 1.6
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !this.isMobile, powerPreference: 'high-performance', alpha: false })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.pixelCap))
-    this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.maxPixelRatio = this.lowPower ? 1.15 : 1.5
+    this.renderScale = this.lowPower ? 0.85 : 1
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, this.maxPixelRatio)
+    this.renderer = new THREE.WebGLRenderer({
+      canvas, antialias: !this.lowPower, powerPreference: 'high-performance',
+      alpha: false, stencil: false,
+    })
+    this.renderer.setPixelRatio(Math.max(0.55, this.basePixelRatio * this.renderScale))
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.24
+    this.renderer.toneMappingExposure = 1.22
+    this._fpsAvg = 0
+    this._qualityTimer = 0
+
+    this.lightSources = []
+    this.pointLightPool = []
+    this._lightTimer = 0
+    this.batchStats = { merged: 0, batches: 0, glows: 0 }
 
     this.textures = { glow: glowTexture() }
     this.colliders = []
@@ -56,6 +190,30 @@ export class World {
     this.moveAmount = 0
     this.facing = Math.PI
 
+    // The academy's inner halls sit on a levelled shelf inside the same
+    // continuous world. Walls and a removable roof turn it into a real
+    // interior without a second scene or a loading screen.
+    this.interactables = []
+    this.heightOverrides = []
+    this.academyRoof = null
+    this.academyFloorY = 0
+    let interiorPeak = -Infinity
+    for (let x = 26; x <= 58; x += 2) {
+      for (let z = -74; z <= -42; z += 2) interiorPeak = Math.max(interiorPeak, this.heightAt(x, z))
+    }
+    this.academyFloorY = interiorPeak + 0.22
+    this.addHeightOverride(25.2, 58.8, -74.8, -41.2, this.academyFloorY)
+    this.addHeightOverride(56.6, 67.4, -67.4, -56.6, this.academyFloorY)
+    this.academyBounds = { x0: 25.2, x1: 67.4, z0: -74.8, z1: -41.2 }
+    // Moonmere Lake: a shallow basin with a raised chapel island, and the
+    // observatory's wind-scoured plateau. Both are levelled before terrain
+    // generation so their props sit flush with the ground.
+    this.addHeightOverride(-39.5, -28.5, 67.5, 80.5, 0.82)
+    this.addHeightOverride(-35.2, -32.8, 55.8, 67.6, 0.74)
+    this.addHeightOverride(-42, -26, 64, 82, 0.35)
+    this.addHeightOverride(-52, -16, 52, 88, 0.55)
+    this.addHeightOverride(40, 62, -2, 18, 2.0)
+
     this.buildSky()
     this.buildTerrain()
     this.buildPaths()
@@ -63,11 +221,14 @@ export class World {
     this.buildMountains()
     buildVillage(this)
     buildAcademy(this)
+    buildAcademyInterior(this)
     buildArena(this)
     buildForest(this)
     buildRuins(this)
     buildCavern(this)
     buildSpire(this)
+    buildLake(this)
+    buildObservatory(this)
     buildNPCs(this)
     buildCreatures(this)
     buildNodes(this)
@@ -76,6 +237,7 @@ export class World {
     this.buildParticles()
     this.buildPlayer()
     this.buildBarrier()
+    this.batchStatics()
 
     this.setPlayer(0, 16, Math.PI)
     this.updateCamera(1, true)
@@ -83,21 +245,26 @@ export class World {
   }
 
   /* ------------------------------------------------------- HEIGHT */
+  addHeightOverride(x0, x1, z0, z1, y) {
+    this.heightOverrides.push({ x0, x1, z0, z1, y })
+  }
+
+  inAcademyInterior(x = this.playerPos.x, z = this.playerPos.z) {
+    const b = this.academyBounds
+    return !!b && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1
+  }
+
   heightAt(x, z) {
+    for (const o of this.heightOverrides || []) {
+      if (x >= o.x0 && x <= o.x1 && z >= o.z0 && z <= o.z1) return o.y
+    }
     let h = Math.sin(x * 0.048) * Math.cos(z * 0.055) * 0.82 + Math.sin((x + z) * 0.03) * 0.48 + Math.cos((x - z) * 0.041) * 0.3
     const dv = Math.hypot(x, z)
     h *= clamp(dv / 26, 0.08, 1)
     h -= 1.45 * Math.exp(-((x + 31) ** 2 + (z - 44) ** 2) / 105)
     h += 0.9 * Math.exp(-((x - 14) ** 2 + (z - 60) ** 2) / 850)
     h -= 0.55 * Math.exp(-((x + 62) ** 2 + (z + 44) ** 2) / 720)
-    h += 0.45 * Math.exp(-((x - 62) ** 2 + (z + 34) ** 2) / 900)
-    // Level the Arcanum campus so interiors and paths sit cleanly on the ground.
-    const campusD = Math.hypot(x - 62, z + 34)
-    if (campusD < 50) {
-      const t = Math.max(0, Math.min(1, (campusD - 42) / 8))
-      const ease = t * t * (3 - 2 * t)
-      h = 0.55 * (1 - ease) + h * ease
-    }
+    h += 0.45 * Math.exp(-((x - 44) ** 2 + (z + 25) ** 2) / 600)
     // Level the duelling ground so the terrain never cuts through the arena floor.
     const arenaD = Math.hypot(x - 24, z + 4)
     if (arenaD < 18) {
@@ -109,6 +276,10 @@ export class World {
   }
 
   addCollider(x, z, r, cameraBlock = false, camR = r * 1.18 + 0.55) { this.colliders.push({ x, z, r, cameraBlock, camR }) }
+
+  addBoxCollider(x, z, hx, hz, cameraBlock = false) {
+    this.colliders.push({ box: true, x, z, hx: Math.max(0.12, hx), hz: Math.max(0.12, hz), cameraBlock, camR: Math.hypot(hx, hz) + 0.5 })
+  }
 
   addCreatureLore(name, where) {
     if (!this.creatureLore.some(c => c.name === name)) this.creatureLore.push({ name, where })
@@ -136,12 +307,13 @@ export class World {
           gl_FragColor = vec4(c, 1.0);
         }`,
     })
-    const sky = new THREE.Mesh(new THREE.SphereGeometry(420, 32, 24), skyMat)
+    const sky = new THREE.Mesh(new THREE.SphereGeometry(420, this.lowPower ? 24 : 32, this.lowPower ? 16 : 24), skyMat)
     this.scene.add(sky)
 
     const starGeo = new THREE.BufferGeometry()
     const starPos = []
-    for (let i = 0; i < 1400; i++) {
+    const starCount = this.lowPower ? 720 : 1400
+    for (let i = 0; i < starCount; i++) {
       const r = 330 + Math.random() * 60
       const theta = Math.random() * Math.PI * 2
       const phi = Math.acos(Math.max(-1, Math.min(1, Math.random() * 1.15 - 0.1)))
@@ -152,13 +324,15 @@ export class World {
     this.stars = new THREE.Points(starGeo, starMat)
     this.scene.add(this.stars)
 
-    // moon
+    // moon (kept out of the static glow batch so the disc never loses depth)
     const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.textures.glow, color: '#e8eeff', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }))
     moon.position.set(-150, 130, -220); moon.scale.setScalar(52); this.scene.add(moon)
+    this.moon = moon
     const moonCore = new THREE.Mesh(new THREE.CircleGeometry(7, 32), new THREE.MeshBasicMaterial({ color: '#f2f0e0', fog: false, toneMapped: false }))
     moonCore.position.copy(moon.position); moonCore.lookAt(0, 10, 0); this.scene.add(moonCore)
     const moonHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.textures.glow, color: '#b9c8ff', transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }))
     moonHalo.position.copy(moon.position); moonHalo.scale.setScalar(100); this.scene.add(moonHalo)
+    this.moonHalo = moonHalo
 
     // aurora ribbons
     this.auroras = []
@@ -183,7 +357,7 @@ export class World {
 
   /* ------------------------------------------------------- TERRAIN */
   buildTerrain() {
-    const size = 260, seg = 120
+    const size = 260, seg = this.lowPower ? 84 : 120
     const geo = new THREE.PlaneGeometry(size, size, seg, seg)
     geo.rotateX(-Math.PI / 2)
     const pos = geo.attributes.position
@@ -196,6 +370,8 @@ export class World {
     const cCave = new THREE.Color('#35313f')
     const cSpire = new THREE.Color('#29222f')
     const cAcademy = new THREE.Color('#3b3b4c')
+    const cLake = new THREE.Color('#2c4450')
+    const cObs = new THREE.Color('#3c3f58')
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i)
       const y = this.heightAt(x, z)
@@ -211,8 +387,12 @@ export class World {
       if (dc < 26) c.lerp(cCave, 0.55 * (1 - dc / 26))
       const ds = Math.hypot(x - 72, z - 56)
       if (ds < 25) c.lerp(cSpire, 0.55 * (1 - ds / 25))
-      const da = Math.hypot(x - 62, z + 34)
-      if (da < 42) c.lerp(cAcademy, 0.55 * (1 - da / 42))
+      const da = Math.hypot(x - 44, z + 20)
+      if (da < 27) c.lerp(cAcademy, 0.45 * (1 - da / 27))
+      const dl = Math.hypot(x + 34, z - 70)
+      if (dl < 24) c.lerp(cLake, 0.6 * (1 - dl / 24))
+      const dobs = Math.hypot(x - 50, z - 8)
+      if (dobs < 20) c.lerp(cObs, 0.55 * (1 - dobs / 20))
       const n = (Math.sin(x * 1.7) * Math.cos(z * 1.3) + Math.sin(x * 0.35 + z * 0.6)) * 0.04
       c.offsetHSL(0, 0, n)
       colors.push(c.r, c.g, c.b)
@@ -245,19 +425,7 @@ export class World {
       [[2, 14], [5, 24], [8, 36], [11, 46], [13, 51]],
       [[-2, -2], [-12, -8], [-24, -16], [-36, -24], [-46, -30], [-52, -35]],
       [[10, 8], [20, 15], [32, 22], [44, 31], [53, 37], [59, 41]],
-      // road from the duelling ground to the Arcanum gate
-      [[36, -12], [44, -8], [52, -6], [58, -8], [62, -11]],
-      // campus paths
-      [[62, -11], [62, -16], [62, -21]],
-      [[62, -22], [62, -28], [62, -35], [62, -42]],
-      [[62, -19], [56, -19], [50, -19], [48, -19]],
-      [[60, -21], [55, -22], [49, -24], [48, -30], [48, -40], [48, -46]],
-      [[62, -28], [68, -28], [72, -30], [74, -31]],
-      [[62, -30], [68, -34], [74, -36], [81, -38]],
-      [[74, -42], [77, -45], [81, -50]],
-      [[62, -21], [66, -21], [69, -19], [72, -18]],
-      [[60, -21], [54, -22], [48, -20], [42, -20], [36, -25], [34, -30], [30, -30]],
-      [[50, -24], [50, -34], [50, -44], [50, -56], [54, -61], [62, -64]],
+      [[34, -8], [39, -10], [42, -13]],
     ]
     for (const pts of routes) {
       const curve = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(x, 0, z)))
@@ -301,19 +469,66 @@ export class World {
     const moonLight = new THREE.DirectionalLight(0xcbd8ff, 1.85)
     moonLight.position.set(-55, 90, 45)
     this.scene.add(moonLight)
-    const fill = new THREE.DirectionalLight(0x7a5fa8, 0.45)
-    fill.position.set(50, 30, -40)
-    this.scene.add(fill)
-    // a soft personal lantern keeps interiors readable without lighting every room separately
-    this.playerLight = new THREE.PointLight(0xffd6a0, 26, 16, 2)
-    this.playerLight.position.set(0, 3, 16)
-    this.scene.add(this.playerLight)
+    // A second directional light costs a full extra light in every standard
+    // material; skip it on phones and low-end machines.
+    if (!this.lowPower) {
+      const fill = new THREE.DirectionalLight(0x7a5fa8, 0.45)
+      fill.position.set(50, 30, -40)
+      this.scene.add(fill)
+    }
+    // Point lights are pooled: at most a couple exist at once and they follow
+    // the nearest authored glow sources. This keeps shader light counts fixed.
+    const poolSize = this.lowPower ? 2 : 3
+    for (let i = 0; i < poolSize; i++) {
+      const light = new THREE.PointLight(0xffffff, 0, 16, 2)
+      light.position.set(0, -60, 0)
+      this.scene.add(light)
+      this.pointLightPool.push(light)
+    }
+  }
+
+  addLightSource(x, y, z, color, intensity = 14, distance = 16, decay = 2) {
+    this.lightSources.push({
+      x, y, z, color: new THREE.Color(color), intensity, distance, decay,
+    })
+  }
+
+  updateLightPool(dt) {
+    this._lightTimer += dt
+    if (this._lightTimer < 0.18) return
+    this._lightTimer = 0
+    const px = this.playerPos.x, pz = this.playerPos.z
+    const best = []
+    for (const s of this.lightSources) {
+      const d = Math.hypot(s.x - px, s.z - pz)
+      if (d > s.distance + 14) continue
+      if (best.length < this.pointLightPool.length) {
+        best.push({ s, d }); best.sort((a, b) => a.d - b.d)
+      } else if (d < best[best.length - 1].d) {
+        best[best.length - 1] = { s, d }; best.sort((a, b) => a.d - b.d)
+      }
+    }
+    for (let i = 0; i < this.pointLightPool.length; i++) {
+      const light = this.pointLightPool[i]
+      const pick = best[i]
+      if (pick) {
+        light.position.set(pick.s.x, pick.s.y, pick.s.z)
+        light.color.copy(pick.s.color)
+        light.intensity = pick.s.intensity
+        light.distance = pick.s.distance
+        light.decay = pick.s.decay
+      } else {
+        light.intensity = 0
+        light.position.set(0, -60, 0)
+      }
+    }
   }
 
   buildMountains() {
     const mat = new THREE.MeshStandardMaterial({ color: '#191426', roughness: 1, flatShading: true })
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 26) * Math.PI * 2 + Math.random() * 0.1
+    const mountains = this.lowPower ? 17 : 26
+    for (let i = 0; i < mountains; i++) {
+      const a = (i / mountains) * Math.PI * 2 + Math.random() * 0.1
       const r = 118 + Math.random() * 36
       const h = 22 + Math.random() * 42
       const mountain = new THREE.Mesh(new THREE.ConeGeometry(16 + Math.random() * 20, h, 5 + (i % 3)), mat)
@@ -329,8 +544,11 @@ export class World {
     const tryPlace = (x, z, kind) => {
       if (Math.hypot(x, z) > 98) return
       if (Math.hypot(x, z) < 21) return
+      if (this.inAcademyInterior(x, z)) return
+      if (Math.hypot(x + 34, z - 70) < 24) return
+      if (Math.hypot(x - 50, z - 8) < 20) return
       if (this.isNearPath(x, z, 4.5)) return
-      if (x > 30 && x < 96 && z > -74 && z < -8) return
+      if (Math.hypot(x - 44, z + 25) < 15) return
       if (Math.hypot(x - 24, z + 4) < 12) return
       for (const c of this.colliders) if (Math.hypot(x - c.x, z - c.z) < c.r + 1.4) return
       for (const nd of NODES) if (Math.hypot(x - nd.pos[0], z - nd.pos[1]) < 3.2) return
@@ -375,10 +593,8 @@ export class World {
     const col = new THREE.Color()
     let ti = 0, pi = 0, bi = 0
     const treeShadowMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.22, depthWrite: false })
-    const addShadow = (x, z, s) => {
-      const sh = new THREE.Mesh(new THREE.CircleGeometry(1.3 * s, 10), treeShadowMat)
-      sh.rotation.x = -Math.PI / 2; sh.position.set(x, this.heightAt(x, z) + 0.04, z); this.scene.add(sh)
-    }
+    const shadows = []
+    const addShadow = (x, z, s) => shadows.push({ x, z, s })
     for (const t of pines) {
       const th = (4.5 + t.s * 3) * 0.8
       pos.set(t.x, t.y + th * 0.5, t.z); sc.set(t.s, th, t.s); q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot)
@@ -417,6 +633,22 @@ export class World {
     if (pineFoliage.instanceColor) pineFoliage.instanceColor.needsUpdate = true
     if (broadFoliage.instanceColor) broadFoliage.instanceColor.needsUpdate = true
     this.scene.add(trunks, pineFoliage, broadFoliage)
+
+    // One instanced draw for every tree shadow instead of one mesh each.
+    if (shadows.length) {
+      const shGeo = new THREE.CircleGeometry(1, 10)
+      const shMesh = new THREE.InstancedMesh(shGeo, treeShadowMat, shadows.length)
+      const sq = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0))
+      const sp = new THREE.Vector3(), ss = new THREE.Vector3()
+      shadows.forEach((t, i) => {
+        sp.set(t.x, this.heightAt(t.x, t.z) + 0.04, t.z)
+        ss.setScalar(1.3 * t.s)
+        m.compose(sp, sq, ss)
+        shMesh.setMatrixAt(i, m)
+      })
+      shMesh.instanceMatrix.needsUpdate = true
+      this.scene.add(shMesh)
+    }
     this.treeCount = trunkCount
   }
 
@@ -430,6 +662,9 @@ export class World {
     while (placed < count && guard++ < 400) {
       const x = (Math.random() - 0.5) * 170, z = (Math.random() - 0.5) * 170
       if (Math.hypot(x, z) < 18 || this.isNearPath(x, z, 3)) continue
+      if (this.inAcademyInterior(x, z)) continue
+      if (Math.hypot(x + 34, z - 70) < 24) continue
+      if (Math.hypot(x - 50, z - 8) < 20) continue
       if (Math.hypot(x + 31, z - 44) < 11) continue
       if (Math.hypot(x - 24, z + 4) < 12) continue
       const sc = 0.4 + Math.random() * 1.6
@@ -443,7 +678,9 @@ export class World {
 
   /* ------------------------------------------------------- AMBIENT PARTICLES */
   buildParticles() {
+    const density = this.lowPower ? 0.5 : 1
     const makePoints = (count, color, size, area, yBase, yRange, opacity = 0.8) => {
+      count = Math.round(count * density)
       const pos = []
       for (let i = 0; i < count; i++) {
         const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * area
@@ -589,10 +826,81 @@ export class World {
     this.arenaBarrierMat = mat
   }
 
-  setDuelArena(active, center = null) {
+  setDuelArena(active, center = null, radius = 8.9) {
     this.arenaBarrier.visible = active
     if (center) this.arenaBarrier.position.set(center.x, center.y, center.z)
-    this.movementBounds = active ? { x: center ? center.x : 24, z: center ? center.z : -4, r: 8.9 } : null
+    this.arenaBarrier.scale.setScalar(Math.max(0.28, radius / 9.4))
+    this.movementBounds = active ? { x: center ? center.x : 24, z: center ? center.z : -4, r: Math.max(1.6, radius - 0.2) } : null
+  }
+
+  /* ------------------------------------------------- STATIC BATCHING */
+  batchStatics() {
+    const dynamic = new Set()
+    const mark = root => { if (root?.traverse) root.traverse(o => dynamic.add(o)) }
+    mark(this.player)
+    mark(this.arenaBarrier)
+    mark(this.motes)
+    mark(this.firefliesMesh)
+    mark(this.cavernDust)
+    mark(this.spireDust)
+    mark(this.bossGroup)
+    mark(this.academyRoof)
+    for (const n of Object.values(this.npcs)) mark(n.group)
+    for (const n of Object.values(this.nodes)) mark(n)
+    for (const c of Object.values(this.creatures)) mark(c.group)
+    for (const f of this.floating) mark(f.obj)
+
+    this.scene.updateMatrixWorld(true)
+
+    // Merge static, opaque, same-material meshes into spatial chunks so the
+    // renderer does far fewer draw calls while still culling by distance.
+    const groups = new Map()
+    this.scene.traverse(o => {
+      if (!o.isMesh || o.isInstancedMesh || o.isSprite || dynamic.has(o)) return
+      if (o.children.length || !o.material || Array.isArray(o.material)) return
+      const m = o.material
+      if (m.transparent || m.blending !== THREE.NormalBlending) return
+      if (m.side !== THREE.FrontSide && m.side !== THREE.DoubleSide) return
+      if (!o.geometry?.attributes?.position || !o.geometry.attributes.normal) return
+      if (o.geometry.attributes.color || o.geometry.morphAttributes?.position?.length) return
+      if (o.userData.noBatch) return
+      const p = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld)
+      const key = `${materialSignature(m)}#${Math.floor(p.x / 46)}:${Math.floor(p.z / 46)}`
+      let bucket = groups.get(key)
+      if (!bucket) { bucket = { material: m, meshes: [] }; groups.set(key, bucket) }
+      bucket.meshes.push(o)
+    })
+
+    for (const bucket of groups.values()) {
+      if (bucket.meshes.length < 2) continue
+      const geo = mergeMeshes(bucket.meshes, bucket.material)
+      if (!geo) continue
+      const mesh = new THREE.Mesh(geo, bucket.material)
+      mesh.matrixAutoUpdate = false
+      mesh.updateMatrix()
+      mesh.userData.batched = true
+      this.scene.add(mesh)
+      for (const old of bucket.meshes) old.parent?.remove(old)
+      this.batchStats.merged += bucket.meshes.length
+      this.batchStats.batches++
+    }
+
+    // Every static glow sprite becomes one instanced quad draw.
+    this.scene.updateMatrixWorld(true)
+    const sprites = []
+    this.scene.traverse(o => {
+      if (!o.isSprite || dynamic.has(o) || o === this.moon || o === this.moonHalo) return
+      if (o.material?.map !== this.textures.glow) return
+      if (o.material.blending !== THREE.AdditiveBlending) return
+      sprites.push(o)
+    })
+    const glowBatch = buildGlowBatch(this.textures.glow, sprites)
+    if (glowBatch) {
+      for (const sp of sprites) sp.parent?.remove(sp)
+      this.scene.add(glowBatch)
+      this.glowBatch = glowBatch
+      this.batchStats.glows = sprites.length
+    }
   }
 
   /* ------------------------------------------------------- MOVEMENT */
@@ -600,7 +908,6 @@ export class World {
     this.playerPos.x = x; this.playerPos.z = z
     this.playerPos.y = this.heightAt(x, z)
     this.player.position.set(x, this.playerPos.y, z)
-    if (this.playerLight) this.playerLight.position.set(x, this.playerPos.y + 2.3, z)
     if (facing !== null) { this.facing = facing; this.player.rotation.y = facing }
     this.velocity.set(0, 0, 0)
     this.camTarget.set(x, this.playerPos.y + 1.55, z)
@@ -639,8 +946,19 @@ export class World {
     const nx = this.playerPos.x + this.velocity.x * dt
     const nz = this.playerPos.z + this.velocity.z * dt
     let px = nx, pz = nz
-    for (let iter = 0; iter < 2; iter++) {
+    for (let iter = 0; iter < 3; iter++) {
       for (const c of this.colliders) {
+        if (c.box) {
+          const dx = px - c.x, dz = pz - c.z
+          const ox = c.hx + 0.42, oz = c.hz + 0.42
+          if (Math.abs(dx) < ox && Math.abs(dz) < oz) {
+            const pushX = ox - Math.abs(dx)
+            const pushZ = oz - Math.abs(dz)
+            if (pushX < pushZ) px = c.x + (dx < 0 ? -ox : ox)
+            else pz = c.z + (dz < 0 ? -oz : oz)
+          }
+          continue
+        }
         const dx = px - c.x, dz = pz - c.z
         const d = Math.hypot(dx, dz), min = c.r + 0.42
         if (d < min && d > 0.0001) {
@@ -659,7 +977,6 @@ export class World {
     this.playerPos.x = px; this.playerPos.z = pz
     this.playerPos.y = this.heightAt(px, pz)
     this.player.position.set(px, this.playerPos.y, pz)
-    if (this.playerLight) this.playerLight.position.set(px, this.playerPos.y + 2.3, pz)
 
     let diff = this.facing - this.player.rotation.y
     while (diff > Math.PI) diff -= Math.PI * 2
@@ -723,14 +1040,12 @@ export class World {
       if (hit > 0 && hit < camT) camT = hit
     }
     if (camT < 1) {
-      // Slide the camera in front of the wall. Height is kept, so a tight room
-      // becomes a high, close view instead of a camera buried in masonry.
-      camT = Math.max(0.03, camT * 0.84)
-      const horiz = Math.max(0.75, d * camT)
-      desired.x = this.camTarget.x + Math.sin(this.cameraYaw) * horiz
-      desired.z = this.camTarget.z + Math.cos(this.cameraYaw) * horiz
-      // stay below the roof beams so a close wall does not fill the frame
-      desired.y = Math.min(desired.y, this.camTarget.y + 2.7)
+      camT = Math.max(0.16, camT * 0.9)
+      desired.set(
+        this.camTarget.x + dx * camT,
+        this.camTarget.y + (desired.y - this.camTarget.y) * Math.max(0.55, camT),
+        this.camTarget.z + dz * camT
+      )
       const wallY = this.heightAt(desired.x, desired.z) + 1.2
       if (desired.y < wallY) desired.y = wallY
     }
@@ -738,7 +1053,7 @@ export class World {
     if (desired.y < minY) desired.y = minY
     if (instant) this.camera.position.copy(desired)
     else this.camera.position.lerp(desired, Math.min(1, dt * 8))
-    if (this.player) this.player.visible = this.camera.position.distanceTo(this.camTarget) > 3.2
+    if (this.player) this.player.visible = this.camera.position.distanceTo(this.camTarget) > 3.05
     if (this.shakeTime > 0) {
       const s = this.shakeAmount
       this.camera.position.x += (Math.random() - 0.5) * s
@@ -765,6 +1080,9 @@ export class World {
   update(dt) {
     this.time += dt
     const t = this.time
+    if (this.academyRoof) this.academyRoof.visible = !this.inAcademyInterior()
+    this.adaptQuality(dt)
+    this.updateLightPool(dt)
     if (this.shakeTime > 0) {
       this.shakeTime -= dt
       if (this.shakeTime <= 0) this.shakeAmount = 0
@@ -851,20 +1169,36 @@ export class World {
     this.updateCamera(dt)
   }
 
+  /* Dynamic resolution: trade a little sharpness for a steady frame rate. */
+  adaptQuality(dt) {
+    this._fpsAvg = this._fpsAvg ? this._fpsAvg * 0.92 + dt * 0.08 : dt
+    this._qualityTimer += dt
+    if (this._qualityTimer < 1.4) return
+    this._qualityTimer = 0
+    const fps = 1 / Math.max(0.001, this._fpsAvg)
+    let next = this.renderScale
+    if (fps < 47) next = Math.max(0.62, this.renderScale - 0.07)
+    else if (fps > 58) next = Math.min(1, this.renderScale + 0.04)
+    if (Math.abs(next - this.renderScale) > 0.005) {
+      this.renderScale = next
+      this.applyRenderSize()
+    }
+  }
+
+  applyRenderSize() {
+    const w = window.innerWidth, h = window.innerHeight
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, this.maxPixelRatio)
+    this.renderer.setPixelRatio(Math.max(0.55, this.basePixelRatio * this.renderScale))
+    this.renderer.setSize(w, h, false)
+  }
+
   render() { this.renderer.render(this.scene, this.camera) }
 
   onResize() {
     const w = window.innerWidth, h = window.innerHeight
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.pixelCap))
-    this.renderer.setSize(w, h)
-  }
-
-  setPixelCap(cap) {
-    this.pixelCap = Math.max(1, Math.min(1.6, cap))
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.pixelCap))
-    this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.applyRenderSize()
   }
 
   screenPosition(vec3) {
@@ -872,7 +1206,15 @@ export class World {
     return { x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (-v.y * 0.5 + 0.5) * window.innerHeight, behind: v.z > 1 }
   }
 
+  roomAt(x = this.playerPos.x, z = this.playerPos.z) {
+    for (const r of this.academyRoomZones || []) {
+      if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return r.id
+    }
+    return null
+  }
+
   zone() {
+    if (this.inAcademyInterior()) return ZONES.find(z => z.id === 'academy') || ZONES[0]
     let best = ZONES[0], bestD = Infinity
     for (const z of ZONES) {
       const d = Math.hypot(this.playerPos.x - z.pos[0], this.playerPos.z - z.pos[1])

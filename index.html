@@ -45,7 +45,7 @@
         <button class="hud-btn" data-panel="shop"><span class="hb-icon">⌂</span><span>Shop</span><kbd>B</kbd></button>
         <button class="hud-btn" data-panel="map"><span class="hb-icon">⌖</span><span>Map</span><kbd>M</kbd></button>
         <button class="hud-btn" data-panel="journal"><span class="hb-icon">❧</span><span>Journal</span><kbd>J</kbd></button>
-        <button class="hud-btn" data-panel="school"><span class="hb-icon">✦</span><span>Academy</span><kbd>K</kbd></button>
+        <button class="hud-btn" data-panel="academy"><span class="hb-icon">⌂</span><span>Academy</span><kbd>U</kbd></button>
       </div>
       <div class="equipped-wand" id="equipped-wand">
         <div class="ew-swatch"></div>
@@ -54,6 +54,13 @@
     </div>
 
     <div id="quest-tracker">
+      <div id="mission-tracker">
+        <div class="mission-kicker"><span id="mission-act">Act I</span><span class="mission-sep">✦</span><span>Main Story</span></div>
+        <div class="mission-title" id="mission-title">The New Student</div>
+        <div class="mission-step" id="mission-step">Speak with Professor Marrow in the academy courtyard.</div>
+        <div class="mission-where" id="mission-where">Arcanum courtyard</div>
+        <div class="mission-bar"><div id="mission-fill"></div></div>
+      </div>
       <div class="qt-title"><span>❧</span> Active Pursuits</div>
       <div id="quest-list"></div>
     </div>
@@ -77,6 +84,30 @@
 
     <div id="interact-prompt" class="hidden">
       <span class="keycap">E</span><span id="interact-text">Interact</span>
+    </div>
+
+    <!-- Touch / mobile controls -->
+    <div id="touch-controls" class="hidden">
+      <div id="joystick-zone">
+        <div id="joystick-base">
+          <div id="joystick-knob"></div>
+        </div>
+        <div class="joy-label">MOVE</div>
+      </div>
+      <div id="touch-actions">
+        <div class="touch-mana"><span>MANA</span><div class="touch-mana-track"><div id="touch-mana-fill"></div></div></div>
+        <div id="touch-cast" class="touch-cast-row">
+          <button class="touch-btn cast category-offensive" data-touch-cast="0" aria-label="Cast spell 1"><span class="tb-icon">✦</span><span class="tb-key">1</span><span class="tb-cd"></span></button>
+          <button class="touch-btn cast category-defensive" data-touch-cast="1" aria-label="Cast spell 2"><span class="tb-icon">✦</span><span class="tb-key">2</span><span class="tb-cd"></span></button>
+          <button class="touch-btn cast category-healing" data-touch-cast="2" aria-label="Cast spell 3"><span class="tb-icon">✦</span><span class="tb-key">3</span><span class="tb-cd"></span></button>
+          <button class="touch-btn cast category-elemental" data-touch-cast="3" aria-label="Cast spell 4"><span class="tb-icon">✦</span><span class="tb-key">4</span><span class="tb-cd"></span></button>
+        </div>
+        <div class="touch-util-row">
+          <button class="touch-btn util" data-touch-action="interact" id="touch-interact" aria-label="Interact"><span class="tb-icon">✋</span><span class="tb-label">Use</span></button>
+          <button class="touch-btn util" data-touch-action="shield" id="touch-shield" aria-label="Hold to raise a ward"><span class="tb-icon">⛨</span><span class="tb-label">Ward</span></button>
+          <button class="touch-btn util" data-touch-action="dodge" id="touch-dodge" aria-label="Dodge"><span class="tb-icon">➤</span><span class="tb-label">Dodge</span></button>
+        </div>
+      </div>
     </div>
 
     <div id="objective-toast"></div>
@@ -144,32 +175,6 @@
     <div class="result-card" id="result-card"></div>
   </div>
 
-  <!-- Touch controls -->
-  <div id="mobile-controls" class="hidden">
-    <div id="joystick-zone">
-      <div id="joystick-base"><div id="joystick-knob"></div></div>
-      <div class="joystick-label">MOVE</div>
-    </div>
-    <div id="mobile-actions">
-      <div class="m-action-row">
-        <button class="m-action m-interact" data-mact="interact" aria-label="Interact">E</button>
-        <button class="m-action" data-mact="shield" aria-label="Shield">⛨</button>
-        <button class="m-action" data-mact="dodge" aria-label="Dodge">↯</button>
-      </div>
-      <div class="m-action-row m-cast-row">
-        <button class="m-action m-cast" data-mcast="0">1</button>
-        <button class="m-action m-cast" data-mcast="1">2</button>
-        <button class="m-action m-cast" data-mcast="2">3</button>
-        <button class="m-action m-cast" data-mcast="3">4</button>
-      </div>
-      <div class="m-action-row m-panel-row">
-        <button class="m-action m-small" data-mpanel="map" aria-label="Map">⌖</button>
-        <button class="m-action m-small" data-mpanel="spells" aria-label="Grimoire">✶</button>
-        <button class="m-action m-small" data-mpanel="journal" aria-label="Journal">❧</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Start screen -->
   <div id="start-screen">
     <div class="start-stars"></div>
@@ -183,6 +188,7 @@
       <div class="start-controls">
         <span><kbd>W A S D</kbd> move</span><span><kbd>E</kbd> interact</span><span><kbd>1–4</kbd> cast</span><span><kbd>Q</kbd> shield</span><span><kbd>Shift</kbd> dodge</span><span><kbd>C</kbd> wandcraft</span><span><kbd>G</kbd> grimoire</span>
       </div>
+      <div class="start-touch-hint">Left stick to move · drag the world to look · right buttons to cast, ward, dodge and interact</div>
       <div class="start-note">Your wand, your spells, your choices — they determine your legacy.</div>
     </div>
     <div class="start-credit">An original fantasy inspired by the wizarding world · WebGL</div>

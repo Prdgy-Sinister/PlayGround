@@ -43,8 +43,6 @@ export const WOODS = [
   { id:'dragonbone', name:'Dragonbone', color:'#ded3b0', rarity:'legendary', price:220, tags:['offensive','elemental'], stats:{power:10,control:7,finesse:6}, desc:'Not wood at all, but the marrow of an old wyrm. It roars when it casts.' },
   { id:'moonash', name:'Moon Ash', color:'#cfe2ea', rarity:'legendary', price:200, tags:['healing','elemental'], stats:{power:8,control:9,finesse:10}, desc:'Grown only where moonlight pools. Its grain glows in the dark.' },
   { id:'starglass', name:'Starglass', color:'#9ad8f0', rarity:'mythic', price:340, tags:['elemental','transformation'], stats:{power:9,control:10,finesse:10}, desc:'A fallen shard of sky, veined with frozen starlight. Few hands can hold it.' },
-  { id:'laurel', name:'Laurel', color:'#7f9a5a', rarity:'rare', price:74, tags:['healing','defensive'], stats:{power:6,control:9,finesse:8}, desc:'Grown in the Arcanum gardens, laurel remembers every oath sworn beneath it.' },
-  { id:'obsidian', name:'Obsidian', color:'#2c2733', rarity:'rare', price:86, tags:['offensive','forbidden'], stats:{power:9,control:8,finesse:6}, desc:'Volcanic glass from beneath the school. It cuts cleanly and asks no questions.' },
 ]
 
 /* ---------------------------------------------------------- CORES */
@@ -62,8 +60,6 @@ export const CORES = [
   { id:'manticore', name:'Manticore Venom', color:'#8a4bb5', rarity:'rare', price:90, tags:['offensive','forbidden'], stats:{power:9,control:7,finesse:6}, passive:{name:'Bleeding Thorn', desc:'Attacks cause bleeding for 4 damage/s over 4s.'} },
   { id:'demiguise', name:'Demiguise Hair', color:'#c8c3b5', rarity:'rare', price:74, tags:['transformation','defensive'], stats:{power:5,control:9,finesse:9}, passive:{name:'Unseen Hand', desc:'Spell cooldowns reduced by 15%.'} },
   { id:'voidheart', name:'Voidheart', color:'#5a3b74', rarity:'mythic', price:400, tags:['forbidden','transformation'], stats:{power:10,control:10,finesse:9}, passive:{name:'Hollow Crown', desc:'All spell damage and healing increased by 15%.'} },
-  { id:'mooncalf', name:'Mooncalf Hair', color:'#b9c8e8', rarity:'uncommon', price:44, tags:['transformation','healing'], stats:{power:5,control:8,finesse:9}, passive:{name:'Moonlit Grace', desc:'Transformation spells cost 10% less and healing feels gentler.'} },
-  { id:'sphinx', name:'Sphinx Feather', color:'#e8c87a', rarity:'rare', price:96, tags:['transformation','defensive'], stats:{power:7,control:10,finesse:8}, passive:{name:'Riddle Ward', desc:'Wards and defensive spells are especially responsive.'} },
 ]
 
 export const FLEXIBILITIES = [
@@ -103,10 +99,6 @@ export const COMBOS = {
   'dragonbone:phoenix': { name:'Wyrm’s Pyre', desc:'Bone and ember, death and rebirth. Offensive magic has rarely been so beautiful.', bonuses:{offensive:.45,healing:.15}, special:'rebirth' },
   'holly:unicorn': { name:'Brave Heart', desc:'Holly and unicorn hair: a pure, stubborn wand that protects the small and the good.', bonuses:{offensive:.2,healing:.25,defensive:.2}, special:'pure' },
   'blackthorn:thestral': { name:'Gravemarch', desc:'A funeral march in wand form. Dark magic is cheap here, and dodging feels like flight.', bonuses:{forbidden:.4,offensive:.25}, special:'gravemarch' },
-  'laurel:phoenix': { name:'Laurel Crown', desc:'A scholar’s crown and a healer’s flame. Defensive and healing magic rise together; wards mend their bearer.', bonuses:{defensive:.32,healing:.3}, special:'flow' },
-  'obsidian:basilisk': { name:'Serpent Glass', desc:'Black glass and serpent venom. Forbidden magic leaves a wound that does not close politely.', bonuses:{forbidden:.42,offensive:.28}, special:'venom' },
-  'silverlime:sphinx': { name:'Moon Riddle', desc:'A wand that answers questions with better questions. Transformation and defence become one elegant argument.', bonuses:{transformation:.34,defensive:.28}, special:'ward' },
-  'laurel:mooncalf': { name:'Garden Moon', desc:'A gentle, curious wand for growing things and changing shapes. Healing and transformation magic feed one another.', bonuses:{healing:.28,transformation:.3}, special:'flow' },
 }
 
 /* ---------------------------------------------------------- SPELLS */
@@ -135,13 +127,6 @@ export const SPELLS = [
   { id:'umbra', name:'Umbra Lash', cat:'forbidden', tier:1, incant:'UM-brah', icon:'☾', mana:24, cd:3.2, power:30, kind:'beam', color:'#ff5f7a', desc:'A whip of living shadow that drains 40% of its damage as health.' },
   { id:'fiendfyre', name:'Fiendfyre', cat:'forbidden', tier:2, incant:'FEEND-fire', icon:'☄', mana:40, cd:12, power:46, kind:'aoe', color:'#ff7a3d', desc:'Cursed flame that fills the arena and burns for 5s.' },
   { id:'anima', name:'Anima Fracture', cat:'forbidden', tier:3, incant:'AN-ih-mah', icon:'☠', mana:30, cd:8, power:26, kind:'curse', color:'#c95aff', desc:'Crack a foe’s will: damage and −30% enemy damage for 5s.' },
-  // advanced academy curriculum
-  { id:'confringo', name:'Confringo', cat:'offensive', tier:4, incant:'kon-FRING-go', icon:'✹', mana:30, cd:6.5, power:42, kind:'aoe', color:'#ff7a4d', desc:'A controlled blast taught in the advanced Charms seminar.' },
-  { id:'patronus', name:'Expecto Patronum', cat:'defensive', tier:4, incant:'ex-PEK-toh pa-TROH-num', icon:'✦', mana:32, cd:14, power:52, kind:'ward', color:'#d8e8ff', desc:'A silver guardian circles you, reducing damage and steadying your mind.' },
-  { id:'rennervate', name:'Rennervate', cat:'healing', tier:4, incant:'ren-er-VAYT', icon:'☤', mana:28, cd:11, power:14, kind:'regen', color:'#b8f5cf', desc:'A reviving current of magic: 14 health per second for 6 seconds.' },
-  { id:'ventus', name:'Ventus', cat:'elemental', tier:4, incant:'VEN-tus', icon:'⌁', mana:24, cd:3.4, power:30, kind:'projectile', color:'#9fe6d8', desc:'A blade of compressed wind that knocks the breath from a duelist.' },
-  { id:'mutatio', name:'Mutatio', cat:'transformation', tier:4, incant:'moo-TAH-tee-oh', icon:'◉', mana:30, cd:8, power:14, kind:'petrify', color:'#d8b4ff', desc:'An advanced transfiguration that locks a foe’s limbs for 2.8 seconds.' },
-  { id:'imperio', name:'Imperio', cat:'forbidden', tier:4, incant:'im-PEER-ee-oh', icon:'☾', mana:36, cd:10, power:30, kind:'curse', color:'#ff5f7a', desc:'A forbidden command of the will. The Restricted Archive is very clear about the cost.' },
 ]
 
 export const SPELL_BY_ID = Object.fromEntries(SPELLS.map(s => [s.id, s]))
@@ -152,11 +137,13 @@ export const CATEGORY_SPELLS = Object.fromEntries(
 /* ---------------------------------------------------------- ZONES */
 export const ZONES = [
   { id:'hollowmere', name:'Hollowmere Village', short:'Hollowmere', pos:[0,0], radius:32, reqRep:0, color:'#d9b978', travel:[0,13], desc:'A crooked little village of lanterns, chimneys and gossip. Your shop stands here.' },
-  { id:'academy', name:'Arcanum Academy', short:'Academy', pos:[62,-34], radius:40, reqRep:0, color:'#9a7be0', travel:[62,-8], desc:'The great school of magic: a walled campus of halls, classrooms, gardens and secrets where every corridor has opinions.' },
-  { id:'forest', name:'Whispering Wood', short:'Whispering Wood', pos:[-50,18], radius:35, reqRep:0, color:'#6fd8a4', travel:[-34,7], desc:'An ancient wood of glowing mushrooms, unicorn trails and trees that remember.' },
-  { id:'ruins', name:'Elder Ruins', short:'Elder Ruins', pos:[16,62], radius:27, reqRep:8, color:'#d8a76f', travel:[13,48], desc:'Broken colonnades of the first wandmakers. Something still practises here.' },
-  { id:'cavern', name:'Glimmer Cavern', short:'Glimmer Cavern', pos:[-66,-46], radius:26, reqRep:18, color:'#7ad8e8', travel:[-53,-34], desc:'A crystal hollow beneath the hills, rich in dragonbone and stranger things.' },
-  { id:'spire', name:'The Hollow Spire', short:'Hollow Spire', pos:[74,56], radius:23, reqRep:30, color:'#d86f8a', travel:[64,43], desc:'A black needle against the sky. Morvane the Hollow waits at its foot.' },
+  { id:'academy', name:'Arcanum Academy', short:'Academy', pos:[42,-20], radius:27, reqRep:0, color:'#9a7be0', travel:[34,-9], desc:'The great school of magic, where candles float and every corridor has opinions.' },
+  { id:'forest', name:'Whispering Wood', short:'Whispering Wood', pos:[-46,16], radius:35, reqRep:0, color:'#6fd8a4', travel:[-34,7], desc:'An ancient wood of glowing mushrooms, unicorn trails and trees that remember.' },
+  { id:'ruins', name:'Elder Ruins', short:'Elder Ruins', pos:[14,58], radius:27, reqRep:8, color:'#d8a76f', travel:[13,48], desc:'Broken colonnades of the first wandmakers. Something still practises here.' },
+  { id:'cavern', name:'Glimmer Cavern', short:'Glimmer Cavern', pos:[-62,-42], radius:26, reqRep:18, color:'#7ad8e8', travel:[-53,-34], desc:'A crystal hollow beneath the hills, rich in dragonbone and stranger things.' },
+  { id:'observatory', name:'Sunken Observatory', short:'Observatory', pos:[50,8], radius:18, reqRep:0, color:'#8fb8ff', travel:[46,0], desc:'A broken dome on a wind-scoured hill. The telescope still turns when no one is touching it.' },
+  { id:'lake', name:'Moonmere Lake', short:'Moonmere', pos:[-34,70], radius:22, reqRep:0, color:'#6fb8d8', travel:[-31,57], desc:'Black water, silver reeds and a drowned chapel whose bell rings on windless nights.' },
+  { id:'spire', name:'The Hollow Spire', short:'Hollow Spire', pos:[70,52], radius:23, reqRep:30, color:'#d86f8a', travel:[64,43], desc:'A black needle against the sky. Morvane the Hollow waits at its foot.' },
 ]
 
 export function zoneAt(x, z) {
@@ -168,112 +155,59 @@ export function zoneAt(x, z) {
   return best || ZONES[0]
 }
 
+/* ---------------------------------------------------------- ACADEMY */
+/* The inner halls are a real, walkable part of the world. These are the
+   rooms the player can discover, and the assignments that track their
+   first year at Arcanum. */
+export const ACADEMY_ROOMS = [
+  { id:'courtyard', name:'Academy Courtyard', short:'Courtyard', desc:'The floating candles never go out, even when it rains. Especially when it rains.' },
+  { id:'grand_hall', name:'Grand Hall', short:'Grand Hall', desc:'Banners of the six schools hang above a duelling circle worn smooth by anxious feet.' },
+  { id:'charms', name:'Charms Classroom', short:'Charms', desc:'Desks in nervous rows, a blackboard that answers back, and the smell of ozone.' },
+  { id:'potions', name:'Potion Laboratory', short:'Potion Lab', desc:'Nine cauldrons, four acceptable smells, and one that should not be mentioned.' },
+  { id:'library', name:'Restricted Library', short:'Library', desc:'Books that whisper, books that bite, and one shelf that is trying very hard to look innocent.' },
+  { id:'wand_studies', name:'Wand Studies', short:'Wand Studies', desc:'Workbenches, core jars and a resonance lens older than the school itself.' },
+  { id:'dorms', name:'Ravenwood Dorms', short:'Dorms', desc:'Your first bed with your name on it. It is narrow, but it is yours.' },
+  { id:'bedroom', name:'Your Bedroom', short:'Bedroom', desc:'A desk, a trunk, a window full of stars. The first room that has ever been yours alone.' },
+  { id:'duel_room', name:'Indoor Duelling Chamber', short:'Duelling Chamber', desc:'Warded walls, scuffed floor, and the best place in the school to make a dramatic mistake.' },
+  { id:'training', name:'Training Grounds', short:'Training', desc:'Practice dummies that have seen more courage than most wizards.' },
+  { id:'vault', name:'The Room of Echoes', short:'Room of Echoes', desc:'A hidden chamber where the Sundered Wand remembers what it used to be.' },
+]
+
+export const ACADEMY_ASSIGNMENTS = [
+  { id:'a_lessons', title:'Attendance & Attunement', desc:'Attend three lessons taught inside the academy.', metric:'academyLessons', target:3, gold:60, rep:4, xp:90, hint:'Professors Marrow, Feld, Thorne and Wren all teach in the inner halls.' },
+  { id:'a_rooms', title:'A Proper Tour', desc:'Discover six rooms in the academy.', metric:'academyRooms', target:6, gold:70, rep:5, xp:100, hint:'Walk through the Grand Hall, classrooms, library, laboratory and dorms.' },
+  { id:'a_brew', title:'Something Simmering', desc:'Brew a potion in the academy laboratory.', metric:'potionsBrewed', target:1, gold:45, rep:3, xp:70, hint:'Professor Selene Thorne keeps a working cauldron in the Potion Lab.' },
+  { id:'a_duel', title:'A Civilised Argument', desc:'Win an indoor duel at the academy.', metric:'academyDuels', target:1, gold:80, rep:6, xp:120, hint:'Tobias Flint and Lysandra Vane are always ready in the Duelling Chamber.' },
+  { id:'a_echoes', title:'Echoes of the Sundered', desc:'Recover three echoes of the Shattered Wand.', metric:'wandShards', target:3, gold:150, rep:10, xp:190, hint:'Listen in the library, the laboratory, the dorms — and behind the shelf.' },
+  { id:'a_secret', title:'The Room of Echoes', desc:'Find the hidden chamber behind the library shelf.', metric:'academySecrets', target:1, gold:120, rep:8, xp:160, hint:'The Restricted Library has a shelf that does not quite belong.' },
+]
+
+export const SHATTERED_WAND = {
+  title:'The Sundered Wand',
+  intro:'The academy was built around a wand that broke. Its pieces were never lost — only hidden, each one still muttering to the others.',
+  final:'The echoes do not name Morvane. They name the hand that first cracked the wand open. The same hand has been feeding the Hollow Spire ever since.',
+}
+
 /* ---------------------------------------------------------- NPCS */
 export const NPCS = [
-  /* ---------------------------------------------------- ARCANUM FACULTY */
   {
-    id:'marrow', name:'Professor Isolde Marrow', role:'Charms Mistress', pos:[42,-52], color:'#7b5ea7', accent:'#d9b978',
-    greeting:'Ah — the new first-year. Magic is not a gift, child. It is a discipline with a sense of humour. Shall we begin?',
+    id:'marrow', name:'Professor Isolde Marrow', role:'Charms Mistress', pos:[37,-14], color:'#7b5ea7', accent:'#d9b978',
+    greeting:'Magic is not a gift, child. It is a discipline with a sense of humour. Shall we begin?',
     options:[
-      { label:'Attend a Charms lesson', action:'lessons', cat:'offensive' },
-      { label:'Ask about the Shattered Wand', action:'talk', text:'Every wand in the school hummed the night the Elder Wand shattered. The fragments went quiet afterwards. One is said to be under Arcanum itself — and the library keeps the only honest account of what happened.' },
+      { label:'Hear the Headmistress’s welcome', action:'talk', flag:'met_marrow', text:'Welcome to Arcanum, Aster Vale. You arrive at an awkward hour. The school is waking up, the lake bell is ringing, and the stars are wrong. Attend your lessons, read the board in the Grand Hall, and keep your wand close. We will speak again when you have learned enough to ask better questions.' },
+      { label:'Report what the wand chose', action:'talk', flag:'reported_marrow', requiresFlags:['beat_morvane','echoes_delivered'], hideIfFlag:'reported_marrow', text:'So the echoes finished their sentence, and the wand chose to keep choosing. Good. Morvane believed obedience was safety. You have proved the opposite, at some cost. The school will remember this — and so will I. Go carefully, Aster. There are other broken things in the world that have not yet learned to speak.' },
+      { label:'Attend a lesson', action:'lessons' },
       { label:'Ask about wand compatibility', action:'talk', text:'Your wand is not a tool — it is a partner with opinions. A generous wand forgives a sloppy wrist. A proud one does not. Practise with what suits you, not what looks impressive.' },
     ],
   },
   {
-    id:'vane', name:'Headmistress Ophelia Vane', role:'Headmistress of Arcanum', pos:[62,-51], color:'#3f5e8a', accent:'#c9d8ee',
-    greeting:'You have the look of someone who intends to matter. Good. Arcanum has little patience for the timid — and considerably less for the late.',
+    id:'vane', name:'Headmistress Ophelia Vane', role:'Headmistress of Arcanum', pos:[45,-16], color:'#3f5e8a', accent:'#c9d8ee',
+    greeting:'You have the look of someone who intends to matter. Good. Arcanum has little patience for the timid.',
     options:[
-      { label:'Review your assignments', action:'school' },
       { label:'Ask about the Hollow Spire', action:'talk', text:'Morvane was the finest wandmaker of his age. Then he decided that a wand should not choose its master — that a wizard should cut the choice out of it. Do not face him before your reputation precedes you. Thirty, at least.' },
       { label:'Ask for a blessing', action:'blessing' },
     ],
   },
-  {
-    id:'feld', name:'Professor Alaric Feld', role:'Defence Against the Dark Arts', pos:[42,-30], color:'#3f5e7a', accent:'#8fd4ff',
-    greeting:'Defence is not about being brave. It is about being difficult to remove. Stand where I can see you, and keep your wand loose.',
-    options:[
-      { label:'Attend a Defence lesson', action:'lessons', cat:'defensive' },
-      { label:'Ask about dark magic', action:'talk', text:'Morvane does not duel like a wizard. He duels like a man editing a sentence. Remove his openings and he will have to rewrite the whole page.' },
-    ],
-  },
-  {
-    id:'voss', name:'Professor Cinder Voss', role:'Potions & Elemental Magic', pos:[81,-43], color:'#8a4f2f', accent:'#ffc266',
-    greeting:'Mind the cauldron. It has opinions about students, and none of them are kind. You are here to learn, not to become a stain on the ceiling.',
-    options:[
-      { label:'Brew a potion', action:'potion' },
-      { label:'Attend an Elemental lesson', action:'lessons', cat:'elemental' },
-      { label:'Ask about the night the wand shattered', action:'talk', text:'The wards in this laboratory screamed for three minutes. Every cauldron boiled at once. When I came down, there was a hairline crack in the foundation shaped like a wand. The school has been hiding it ever since.' },
-    ],
-  },
-  {
-    id:'crowe', name:'Professor Mirabel Crowe', role:'Transfiguration', pos:[81,-52.5], color:'#6a4a9a', accent:'#c79bff',
-    greeting:'Everything can become something else. A desk. A duel. A student. The trick is persuading it to become the right thing.',
-    options:[
-      { label:'Attend a Transfiguration lesson', action:'lessons', cat:'transformation' },
-      { label:'Ask about hidden passages', action:'talk', text:'Arcanum was built by wandmakers, which means it was built with escape routes. The library has one. The dormitories have another. The founders called them “honest architecture.”' },
-    ],
-  },
-  {
-    id:'ash', name:'Matron Elowen Ash', role:'Healer of Arcanum', pos:[69,-34], color:'#4f7a64', accent:'#9bf0bf',
-    greeting:'Sit. Breathe. Show me the hand you are hiding. The other one, please — I have taught first-years before.',
-    options:[
-      { label:'Attend a Healing lesson', action:'lessons', cat:'healing' },
-      { label:'Ask about the wounded student', action:'talk', text:'A fourth-year came in last week with a cut that would not close. The wound hummed at the same pitch as the broken ward beneath the school. I have written to the Headmistress. Twice.' },
-    ],
-  },
-  {
-    id:'wren', name:'Archivist Wren', role:'Keeper of the Arcanum Library', pos:[81,-28.4], color:'#5a4a3a', accent:'#e9c874',
-    greeting:'Whisper, please. The books are sleeping. Or plotting. With books it is difficult to tell which.',
-    options:[
-      { label:'Review academy assignments', action:'school' },
-      { label:'Ask about the Shattered Wand', action:'talk', text:'The catalogue entry is missing, but the shelf remembers. Look for a red spine behind the astronomy section. And if a bookcase asks you a question, answer politely.' },
-      { label:'Search the restricted archive', action:'talk', text:'The restricted archive is not locked. It is simply ashamed. Find the loose bookcase on the east wall and it will let you through.' },
-    ],
-  },
-  {
-    id:'hollis', name:'Professor Jasper Hollis', role:'Wand Studies', pos:[56,-36], color:'#6b5a3a', accent:'#d9b978',
-    greeting:'A wand is a biography with a handle. We shall read yours carefully, and try not to break the spine.',
-    options:[
-      { label:'Use the wand bench', action:'wand' },
-      { label:'Attend a Wand Studies lesson', action:'lessons', cat:'offensive' },
-      { label:'Ask about wand lore', action:'talk', text:'Elder and thestral. Holly and phoenix. Some pairings are not recipes but promises. The library keeps a few that the Guild would rather forget.' },
-    ],
-  },
-  /* ---------------------------------------------------- STUDENTS & RIVALS */
-  {
-    id:'luma', name:'Luma Bright', role:'Fellow First-Year', pos:[58,-20], color:'#6a5a8a', accent:'#b9a8ff',
-    greeting:'You are the new one! I have already been here three days and I have only been threatened twice. That is apparently good.',
-    options:[
-      { label:'Ask what to do first', action:'talk', text:'Lessons, obviously. Professor Marrow teaches Charms in the west classroom. Then brew something in the potion lab and try not to explode. The Headmistress posts assignments in the school ledger.' },
-      { label:'Review the school ledger', action:'school' },
-    ],
-  },
-  {
-    id:'elara', name:'Elara Vex', role:'Rival Duelist', pos:[66,-20], color:'#4f6f8f', accent:'#a8d8ff',
-    greeting:'So you are the new wandmaker. I hear you can make a wand that does not explode. How ambitious.',
-    options:[
-      { label:'Challenge her to a duel', action:'duel', duel:'elara', arena:'academy' },
-      { label:'Trade friendly insults', action:'talk', text:'I do not dislike you, Vale. I simply find you convenient. Beat me and I will tell everyone you are dangerous. Lose, and I will tell everyone you are charming.' },
-    ],
-  },
-  {
-    id:'tobias', name:'Tobias Flint', role:'Academy Champion', pos:[78,-16], color:'#6b4f3f', accent:'#e9b45c',
-    greeting:'The indoor arena is mine until someone takes it. You look like someone who has read about dueling and would now like to try it. Go on, then.',
-    options:[
-      { label:'Duel the Academy Champion', action:'duel', duel:'tobias', arena:'academy' },
-      { label:'Ask for a lesson', action:'talk', text:'Shield the first cast. Every first-year panics and dodges. A shield buys you a breath, and a breath is a plan.' },
-    ],
-  },
-  {
-    id:'sable', name:'Sable Quinn', role:'Academy Prefect', pos:[84,-15], color:'#4a4f6a', accent:'#9fd8ff',
-    greeting:'Prefect Quinn. I enforce curfew, collect lost wands and, on Thursdays, humiliate first-years in the indoor arena. You are welcome to make an appointment.',
-    options:[
-      { label:'Duel the Prefect', action:'duel', duel:'sable', arena:'academy' },
-      { label:'Ask about the rules', action:'talk', text:'Rule one: the indoor arena is not for grudges. Rule two: it is absolutely for grudges. Rule three: do not touch the bookcase on the library’s east wall. It bites.' },
-    ],
-  },
-  /* ---------------------------------------------------- VILLAGE */
   {
     id:'quill', name:'Barnaby Quill', role:'Purveyor of Rare Materials', pos:[6,5], color:'#7a6b4a', accent:'#e9c874',
     greeting:'Rare woods! Honest cores! Slightly cursed curiosities! No refunds on the cursed ones. Mostly.',
@@ -301,6 +235,14 @@ export const NPCS = [
     ],
   },
   {
+    id:'elara', name:'Elara Vex', role:'Rival Duelist', pos:[32,-12], color:'#4f6f8f', accent:'#a8d8ff',
+    greeting:'So you are the new wandmaker. I hear you can make a wand that does not explode. How ambitious.',
+    options:[
+      { label:'Challenge her to a duel', action:'duel', duel:'elara' },
+      { label:'Trade friendly insults', action:'talk', text:'I do not dislike you, Vale. I simply find you convenient. Beat me and I will tell everyone you are dangerous. Lose, and I will tell everyone you are charming.' },
+    ],
+  },
+  {
     id:'garrick', name:'Garrick Sloane', role:'Tournament Regular', pos:[20,-7], color:'#5c4a6e', accent:'#c79bff',
     greeting:'Another wandmaker with a hero complex. Splendid. The arena has been dreadfully short of tragedy.',
     options:[
@@ -320,6 +262,116 @@ export const NPCS = [
     greeting:'You are the wandmaker! If you make a wand that helps people, I will tell every healer in the valley. If you make one that explodes, I will also tell them. Honestly.',
     options:[
       { label:'Talk about healing wands', action:'talk', text:'Willow and unicorn hair. Pear and demiguise. A healing wand should feel like a hand on your shoulder, not a hand around your throat.' },
+    ],
+  },
+  /* -------- Arcanum inner halls -------- */
+  {
+    id:'feld', name:'Professor Alaric Feld', role:'Master of Defensive Arts', pos:[53,-47], color:'#3f5e8a', accent:'#8fd0ff',
+    greeting:'A ward is not a wall. A wall is what you build when you have stopped thinking. Stand there and try to make me proud.',
+    options:[
+      { label:'Attend a warding lesson', action:'lesson', cat:'defensive' },
+      { label:'Report the result of the duel', action:'talk', flag:'reported_feld', requiresFlags:['beat_lysandra'], hideIfFlag:'reported_feld', text:'You won. Good. Now forget the victory and remember the mistake you nearly made. That is the only part worth keeping. Lysandra will be back, and next time she will have watched you as closely as you watched her.' },
+      { label:'Ask about the academy’s secrets', action:'talk', text:'Every school hides something. Arcanum hides a broken wand and a very patient ghost. The ghost is politer. If you find the shelf that hums, do not argue with it.' },
+      { label:'Duel him — indoor rules', action:'duel', duel:'feld', indoor:true },
+    ],
+  },
+  {
+    id:'thorne', name:'Professor Selene Thorne', role:'Mistress of Potions', pos:[53,-56], color:'#4f7a64', accent:'#9bf0bf',
+    greeting:'Mind the cauldron. It is not angry, it is merely disappointed. There is a difference, and both can scar.',
+    options:[
+      { label:'Brew a restorative draught', action:'brew' },
+      { label:'Attend a healing lesson', action:'lesson', cat:'healing' },
+      { label:'Ask about the black sap', action:'talk', text:'Something has been dripping through the north wall for a month. It remembers being a wand. I have stopped calling it a leak.' },
+    ],
+  },
+  {
+    id:'wren', name:'Professor Cassian Wren', role:'Keeper of Wandlore', pos:[52,-68], color:'#6a4a9a', accent:'#d9b978',
+    greeting:'You made a wand before you could name the six schools. That is either talent or a severe lack of supervision. Let us find out which.',
+    options:[
+      { label:'Attend a wandlore lesson', action:'lesson', cat:'transformation' },
+      { label:'Open the crafting bench', action:'wand' },
+      { label:'Ask about the first wand', action:'talk', text:'The Firstlight was not a wand. It was a disagreement between a branch and a storm that lasted long enough to become one. The Sundered Wand was the second. It ended the argument badly.' },
+    ],
+  },
+  {
+    id:'finch', name:'Maud Finch', role:'Restricted Librarian', pos:[31,-68], color:'#6b5e45', accent:'#c9b98f',
+    greeting:'The library is open. The books are not. If one of them asks you a question, do not answer with your full name.',
+    options:[
+      { label:'Review your student record', action:'academy' },
+      { label:'Ask about the Sundered Wand', action:'talk', flag:'met_finch', text:'We thought three echoes survived. We were wrong. Two more are waking: one in the drowned chapel on Moonmere, one caught in the observatory lens. The shelf by the west wall is the only one here that breathes. Start with it.' },
+    ],
+  },
+  {
+    id:'dune', name:'Matron Elspeth Dune', role:'Keeper of the Dorms', pos:[45,-67], color:'#8a4f5e', accent:'#e8cf9a',
+    greeting:'Your bed is the one with the sensible blanket. The other students will tell you it is haunted. It is not. It is simply older than they are.',
+    options:[
+      { label:'Rest in your room', action:'rest' },
+      { label:'Ask about the missing student', action:'talk', text:'A first-year went looking for the Room of Echoes and came back with no shadow. She is fine. Her shadow is still in the library, reading.' },
+    ],
+  },
+  {
+    id:'pike', name:'Rowan Pike', role:'Fellow First-Year', pos:[44,-54], color:'#5c4a6e', accent:'#c79bff',
+    greeting:'You are the new one, aren’t you? I have been here three days and I have already been threatened by a book. We should be friends.',
+    options:[
+      { label:'Ask what to do first', action:'talk', text:'Lessons, obviously. Then the library. Then the place under the stairs that Professor Feld says is a boiler room and definitely is not. I have a map. It is mostly guesses.' },
+      { label:'Share notes on the Sundered Wand', action:'talk', text:'The wand broke into echoes, and the echoes sing the same note. I heard it in the dorm wall. It sounded like someone saying “not yet”.' },
+    ],
+  },
+  {
+    id:'lysandra', name:'Lysandra Vane', role:'Rival First-Year', pos:[30,-47], color:'#4f6f8f', accent:'#a8d8ff',
+    greeting:'So you are the wandmaker. I expected someone taller. Or at least someone with a better hat.',
+    options:[
+      { label:'Duel her — indoor rules', action:'duel', duel:'lysandra', indoor:true },
+      { label:'Trade barbs', action:'talk', text:'I do not need to beat you today. I only need everyone to remember that I could. That is how reputations are made, Vale. Not with wands — with witnesses.' },
+    ],
+  },
+  {
+    id:'tobias', name:'Tobias Flint', role:'Academy Champion', pos:[32,-46], color:'#6b4f3f', accent:'#e9b45c',
+    greeting:'The champion’s circle is mine until someone takes it. You are welcome to try. I will even let you choose the music.',
+    options:[
+      { label:'Challenge the champion', action:'duel', duel:'tobias', indoor:true },
+      { label:'Ask for a duelling tip', action:'talk', text:'Do not shield when you are frightened. Shield when you are certain. Fear makes a ward thin and a duel short.' },
+    ],
+  },
+  {
+    id:'bramble', name:'Caretaker Bramble', role:'Keeper of Doors', pos:[40,-46], color:'#4a4a3a', accent:'#b9c98f',
+    greeting:'Doors are honest. They are either open or they are not. It is the walls you have to watch.',
+    options:[
+      { label:'Ask about hidden passages', action:'talk', text:'The tapestry in the dorms hides a draught, the potion wall hides a cupboard, and the library shelf hides a room that is not on any map. I maintain all three. Badly.' },
+      { label:'Ask about the dorms', action:'talk', text:'Your room is at the north end. The bed is old, the window sticks, and the floorboard by the desk creaks in a way that is almost a word.' },
+    ],
+  },
+  {
+    id:'echo', name:'The Echo of Firstlight', role:'A Memory in the Vault', pos:[63,-62], color:'#9a7be0', accent:'#e6c987',
+    greeting:'You brought a wand into a room full of broken ones. That is either very brave or very rude. Sit. Listen. The pieces remember more than the whole did.',
+    options:[
+      { label:'Ask what broke the wand', action:'talk', text:'A hand. Not the Hollow’s — not yet. A teacher who believed a wand should be obedient. The wand disagreed. The school has been apologising ever since.' },
+      { label:'Ask how to mend it', action:'talk', flag:'echoes_delivered', text:'You cannot mend an argument by winning it. Find the three echoes. Let them finish their sentence. Then the wand will decide what it wants to be. You have done the listening. Now the school must do the answering.' },
+    ],
+  },
+  /* -------- wider world: market, lake and observatory -------- */
+  {
+    id:'peddler', name:'Pell the Peddler', role:'Market Keeper', pos:[10,9], color:'#7d5a3a', accent:'#e9c874',
+    greeting:'Wands! Charms! Perfectly legal curiosities! If it hums, it is probably fine. If it screams, it costs extra.',
+    options:[
+      { label:'Browse the market', action:'shop', },
+      { label:'Ask what travellers are saying', action:'talk', text:'Three things. The lake bell rang without a hand. A light burned in the old observatory all night. And a hooded customer bought every void-black core I had. I did not ask his name. I like my name.' },
+    ],
+  },
+  {
+    id:'mira', name:'Mira Fenn', role:'The Lake Witch', pos:[-34,58], color:'#3f6f7a', accent:'#8fe6ff',
+    greeting:'The lake keeps what it is given. Names, rings, promises. Sometimes it gives one back, but it always asks a price first.',
+    options:[
+      { label:'Ask about the drowned chapel', action:'talk', flag:'met_mira', text:'The chapel went under in my grandmother’s time. The bell still rings when the Hollow’s name is spoken near the water. Go out to the altar and ring it yourself. If it answers, do not tell it your true name.' },
+      { label:'Ask about the lake’s echo', action:'talk', text:'A shard of the Sundered Wand fell into the water the night it broke. It has been ringing the bell ever since, trying to finish a sentence it never got to say.' },
+    ],
+  },
+  {
+    id:'vela', name:'Astronomer Vela', role:'Keeper of the Sunken Observatory', pos:[50,12], color:'#3f4f8a', accent:'#a8d8ff',
+    greeting:'The stars are not fixed. They are simply slower than we are. I have been charting one that moves against the rest. It is not a star.',
+    options:[
+      { label:'Ask what she has seen', action:'talk', flag:'met_vela', text:'A dark star that circles the Hollow Spire. Every hundred nights it passes over Arcanum, and every time it passes, another wand in the valley forgets how to choose. The great telescope still has a piece of the first passing caught in its lens.' },
+      { label:'Ask about the telescope', action:'talk', text:'Point it at the dark star and you will see a shard of the Sundered Wand. It is not in the sky. The sky is merely reflecting what is buried beneath this hill.' },
     ],
   },
   {
@@ -368,15 +420,11 @@ export const NODES = [
   { id:'n_kelpie1', type:'core', mat:'kelpie', label:'Kelpie Mane in the Reeds', pos:[-31,44], respawn:170 },
   { id:'n_demiguise1', type:'core', mat:'demiguise', label:'Demiguise Hair', pos:[-55,34], respawn:190 },
   { id:'n_unicorn1', type:'core', mat:'unicorn', label:'Unicorn Hair', pos:[-45,17], respawn:150 },
-  // academy grounds, gardens and hidden rooms
-  { id:'n_silver1', type:'wood', mat:'silverlime', label:'Silver Lime Slip', pos:[52,-22], respawn:160 },
-  { id:'n_walnut1', type:'wood', mat:'walnut', label:'Walnut Burl', pos:[28,-31], respawn:140 },
-  { id:'n_holly1', type:'wood', mat:'holly', label:'Holly Cutting', pos:[30,-24], respawn:120 },
-  { id:'n_veela1', type:'core', mat:'veela', label:'Veela Hair', pos:[55,-17], respawn:190 },
-  { id:'n_laurel1', type:'wood', mat:'laurel', label:'Laurel Crown Cutting', pos:[27,-26], respawn:180 },
-  { id:'n_mooncalf1', type:'core', mat:'mooncalf', label:'Mooncalf Hair in the Herb Beds', pos:[31,-36], respawn:210 },
-  { id:'n_sphinx1', type:'core', mat:'sphinx', label:'Sphinx Feather behind the Archive', pos:[93,-31], respawn:280 },
-  { id:'n_obsidian1', type:'wood', mat:'obsidian', label:'Obsidian Vein in the Undercroft', pos:[61,-69], respawn:300 },
+  // academy
+  { id:'n_silver1', type:'wood', mat:'silverlime', label:'Silver Lime Slip', pos:[52,-11], respawn:160 },
+  { id:'n_walnut1', type:'wood', mat:'walnut', label:'Walnut Burl', pos:[49,-30], respawn:140 },
+  { id:'n_holly1', type:'wood', mat:'holly', label:'Holly Cutting', pos:[31,-29], respawn:120 },
+  { id:'n_veela1', type:'core', mat:'veela', label:'Veela Hair', pos:[55,-19], respawn:190 },
   // ruins
   { id:'n_yew1', type:'wood', mat:'yew', label:'Yew Root', pos:[22,66], respawn:170 },
   { id:'n_ebony1', type:'wood', mat:'ebony', label:'Ebony Shard', pos:[7,67], respawn:180 },
@@ -400,19 +448,34 @@ export const NODES = [
   { id:'c3', type:'chest', label:'Ruined Strongbox', pos:[11,71], gold:[60,90], loot:['ebony','thestral'] },
   { id:'c4', type:'chest', label:'Cavern Cache', pos:[-72,-32], gold:[70,110], loot:['starglass','dragon'] },
   { id:'c5', type:'chest', label:'Ash-Stained Chest', pos:[59,66], gold:[50,80], loot:['blackthorn','manticore'] },
-  { id:'c6', type:'chest', label:'Academy Lost-Property Trunk', pos:[42,-19], gold:[35,65], loot:['walnut','veela'] },
-  { id:'c7', type:'chest', label:'Archivist’s Sealed Strongbox', pos:[92,-27], gold:[70,120], loot:['sphinx','silverlime'] },
-  { id:'c8', type:'chest', label:'Undercroft Reliquary', pos:[65,-70], gold:[90,150], loot:['obsidian','mooncalf'] },
+  { id:'c6', type:'chest', label:'Academy Lost-Property Trunk', pos:[46,-35], gold:[35,65], loot:['walnut','veela'] },
+  { id:'c7', type:'chest', label:'Echo Vault Reliquary', pos:[64,-66], gold:[90,140], loot:['starglass','phoenix'] },
+  { id:'c8', type:'chest', label:'Your Bedroom Trunk', pos:[47,-71], gold:[30,55], loot:['holly','unicorn'] },
+  // academy echoes of the Shattered Wand
+  { id:'clue_library', type:'clue', label:'The Sundered Wand: The First Break', pos:[28.4,-66.5], lore:'The first crack came from the inside. A wand that could choose its master was asked to stop choosing. It refused. The wood split along the refusal, and the school was built around the sound.' },
+  { id:'clue_lab', type:'clue', label:'A Brewer’s Warning', pos:[55.5,-61.5], lore:'Black sap, still warm, still humming. Professor Thorne’s note reads: “It is not an ingredient. It is a memory trying to become a wand again. Do not stir clockwise.”' },
+  { id:'clue_dorm', type:'clue', label:'A Half-Burned Letter', pos:[46,-70], lore:'“—if the Hollow finds the echoes first, he will not mend the wand. He will use it to cut the choosing out of every wand in the valley. Burn this. — A friend who is no longer sure.”' },
+  { id:'clue_vault', type:'clue', label:'Echo of the Firstlight', pos:[61.5,-60.5], lore:'The echo speaks with two voices: the wand and the hand that broke it. “You wanted me to obey.” “I wanted you to be safe.” Neither has forgiven the other. The room waits for a third voice.' },
+  // Moonmere Lake
+  { id:'n_lake_willow', type:'wood', mat:'willow', label:'Drowned Willow Switch', pos:[-26,64], respawn:120 },
+  { id:'n_lake_ash', type:'wood', mat:'ash', label:'Waterlogged Ash Bough', pos:[-42,60], respawn:140 },
+  { id:'n_lake_kelpie', type:'core', mat:'kelpie', label:'Kelpie Mane in the Reeds', pos:[-44,73], respawn:170 },
+  { id:'n_lake_demiguise', type:'core', mat:'demiguise', label:'Demiguise Hair on the Altar', pos:[-34,73], respawn:190 },
+  { id:'c9', type:'chest', label:'Chapel Poor-Box', pos:[-36.5,73.5], gold:[45,75], loot:['willow','kelpie'] },
+  { id:'clue_lake', type:'clue', label:'The Drowned Bell’s Echo', pos:[-34,74], lore:'The bell does not ring for the dead. It rings for the promise the wand made and could not keep. “I chose,” it says. “I chose her. I chose him. I chose the next hand. I will choose again.”' },
+  // Sunken Observatory
+  { id:'n_obs_starglass', type:'wood', mat:'starglass', label:'Fallen Starglass Shard', pos:[43,12], respawn:220 },
+  { id:'n_obs_moonash', type:'wood', mat:'moonash', label:'Moon Ash Blossom', pos:[58,2], respawn:230 },
+  { id:'n_obs_augurey', type:'core', mat:'augurey', label:'Augurey in the Dome', pos:[55,14], respawn:190 },
+  { id:'n_obs_phoenix', type:'core', mat:'phoenix', label:'Phoenix Feather in the Lens', pos:[47,5], respawn:240 },
+  { id:'c10', type:'chest', label:'Astronomer’s Strongbox', pos:[49,1], gold:[60,95], loot:['starglass','phoenix'] },
+  { id:'clue_observatory', type:'clue', label:'The Dark Star’s Reflection', pos:[50,4], lore:'The telescope shows no star. It shows a hand closing around a wand, and the wand splitting along its refusal. Behind the hand, the Hollow Spire is already being built.' },
   // lore
   { id:'l1', type:'lore', label:'The Wanderer’s Stone', pos:[1,6], lore:'The first wand was not made. It was found — a splinter of lightning caught in a fallen branch, still warm. The old wandmakers called this the Firstlight, and argued about it for six centuries.' },
   { id:'l2', type:'lore', label:'Mossy Headstone', pos:[-46,10], lore:'Here lies a wandmaker who sold a wand to a king. The king conquered a country. The wandmaker went home and made spoons. “Spoons,” the stone reads, “never ask to be heroes.”' },
   { id:'l3', type:'lore', label:'Broken Plinth', pos:[14,60], lore:'The Elder Ruins were a college of wandlore before the school on the hill. Its last master wrote: “A wand is a promise. Break it and the wood remembers.”' },
   { id:'l4', type:'lore', label:'Crystal Echo', pos:[-63,-50], lore:'The cavern crystals sing when a wand is near. Miners used them to test whether a wizard was telling the truth about his credentials. They were seldom wrong and never popular.' },
   { id:'l5', type:'lore', label:'Spire Inscription', pos:[68,49], lore:'“I made wands that chose good people, and good people died anyway. So I removed the choosing.” — M. The rest of the stone has been scratched away.' },
-  // Arcanum secrets — these carry the Shattered Wand subplot
-  { id:'l_academy1', type:'lore', clue:'catalogue', label:'The Missing Catalogue', pos:[79,-34], lore:'A red spine sits behind the astronomy shelves, exactly where the Archivist said it would. The catalogue entry has been cut out with a wand, not a knife. In the margin: “One fragment was carried into the school. It is still humming.”' },
-  { id:'l_academy2', type:'lore', clue:'foundation', label:'The Cracked Foundation', pos:[58,-68], lore:'Beneath the Great Hall the stone has split in a line the length of a wand. Frost gathers in the crack even in summer. If you put your ear to it, you can hear a duel being fought far away — and someone winning.' },
-  { id:'l_academy3', type:'lore', clue:'stair', label:'The Founders’ Stair', pos:[39,-16], lore:'Behind the dormitory curtain, a narrow stair spirals down into the dark. The founders built it “for honest departures.” Halfway down, a small brass plaque reads: “A wand is a promise. Break it and the wood remembers.”' },
 ]
 
 /* ------------------------------------------------------- CUSTOMERS */
@@ -440,8 +503,9 @@ export const DUELISTS = {
   elara:   { id:'elara', name:'Elara Vex', title:'Rival Duelist', hp:85, damage:9,  speed:3.4, castMin:1.6, castMax:2.4, color:'#4f6f8f', accent:'#a8d8ff', style:'bolt', rep:1, gold:[18,30], xp:45 },
   garrick: { id:'garrick', name:'Garrick Sloane', title:'Tournament Regular', hp:120, damage:11, speed:3.0, castMin:1.4, castMax:2.2, color:'#5c4a6e', accent:'#c79bff', style:'fan', rep:2, gold:[25,40], xp:60 },
   tobias:  { id:'tobias', name:'Tobias Flint', title:'Academy Champion', hp:150, damage:13, speed:3.2, castMin:1.2, castMax:2.0, color:'#6b4f3f', accent:'#e9b45c', style:'multi', rep:3, gold:[40,60], xp:90 },
-  sable:   { id:'sable', name:'Sable Quinn', title:'Academy Prefect', hp:175, damage:14, speed:3.5, castMin:1.1, castMax:1.9, color:'#4a4f6a', accent:'#9fd8ff', style:'fan', rep:4, gold:[50,75], xp:120 },
   marrow:  { id:'marrow', name:'Professor Isolde Marrow', title:'Charms Mistress', hp:200, damage:16, speed:2.8, castMin:1.0, castMax:1.8, color:'#5b3f8f', accent:'#d7c1ff', style:'fan', rep:5, gold:[70,100], xp:140 },
+  lysandra:{ id:'lysandra', name:'Lysandra Vane', title:'Rival First-Year', hp:105, damage:10, speed:3.5, castMin:1.5, castMax:2.3, color:'#4f6f8f', accent:'#a8d8ff', style:'bolt', rep:2, gold:[25,45], xp:75 },
+  feld:    { id:'feld', name:'Professor Alaric Feld', title:'Master of Defensive Arts', hp:170, damage:14, speed:3.0, castMin:1.2, castMax:2.0, color:'#3f5e8a', accent:'#8fd0ff', style:'fan', rep:4, gold:[55,85], xp:125 },
   gloomfang:{ id:'gloomfang', name:'Gloomfang', title:'Terror of the Wood', hp:140, damage:14, speed:4.0, castMin:1.1, castMax:1.9, color:'#31402f', accent:'#8ad86f', style:'multi', rep:3, gold:[30,50], xp:100, beast:true },
   warden:  { id:'warden', name:'Crystal Warden', title:'Keeper of the Glimmer', hp:240, damage:15, speed:2.4, castMin:1.3, castMax:2.2, color:'#3f6f7a', accent:'#8fe6ff', style:'fan', rep:5, gold:[80,120], xp:170 },
   morvane: { id:'morvane', name:'Morvane the Hollow', title:'The Dark Wandmaker', hp:520, damage:19, speed:2.6, castMin:0.8, castMax:1.5, color:'#221a2b', accent:'#ff5f7a', style:'boss', rep:20, gold:[400,500], xp:800, boss:true },
@@ -460,42 +524,95 @@ export const TOURNAMENT_RANKS = [
 ]
 
 /* ---------------------------------------------------------- QUESTS */
+/* Pursuits are the open-world checklist: pick them up in any order. The
+   main story lives in MISSIONS below and always shows one clear next step. */
 export const QUESTS = [
-  { id:'q_wand', title:'The First Wand', desc:'Craft a wand of your own at the bench.', metric:'wandsCrafted', target:1, gold:45, rep:5, xp:60, hint:'Press C to open the wandcrafting bench.' },
-  { id:'q_learn', title:'A Proper Education', desc:'Learn three spells at Arcanum Academy.', metric:'spellsLearned', target:3, gold:50, rep:6, xp:80, hint:'Speak with Professor Marrow in the academy courtyard.' },
-  { id:'q_academy', title:'The School Beneath', desc:'Discover three secrets hidden around Arcanum Academy.', metric:'academySecrets', target:3, gold:180, rep:12, xp:220, hint:'Search the library, the dormitories and the cracked foundation beneath the Great Hall.' },
-  { id:'q_potions', title:'A Useful Education', desc:'Brew three potions in the Arcanum laboratory.', metric:'potionsBrewed', target:3, gold:90, rep:5, xp:110, hint:'Professor Voss keeps the recipe book in the potion laboratory.' },
-  { id:'q_duel', title:'First Blood', desc:'Win a wizard’s duel.', metric:'duelsWon', target:1, gold:40, rep:5, xp:70, hint:'Challenge Elara Vex, or speak to Sergeant Rook at the arena.' },
-  { id:'q_sell', title:'Shopkeeper’s Debut', desc:'Sell a wand to a customer.', metric:'wandsSold', target:1, gold:60, rep:6, xp:60, hint:'Open your shop with B and match a wand to a customer.' },
-  { id:'q_rare', title:'The Whispering Ruins', desc:'Gather three rare or better materials.', metric:'rareGathered', target:3, gold:100, rep:9, xp:120, hint:'Rare nodes wait in the Elder Ruins and Glimmer Cavern.' },
-  { id:'q_discover', title:'A Student of Resonance', desc:'Discover five unique wand combinations.', metric:'combosDiscovered', target:5, gold:120, rep:10, xp:150, hint:'Experiment with different wood and core pairings.' },
-  { id:'q_tourney', title:'Champion of Hollowmere', desc:'Win the dueling tournament.', metric:'tournamentsWon', target:1, gold:300, rep:18, xp:300, hint:'Sergeant Rook at the arena runs the tournament.' },
-  { id:'q_boss', title:'The Hollow Spire', desc:'Defeat Morvane the Hollow and claim the Voidheart.', metric:'bossDefeated', target:1, gold:500, rep:30, xp:500, hint:'Reach 30 reputation, then climb the spire in the south-east.' },
+  { id:'q_wand', title:'The First Wand', desc:'Craft a wand of your own at the bench.', metric:'wandsCrafted', target:1, gold:45, rep:5, xp:60, where:'Your shop', hint:'Press C to open the wandcrafting bench.' },
+  { id:'q_learn', title:'A Proper Education', desc:'Learn three spells at Arcanum Academy.', metric:'spellsLearned', target:3, gold:50, rep:6, xp:80, where:'Academy lessons', hint:'Speak with Professor Marrow in the academy courtyard.' },
+  { id:'q_duel', title:'First Blood', desc:'Win a wizard’s duel.', metric:'duelsWon', target:1, gold:40, rep:5, xp:70, where:'Hollowmere Arena', hint:'Challenge Elara Vex, or speak to Sergeant Rook at the arena.' },
+  { id:'q_sell', title:'Shopkeeper’s Debut', desc:'Sell a wand to a customer.', metric:'wandsSold', target:1, gold:60, rep:6, xp:60, where:'Your shop', hint:'Open your shop with B and match a wand to a customer.' },
+  { id:'q_market', title:'Market Day', desc:'Sell three wands to customers.', metric:'wandsSold', target:3, gold:110, rep:8, xp:130, where:'Your shop', hint:'Craft a few wands first, then open the shop and sell them.' },
+  { id:'q_duelist', title:'The Duelling Circuit', desc:'Win four duels against named opponents.', metric:'duelsWon', target:4, gold:130, rep:10, xp:160, where:'Arena & Academy', hint:'Sergeant Rook’s register lists every opponent in the Hollow.' },
+  { id:'q_rare', title:'The Whispering Ruins', desc:'Gather three rare or better materials.', metric:'rareGathered', target:3, gold:100, rep:9, xp:120, where:'Elder Ruins & Cavern', hint:'Rare nodes wait in the Elder Ruins and Glimmer Cavern.' },
+  { id:'q_discover', title:'A Student of Resonance', desc:'Discover five unique wand combinations.', metric:'combosDiscovered', target:5, gold:120, rep:10, xp:150, where:'Wandcrafting bench', hint:'Experiment with different wood and core pairings.' },
+  { id:'q_academy', title:'A School of Secrets', desc:'Discover six rooms within Arcanum Academy.', metric:'academyRooms', target:6, gold:90, rep:6, xp:120, where:'Arcanum inner halls', hint:'Enter the inner halls through the courtyard arch and explore every door.' },
+  { id:'q_secrets', title:'The Caretaker’s Doors', desc:'Find two secret passages in the academy.', metric:'academySecrets', target:2, gold:140, rep:9, xp:170, where:'Academy', hint:'Caretaker Bramble knows about the tapestry, the cupboard and the shelf that breathes.' },
+  { id:'q_sundered', title:'The Sundered Wand', desc:'Recover three echoes of the Shattered Wand.', metric:'wandShards', target:3, gold:160, rep:10, xp:200, where:'Academy, Lake & Observatory', hint:'The library, the laboratory, the dorms, the lake bell and the great telescope.' },
+  { id:'q_last_echo', title:'The Last Echo', desc:'Recover five echoes of the Shattered Wand.', metric:'wandShards', target:5, gold:220, rep:12, xp:260, where:'Everywhere', hint:'Two echoes remain beyond the first three. The lake and the observatory keep them.' },
+  { id:'q_potions', title:'Something Simmering', desc:'Brew a potion in the academy laboratory.', metric:'potionsBrewed', target:1, gold:50, rep:3, xp:75, where:'Potion Laboratory', hint:'Professor Thorne will show you the cauldron.' },
+  { id:'q_honours', title:'First-Year Honours', desc:'Complete three academy assignments.', metric:'academyAssignments', target:3, gold:150, rep:10, xp:180, where:'Academy', hint:'Read the Assignment Board in the Grand Hall.' },
+  { id:'q_beasts', title:'Beasts of the Hollow', desc:'Defeat Gloomfang and the Crystal Warden.', metric:'beastsDefeated', target:2, gold:180, rep:12, xp:220, where:'Whispering Wood & Glimmer Cavern', hint:'Gloomfang hunts the deep wood. The Warden guards the crystal hollow.' },
+  { id:'q_tourney', title:'Champion of Hollowmere', desc:'Win the dueling tournament.', metric:'tournamentsWon', target:1, gold:300, rep:18, xp:300, where:'Hollowmere Arena', hint:'Sergeant Rook at the arena runs the tournament.' },
+  { id:'q_boss', title:'The Hollow Spire', desc:'Defeat Morvane the Hollow and claim the Voidheart.', metric:'bossDefeated', target:1, gold:500, rep:30, xp:500, where:'The Hollow Spire', hint:'Reach 30 reputation, then climb the spire in the south-east.' },
 ]
 
-/* ---------------------------------------------------- ARCANUM ACADEMY */
-export const ACADEMY_ASSIGNMENTS = [
-  { id:'a_lessons', title:'First Recitation', desc:'Attend three lessons with the Arcanum faculty.', metric:'lessons', target:3, gold:60, rep:4, xp:90, where:'Any classroom' },
-  { id:'a_potions', title:'Something That Bubbles', desc:'Brew two potions without setting the laboratory alight.', metric:'potions', target:2, gold:75, rep:3, xp:80, where:'Potion laboratory' },
-  { id:'a_duel', title:'Indoor Credentials', desc:'Win a duel in the indoor arena.', metric:'academyDuelsWon', target:1, gold:80, rep:4, xp:100, where:'Indoor arena' },
-  { id:'a_wand', title:'The Wand That Chooses Back', desc:'Craft a wand while enrolled at the Academy.', metric:'wands', target:1, gold:90, rep:4, xp:110, where:'Wand studies bench' },
-  { id:'a_secrets', title:'Honest Architecture', desc:'Uncover all three Academy secrets.', metric:'secrets', target:3, gold:200, rep:10, xp:240, where:'Library · Dormitories · Undercroft' },
+/* ---------------------------------------------------------- MAIN STORY */
+/* One mission is active at a time. Each step names a place and a concrete
+   action, so the HUD can always answer "what do I do next?" while the rest
+   of the world stays open. */
+export const MISSIONS = [
+  {
+    id:'m1', act:'I', title:'The New Student', giver:'Professor Isolde Marrow',
+    brief:'You have arrived at Arcanum in an awkward hour. The Headmistress wants you enrolled, the school wants you taught, and something under the lake is ringing.',
+    steps:[
+      { text:'Speak with Professor Marrow in the academy courtyard.', hint:'Marrow stands north of the fountain, by the courtyard steps.', where:'Arcanum courtyard', pos:[37,-14], flag:'met_marrow' },
+      { text:'Enter the inner halls beneath the courtyard arch.', hint:'The arch glows violet on the north side of the courtyard.', where:'Courtyard arch', pos:[42,-9.4], flag:'entered_halls' },
+      { text:'Read the Assignment Board in the Grand Hall.', hint:'The board hangs on the north wall of the Grand Hall.', where:'Grand Hall', pos:[37.3,-61.4], flag:'read_board' },
+      { text:'Attend one lesson from any professor.', hint:'Marrow, Feld, Thorne or Wren will all take a first-year.', where:'Academy classrooms', pos:[42,-58], flag:'attended_lesson' },
+    ],
+    reward:{ gold:100, rep:6, xp:120 },
+  },
+  {
+    id:'m2', act:'I', title:'The Rival’s Gauntlet', giver:'Lysandra Vane',
+    brief:'Lysandra Vane has decided that your enrolment is an insult worth correcting in public. The duelling chamber has rules. She intends to bend them.',
+    steps:[
+      { text:'Defeat Lysandra Vane in the indoor duelling chamber.', hint:'The chamber is south-west of the Grand Hall, through the west door.', where:'Duelling Chamber', pos:[30.5,-46.3], flag:'beat_lysandra' },
+      { text:'Tell Professor Feld how the bout ended.', hint:'Feld teaches Defensive Arts in the chamber’s north aisle.', where:'Duelling Chamber', pos:[53,-47], flag:'reported_feld' },
+    ],
+    reward:{ gold:120, rep:8, xp:150 },
+  },
+  {
+    id:'m3', act:'II', title:'Echoes in the Stacks', giver:'Maud Finch',
+    brief:'The Sundered Wand broke into echoes, and Arcanum has been collecting them ever since. Maud Finch knows which shelves are listening.',
+    steps:[
+      { text:'Speak with Maud Finch in the Restricted Library.', hint:'The library is the north-west room of the inner halls.', where:'Restricted Library', pos:[31,-68], flag:'met_finch' },
+      { text:'Recover two echoes of the Sundered Wand.', hint:'The library, the potion lab and the dorms each hold one.', where:'Academy', pos:[28.4,-66.5], metric:'wandShards', target:2 },
+      { text:'Find the hidden Room of Echoes behind the humming shelf.', hint:'Examine the shelf against the library’s west wall.', where:'Restricted Library', pos:[27.2,-64.3], flag:'found_vault' },
+    ],
+    reward:{ gold:160, rep:10, xp:200 },
+  },
+  {
+    id:'m4', act:'II', title:'The Sunken Observatory', giver:'Astronomer Vela',
+    brief:'A dark star moves against the sky, and the old observatory still turns its lens toward it. Vela has been waiting for someone the star is willing to show.',
+    steps:[
+      { text:'Travel to the Sunken Observatory east of the academy.', hint:'Open the map (M) and fast-travel, or follow the eastern road.', where:'Sunken Observatory', pos:[50,8], flag:'visited_observatory' },
+      { text:'Introduce yourself to Astronomer Vela.', hint:'She waits beside the broken dome.', where:'Sunken Observatory', pos:[50,12], flag:'met_vela' },
+      { text:'Look through the great telescope and recover its echo.', hint:'The telescope points at the dark star from the north side of the dome.', where:'Sunken Observatory', pos:[50,4], flag:'echo_observatory' },
+    ],
+    reward:{ gold:180, rep:10, xp:220 },
+  },
+  {
+    id:'m5', act:'II', title:'The Drowned Chapel', giver:'Mira Fenn',
+    brief:'Moonmere Lake keeps what it is given. The chapel bell has been ringing without a hand, and Mira Fenn says the lake is trying to finish a sentence.',
+    steps:[
+      { text:'Travel to Moonmere Lake in the south-west.', hint:'Open the map (M) and travel to Moonmere, or follow the southern road.', where:'Moonmere Lake', pos:[-34,70], flag:'visited_lake' },
+      { text:'Speak with Mira Fenn on the shore.', hint:'Mira keeps a lantern by the dock, south of the water.', where:'Moonmere shore', pos:[-34,58], flag:'met_mira' },
+      { text:'Ring the drowned chapel bell and recover its echo.', hint:'Cross the dock to the island chapel and ring the bell at the altar.', where:'Drowned Chapel', pos:[-34,74], flag:'echo_lake' },
+      { text:'Bring the echoes to the Room of Echoes and hear the wand’s sentence.', hint:'Return to the hidden vault behind the library shelf.', where:'Room of Echoes', pos:[63,-62], flag:'echoes_delivered' },
+    ],
+    reward:{ gold:220, rep:12, xp:280 },
+  },
+  {
+    id:'m6', act:'III', title:'The Hollow Thread', giver:'Professor Isolde Marrow',
+    brief:'The echoes name the hand that first cracked the wand open. That hand has been feeding the Hollow Spire ever since. The school can teach you no further. The rest is a choice.',
+    steps:[
+      { text:'Reach 30 reputation so the Spire will admit you.', hint:'Lessons, assignments, duels and honest work all raise your reputation.', where:'The Hollow', pos:[70,52], rep:30 },
+      { text:'Defeat Morvane the Hollow at the Hollow Spire.', hint:'The Spire stands in the south-east. Morvane waits at its foot.', where:'The Hollow Spire', pos:[70,52], flag:'beat_morvane' },
+      { text:'Return to Professor Marrow and tell her what the wand chose.', hint:'She waits in the academy courtyard.', where:'Arcanum courtyard', pos:[37,-14], flag:'reported_marrow' },
+    ],
+    reward:{ gold:400, rep:20, xp:400 },
+  },
 ]
-
-export const POTIONS = [
-  { id:'vitality', name:'Vitality Tonic', glyph:'✚', color:'#78e6a8', mins:'Potion lab', cost:{ pear:1, unicorn:1 }, desc:'A warm green draught. Restores you to full health and steadies the hand.', flavor:'Matron Ash approves. Reluctantly.' },
-  { id:'ember', name:'Ember Focus', glyph:'☄', color:'#ffc266', mins:'Potion lab', cost:{ ash:1, dragon:1 }, desc:'Bottled courage. Grants a surge of experience and reputation.', flavor:'Professor Voss says courage is mostly preparation.' },
-  { id:'clarity', name:'Moonlit Clarity', glyph:'◉', color:'#9fd8ff', mins:'Potion lab', cost:{ willow:1, demiguise:1 }, desc:'Clears the mind. Reveals one uncharted wand resonance.', flavor:'The bookcase on the east wall is listening.' },
-  { id:'foundation', name:'Foundation Draught', glyph:'☾', color:'#c79bff', mins:'Potion lab', cost:{ laurel:1, mooncalf:1 }, desc:'Tastes of cold stone and old oaths. Adds a reputation point and a little lore.', flavor:'Best drunk before asking the school a question.' },
-]
-
-export const ACADEMY_CLUES = [
-  { id:'catalogue', title:'The Missing Catalogue', place:'Library, behind the astronomy shelves', fragment:'The catalogue says a fragment was carried into Arcanum and is still humming.', reward:{ mat:'silverlime', qty:1, xp:60, rep:2 } },
-  { id:'foundation', title:'The Cracked Foundation', place:'Undercroft, beneath the Great Hall', fragment:'A wand-shaped crack runs through the foundation. Something below is still duelling.', reward:{ mat:'obsidian', qty:1, xp:80, rep:2 } },
-  { id:'stair', title:'The Founders’ Stair', place:'Dormitory, behind the curtain', fragment:'The founders built a stair “for honest departures.” A fragment passed this way.', reward:{ mat:'sphinx', qty:1, xp:100, rep:3 } },
-]
-
-export const ACADEMY_HOUSES = ['Ravenwood', 'Emberfall', 'Tideglass', 'Thornhall']
 
 export const RANKS = [
   { rep:0, title:'Curious Novice' },
@@ -519,7 +636,6 @@ export const LORE = {
   school: { title:'Arcanum Academy', text:'Six schools, one rule: magic takes something. The wise decide what they are willing to give.' },
   shop: { title:'The Crooked Wand', text:'A shop is a promise that someone will still be here tomorrow. Your name is above the door now.' },
   spire: { title:'The Hollow Spire', text:'Morvane believed wands should obey. The wood disagreed. He has been arguing with it ever since.' },
-  fragment: { title:'The Shattered Wand — Arcanum Fragment', text:'Three school secrets point to the same truth: a fragment of the Elder Wand was hidden beneath Arcanum. It is not a relic to be displayed. It is a decision waiting to be made.' },
 }
 
 export const CREATURE_LORE = [

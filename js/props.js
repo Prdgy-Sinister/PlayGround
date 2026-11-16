@@ -67,8 +67,7 @@ export function lamp(world, x, z, color = '#ffc978', height = 3.1, intensity = 2
   const lantern = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(color), toneMapped: false }))
   lantern.position.y = height - 0.06; g.add(lantern)
   addGlow(world, g, color, 2.6, 0, height - 0.06, 0, 0.75)
-  const light = new THREE.PointLight(new THREE.Color(color), intensity, dist, 1.8)
-  light.position.y = height - 0.1; g.add(light)
+  world.addLightSource(x, y + height - 0.1, z, color, intensity, dist, 1.8)
   world.scene.add(g)
   return g
 }
@@ -178,7 +177,7 @@ export function buildVillage(world) {
   const orb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshBasicMaterial({ color: '#a9d8ff', toneMapped: false }))
   orb.position.y = 4.5; fountain.add(orb)
   addGlow(world, fountain, '#9fd0ff', 3.4, 0, 4.5, 0, 0.7)
-  const wl = new THREE.PointLight(0x8fc8ff, 14, 14, 2); wl.position.y = 3.4; fountain.add(wl)
+  world.addLightSource(0, y0 + 3.4, 0, 0x8fc8ff, 14, 14, 2)
   scene.add(fountain)
   world.addCollider(0, 0, 3.1)
   world.fireflies.push({ obj: fountain, kind: 'fountain' })
@@ -239,627 +238,555 @@ export function buildVillage(world) {
   }
 }
 
-/* ---------------------------------------------------------- ACADEMY HELPERS */
-function academyWall(world, group, ox, oz, x1, z1, x2, z2, opts = {}) {
-  const h = opts.h ?? 3.4, t = opts.t ?? 0.42
-  const dx = x2 - x1, dz = z2 - z1
-  const len = Math.hypot(dx, dz)
-  if (len < 0.08) return
-  const color = opts.color ?? '#4a475e'
-  const trim = opts.trim ?? '#6d6880'
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, h, t), std(color, { rough: 0.97 }))
-  mesh.position.set((x1 + x2) / 2, h / 2 + 0.03, (z1 + z2) / 2)
-  mesh.rotation.y = Math.atan2(-dz, dx)
-  group.add(mesh)
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(len + 0.12, 0.18, t + 0.16), std(trim, { rough: 0.9 }))
-  cap.position.set(mesh.position.x, h + 0.04, mesh.position.z)
-  cap.rotation.y = mesh.rotation.y
-  group.add(cap)
-  if (opts.collide !== false) {
-    const steps = Math.max(1, Math.ceil(len / 1.25))
-    const r = Math.max(0.52, t * 0.62 + 0.28)
-    for (let i = 0; i <= steps; i++) {
-      const t0 = i / steps
-      world.addCollider(ox + x1 + dx * t0, oz + z1 + dz * t0, r, true, 0.9)
-    }
-  }
-  return mesh
-}
-
-function academySign(world, group, text, sub, x, y, z, rotY, color = '#c9a6ff') {
-  const board = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.55, 0.14), std('#241a33', { rough: 0.9 }))
-  board.position.set(x, y, z); board.rotation.y = rotY; group.add(board)
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.4), new THREE.MeshBasicMaterial({ map: signTexture([text, sub], { fg: color }), toneMapped: false }))
-  face.position.set(x, y, z); face.rotation.y = rotY
-  face.translateZ(0.085); group.add(face)
-}
-
-function academyLantern(world, group, x, y, z, color = '#ffc978') {
-  const cage = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), new THREE.MeshBasicMaterial({ color, toneMapped: false }))
-  cage.position.set(x, y, z); group.add(cage)
-  addGlow(world, group, color, 1.5, x, y, z, 0.55)
-}
-
-function academyChandelier(world, group, x, y, z) {
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.035, 5, 20), std('#5a4a3a', { metal: 0.35 }))
-  ring.rotation.x = Math.PI / 2; ring.position.set(x, y, z); group.add(ring)
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2
-    const c = new THREE.Group(); c.position.set(x + Math.cos(a) * 0.95, y + 0.16, z + Math.sin(a) * 0.95)
-    const wax = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.3, 5), std('#e6dcc2', { emissive: '#5a4524', ei: 0.35 }))
-    c.add(wax)
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.16, 5), new THREE.MeshBasicMaterial({ color: '#ffd08a', toneMapped: false }))
-    flame.position.y = 0.22; c.add(flame)
-    addGlow(world, c, '#ffcf83', 0.72, 0, 0.22, 0, 0.75)
-    group.add(c)
-  }
-}
-
-function academyDesk(group, x, z, rot = 0, color = '#4b3524') {
-  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot
-  const top = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.12, 0.95), std(color, { rough: 0.9 }))
-  top.position.y = 0.78; g.add(top)
-  for (const [sx, sz] of [[-0.68, -0.34], [0.68, -0.34], [-0.68, 0.34], [0.68, 0.34]]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.78, 0.09), std('#3a2b22'))
-    leg.position.set(sx, 0.39, sz); g.add(leg)
-  }
-  const book = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.09, 0.64), std(['#6b2f45', '#3f5e7d', '#5e5a3f'][Math.floor(Math.abs(x + z)) % 3]))
-  book.position.set(-0.35, 0.88, 0.05); book.rotation.y = 0.2; g.add(book)
-  group.add(g)
-}
-
-function academyShelf(group, x, z, rot = 0, color = '#3d2a1e', w = 3.2, h = 3.0) {
-  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.46), std(color, { rough: 0.94 }))
-  frame.position.y = h / 2; g.add(frame)
-  const back = new THREE.Mesh(new THREE.BoxGeometry(w - 0.16, h - 0.2, 0.06), std('#241a18'))
-  back.position.set(0, h / 2, -0.21); g.add(back)
-  for (let r = 0; r < 4; r++) {
-    const shelf = new THREE.Mesh(new THREE.BoxGeometry(w - 0.1, 0.09, 0.5), std('#5b4029'))
-    shelf.position.set(0, 0.5 + r * 0.68, 0); g.add(shelf)
-    let bx = -w / 2 + 0.24
-    while (bx < w / 2 - 0.22) {
-      const bw = 0.08 + ((r * 7 + bx * 5) % 1 + 1) % 1 * 0.09
-      const bh = 0.32 + ((r * 3 + bx * 7) % 1 + 1) % 1 * 0.2
-      const book = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.3), std(['#6b2f45', '#3f5e7d', '#5e5a3f', '#4f3f6b', '#7d3f4f'][(r + Math.round(bx * 10)) % 5]))
-      book.position.set(bx + bw / 2, 0.55 + r * 0.68 + bh / 2, 0.08); g.add(book)
-      bx += bw + 0.035
-    }
-  }
-  group.add(g)
-  return g
-}
-
-function academyBed(group, x, z, rot = 0) {
-  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.32, 2.4), std('#4b3524'))
-  frame.position.y = 0.28; g.add(frame)
-  const mat = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.26, 2.18), std('#d8cdb6', { rough: 0.95 }))
-  mat.position.y = 0.57; g.add(mat)
-  const blanket = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.12, 1.35), std(['#5b3a78', '#3f5e7a', '#7a3f4f'][Math.abs(Math.round(x * 3 + z)) % 3], { rough: 0.95 }))
-  blanket.position.set(0, 0.73, 0.32); g.add(blanket)
-  const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.16, 0.4), std('#efe6d4'))
-  pillow.position.set(0, 0.74, -0.82); g.add(pillow)
-  for (const [sx, sz] of [[-0.58, -1.12], [0.58, -1.12], [-0.58, 1.12], [0.58, 1.12]]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.28, 0.1), std('#3a2b22'))
-    leg.position.set(sx, 0.14, sz); g.add(leg)
-  }
-  group.add(g)
-}
-
-function academyCauldron(world, group, x, z, color = '#7fd08a') {
-  const g = new THREE.Group(); g.position.set(x, 0, z)
-  const pot = new THREE.Mesh(new THREE.SphereGeometry(0.78, 14, 10, 0, Math.PI * 2, Math.PI * 0.28, Math.PI * 0.72), std('#2e2a33', { rough: 0.7, metal: 0.3 }))
-  pot.position.y = 0.78; g.add(pot)
-  const brew = new THREE.Mesh(new THREE.CircleGeometry(0.66, 18), new THREE.MeshBasicMaterial({ color, toneMapped: false }))
-  brew.rotation.x = -Math.PI / 2; brew.position.y = 1.04; g.add(brew)
-  addGlow(world, g, color, 2.1, 0, 1.1, 0, 0.5)
-  for (const s of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.55, 5), std('#3a3030'))
-    leg.position.set(s * 0.45, 0.28, 0); leg.rotation.z = s * 0.25; g.add(leg)
-  }
-  const steam = new THREE.Sprite(new THREE.SpriteMaterial({ map: world.textures.glow, color, transparent: true, opacity: 0.16, depthWrite: false }))
-  steam.position.y = 1.7; steam.scale.setScalar(1.4); g.add(steam)
-  group.add(g)
-}
-
-function academyBanner(group, x, y, z, color = '#5b3a78', rot = 0) {
-  const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 3.4), new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide, roughness: 0.9, emissive: '#241338', emissiveIntensity: 0.55 }))
-  cloth.position.set(x, y, z); cloth.rotation.y = rot; group.add(cloth)
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.4, 5), std('#b39a6c', { metal: 0.4 }))
-  bar.rotation.z = Math.PI / 2; bar.position.set(x, y + 1.72, z); bar.rotation.y = rot; group.add(bar)
-}
-
-function academyDummy(group, x, z, rot = 0) {
-  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.8, 6), std('#4b3524'))
-  post.position.y = 0.9; g.add(post)
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.55, 4, 6), std('#c9b98f', { rough: 0.98 }))
-  body.position.y = 1.35; g.add(body)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), std('#d8c7a0'))
-  head.position.y = 1.95; g.add(head)
-  const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 12), std('#6b2f45', { metal: 0.2 }))
-  shield.rotation.z = Math.PI / 2; shield.position.set(0.02, 1.32, 0.24); g.add(shield)
-  const target = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.15, 12), new THREE.MeshBasicMaterial({ color: '#d9b978', side: THREE.DoubleSide, toneMapped: false }))
-  target.position.set(0.02, 1.32, 0.31); g.add(target)
-  group.add(g)
-}
-
-function academyRoom(world, opts) {
-  const scene = world.scene
-  const { x, z, w, d, h = 5.2, name = 'Academy Room', sub = 'Arcanum Academy', kind = 'classroom' } = opts
-  const wall = opts.wall ?? '#4a475e', trim = opts.trim ?? '#6d6880'
-  const y = world.heightAt(x, z)
-  const g = new THREE.Group(); g.position.set(x, y, z); scene.add(g)
-  const doors = opts.doors || [{ side: 'south', at: 0, width: 3.0 }]
-  const t = 0.44
-
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(w - 0.3, 0.26, d - 0.3), std(opts.floorColor ?? '#5a5568', { rough: 0.98 }))
-  floor.position.y = 0.06; g.add(floor)
-  const border = new THREE.Mesh(new THREE.BoxGeometry(w - 1.0, 0.04, d - 1.0), std(opts.floorColor2 ?? '#4d485e', { rough: 1 }))
-  border.position.y = 0.2; g.add(border)
-  // a deep foundation hides any small terrain differences
-  const found = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 1.6, d + 0.5), std('#343140', { rough: 1 }))
-  found.position.y = -0.72; g.add(found)
-
-  const sideDefs = {
-    south: { fixed: 'z', at: d / 2, from: -w / 2, to: w / 2 },
-    north: { fixed: 'z', at: -d / 2, from: -w / 2, to: w / 2 },
-    west: { fixed: 'x', at: -w / 2, from: -d / 2, to: d / 2 },
-    east: { fixed: 'x', at: w / 2, from: -d / 2, to: d / 2 },
-  }
-  for (const [side, sd] of Object.entries(sideDefs)) {
-    const door = doors.find(dd => dd.side === side)
-    let runs = [[sd.from, sd.to]]
-    if (door) {
-      const a = door.at - door.width / 2, b = door.at + door.width / 2
-      runs = [[sd.from, a], [b, sd.to]]
-      // lintel and threshold
-      if (side === 'south' || side === 'north') {
-        const lintel = new THREE.Mesh(new THREE.BoxGeometry(door.width + 0.35, 0.9, t + 0.12), std(trim))
-        lintel.position.set(door.at, h - 0.45, sd.at); g.add(lintel)
-        const step = new THREE.Mesh(new THREE.BoxGeometry(door.width + 0.9, 0.16, 0.85), std('#676277'))
-        step.position.set(door.at, 0.08, sd.at + Math.sign(sd.at) * 0.42); g.add(step)
-      } else {
-        const lintel = new THREE.Mesh(new THREE.BoxGeometry(t + 0.12, 0.9, door.width + 0.35), std(trim))
-        lintel.position.set(sd.at, h - 0.45, door.at); g.add(lintel)
-        const step = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.16, door.width + 0.9), std('#676277'))
-        step.position.set(sd.at + Math.sign(sd.at) * 0.42, 0.08, door.at); g.add(step)
-      }
-    }
-    for (const [a, b] of runs) {
-      if (b - a < 0.15) continue
-      if (side === 'south' || side === 'north') {
-        academyWall(world, g, x, z, a, sd.at, b, sd.at, { h, t, color: wall, trim })
-      } else {
-        academyWall(world, g, x, z, sd.at, a, sd.at, b, { h, t, color: wall, trim })
-      }
-    }
-  }
-
-  // corner posts and open roof beams
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.6, h + 0.7, 0.6), std(trim, { rough: 0.95 }))
-    post.position.set(sx * (w / 2 - 0.05), (h + 0.7) / 2, sz * (d / 2 - 0.05)); g.add(post)
-  }
-  for (const bx of [-w / 4, w / 4]) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, d + 0.5), std('#3a2b3f'))
-    beam.position.set(bx, h + 0.28, 0); g.add(beam)
-  }
-  for (const bz of [-d / 4, d / 4]) {
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.22, 0.22), std('#3a2b3f'))
-    beam.position.set(0, h + 0.28, bz); g.add(beam)
-  }
-  // glowing windows
-  const lit = new THREE.MeshBasicMaterial({ color: '#ffcf83', toneMapped: false })
-  for (const sx of [-w * 0.3, w * 0.3]) {
-    for (const sz of [-1, 1]) {
-      const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 1.25), lit)
-      pane.position.set(sx, h * 0.56, sz * (d / 2 + 0.015)); pane.rotation.y = sz > 0 ? 0 : Math.PI; g.add(pane)
-      addGlow(world, g, '#ffc06a', 1.1, sx, h * 0.56, sz * (d / 2 + 0.1), 0.22)
-    }
-  }
-  for (const sz of [-d * 0.28, d * 0.28]) {
-    for (const sx of [-1, 1]) {
-      const pane = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 1.25), lit)
-      pane.position.set(sx * (w / 2 + 0.015), h * 0.56, sz); pane.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2; g.add(pane)
-    }
-  }
-
-  // sign above the first door
-  if (doors[0]) {
-    const dd = doors[0]
-    if (dd.side === 'south') academySign(world, g, name, sub, dd.at, h + 0.55, d / 2 + 0.12, 0)
-    else if (dd.side === 'north') academySign(world, g, name, sub, dd.at, h + 0.55, -d / 2 - 0.12, Math.PI)
-    else if (dd.side === 'west') academySign(world, g, name, sub, -w / 2 - 0.12, h + 0.55, dd.at, -Math.PI / 2)
-    else academySign(world, g, name, sub, w / 2 + 0.12, h + 0.55, dd.at, Math.PI / 2)
-  }
-
-  // interior dressing
-  if (kind === 'mainhall') {
-    for (const zz of [-2.5, 2.5]) {
-      for (const xx of [-5.2, 0, 5.2]) {
-        const table = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.16, 1.0), std('#5b4029'))
-        table.position.set(xx, 0.86, zz); g.add(table)
-        for (const s of [-1, 1]) {
-          const bench = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.14, 0.38), std('#4b3524'))
-          bench.position.set(xx, 0.48, zz + s * 0.78); g.add(bench)
-        }
-      }
-    }
-    const dais = new THREE.Mesh(new THREE.BoxGeometry(12, 0.4, 3.4), std('#5f5a6e'))
-    dais.position.set(0, 0.3, -d / 2 + 2.2); g.add(dais)
-    const head = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.18, 1.2), std('#4b3524'))
-    head.position.set(0, 0.9, -d / 2 + 2.2); g.add(head)
-    const chair = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.0, 1.0), std('#3a2b3f'))
-    chair.position.set(0, 1.2, -d / 2 + 3.5); g.add(chair)
-    for (const bx of [-7, -3.5, 3.5, 7]) academyBanner(g, bx, h * 0.55, -d / 2 + 0.3, '#5b3a78')
-    academyChandelier(world, g, 0, h - 1.0, -3)
-    academyChandelier(world, g, 0, h - 1.0, 3)
-    const statue = new THREE.Group(); statue.position.set(-7.6, 0, -d / 2 + 2.5)
-    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 1.2, 8), std('#6d6880'))
-    plinth.position.y = 0.6; statue.add(plinth)
-    const figure = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.5, 6), std('#d9b978', { emissive: '#6b4d19', ei: 0.25 }))
-    figure.position.y = 2.4; statue.add(figure)
-    g.add(statue)
-  } else if (kind === 'charms') {
-    for (const zz of [-2.2, 1.8]) for (const xx of [-3.4, 0, 3.4]) academyDesk(g, xx, zz, zz > 0 ? Math.PI : 0)
-    const board = new THREE.Mesh(new THREE.BoxGeometry(7.2, 2.8, 0.16), std('#203a30', { emissive: '#0f2a22', ei: 0.5 }))
-    board.position.set(0, 2.4, -d / 2 + 0.38); g.add(board)
-    for (let i = 0; i < 5; i++) {
-      const chalk = new THREE.Mesh(new THREE.PlaneGeometry(0.35 + (i % 3) * 0.45, 0.07), new THREE.MeshBasicMaterial({ color: '#d8e8d0', transparent: true, opacity: 0.75 }))
-      chalk.position.set(-1.7 + i * 0.8, 2.9 - i * 0.33, -d / 2 + 0.48); g.add(chalk)
-    }
-    academyBanner(g, -w / 2 + 0.35, h * 0.55, 0, '#6b2f45', Math.PI / 2)
-    academyChandelier(world, g, 0, h - 0.9, 0)
-  } else if (kind === 'defence') {
-    for (const [xx, zz, rot] of [[-3.2, -1.5, 0.3], [3.2, -1.5, -0.3], [-3.2, 2.2, 0.5], [3.2, 2.2, -0.5]]) academyDummy(g, xx, zz, rot)
-    academyShelf(g, -w / 2 + 0.5, 0, Math.PI / 2, '#3d2a1e', 4.2, 2.6)
-    for (const bx of [-3, 3]) academyBanner(g, bx, h * 0.55, -d / 2 + 0.3, '#3f5e7a')
-    academyChandelier(world, g, 0, h - 0.9, 1)
-  } else if (kind === 'dorm') {
-    for (const [xx, zz, rot] of [[-4, -3.2, 0], [0, -3.2, 0], [4, -3.2, 0], [-4.2, 2.2, Math.PI]]) academyBed(g, xx, zz, rot)
-    const rug = new THREE.Mesh(new THREE.CircleGeometry(2.2, 20), std('#5b3a78', { rough: 1 }))
-    rug.rotation.x = -Math.PI / 2; rug.position.set(1.4, 0.22, 2.2); g.add(rug)
-    const chest = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.8, 0.7), std('#4b3524'))
-    chest.position.set(4.6, 0.45, 2.6); g.add(chest)
-    const fire = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.6, 0.5), std('#3a3030'))
-    fire.position.set(-w / 2 + 0.45, 0.8, 0.5); fire.rotation.y = Math.PI / 2; g.add(fire)
-    const ember = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.8), new THREE.MeshBasicMaterial({ color: '#ff9a4d', transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }))
-    ember.position.set(-w / 2 + 0.72, 0.7, 0.5); ember.rotation.y = Math.PI / 2; g.add(ember)
-    academyBanner(g, w / 2 - 0.35, h * 0.55, 0, '#3f5e7a', -Math.PI / 2)
-    // curtained Founders' Stair
-    const curtain = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.8), new THREE.MeshStandardMaterial({ color: '#5b3a78', side: THREE.DoubleSide, roughness: 0.95, emissive: '#241338', emissiveIntensity: 0.5 }))
-    curtain.position.set(-3, 1.5, d / 2 - 0.4); g.add(curtain)
-    const stairGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.8), new THREE.MeshBasicMaterial({ color: '#9a7be0', transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false }))
-    stairGlow.position.set(-3, 1.2, d / 2 - 0.34); g.add(stairGlow)
-  } else if (kind === 'wandworks') {
-    const bench = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.14, 1.1), std('#5b4029', { rough: 0.9 }))
-    bench.position.set(0, 0.92, 1.1); g.add(bench)
-    for (const sx of [-2.3, 2.3]) {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.9, 0.9), std('#3a2b22'))
-      leg.position.set(sx, 0.46, 1.1); g.add(leg)
-    }
-    // wand rack
-    const rack = new THREE.Mesh(new THREE.BoxGeometry(4.4, 2.1, 0.35), std('#3d2a1e'))
-    rack.position.set(0, 1.45, -d / 2 + 0.42); g.add(rack)
-    for (let i = 0; i < 9; i++) {
-      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.036, 1.25, 5), std(['#8a5a3a', '#c9a86a', '#a8c094', '#3a2b3f'][i % 4]))
-      stick.position.set(-1.8 + (i % 5) * 0.9, 1.72 + Math.floor(i / 5) * 0.62, -d / 2 + 0.66)
-      stick.rotation.z = (i % 2 ? -1 : 1) * 0.16; g.add(stick)
-      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), new THREE.MeshBasicMaterial({ color: ['#ffc978', '#9fd8ff', '#c79bff'][i % 3], toneMapped: false }))
-      tip.position.set(stick.position.x + stick.rotation.z * -0.6, stick.position.y + 0.58, -d / 2 + 0.68); g.add(tip)
-    }
-    // lathe and work stool
-    const lathe = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.5, 1.0, 8), std('#4a475e', { metal: 0.35 }))
-    lathe.position.set(-2.6, 0.55, -1.2); g.add(lathe)
-    const latheTop = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.16, 0.5), std('#6d6880', { metal: 0.4 }))
-    latheTop.position.set(-2.6, 1.1, -1.2); g.add(latheTop)
-    const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.55, 8), std('#3a2b22'))
-    stool.position.set(1.6, 0.3, -1.4); g.add(stool)
-    academyShelf(g, w / 2 - 0.4, -2.2, -Math.PI / 2, '#3d2a1e', 2.8, 2.8)
-    academyLantern(world, g, 0, h - 0.9, 0, '#ffc978')
-    academyChandelier(world, g, 0, h - 0.9, 0.6)
-  } else if (kind === 'infirmary') {
-    for (const [xx, zz, rot] of [[-3, -2.2, 0], [0.5, -2.2, 0], [-3, 1.8, Math.PI], [2.8, 1.8, Math.PI]]) academyBed(g, xx, zz, rot)
-    academyShelf(g, w / 2 - 0.5, -1.2, -Math.PI / 2, '#3d2a1e', 3.4, 2.8)
-    academyCauldron(world, g, 3.8, 0.3, '#9bf0bf')
-    for (const bx of [-3, 3]) academyBanner(g, bx, h * 0.55, -d / 2 + 0.3, '#3f6b55')
-    academyChandelier(world, g, 0, h - 0.9, 0)
-  } else if (kind === 'transfiguration') {
-    for (const [xx, zz] of [[-3.4, -1.2], [0, -1.2], [3.4, -1.2]]) {
-      const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.55, 1.05, 8), std('#6d6880'))
-      ped.position.set(xx, 0.52, zz); g.add(ped)
-      const shape = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), std(['#c79bff', '#d9b978', '#8fd4ff'][Math.round(xx + 4) % 3], { emissive: '#4a2b5a', ei: 0.3 }))
-      shape.position.set(xx, 1.3, zz); g.add(shape)
-    }
-    const mirror = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 2.4), new THREE.MeshStandardMaterial({ color: '#7a86a8', metalness: 0.8, roughness: 0.16 }))
-    mirror.position.set(0, 2.4, -d / 2 + 0.34); g.add(mirror)
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.8, 0.16), std('#b39a6c', { metal: 0.4 }))
-    frame.position.set(0, 2.4, -d / 2 + 0.26); g.add(frame)
-    academyChandelier(world, g, 0, h - 0.9, 1.2)
-  } else if (kind === 'potions') {
-    academyCauldron(world, g, -3.2, -1.6, '#7fd08a')
-    academyCauldron(world, g, 2.4, 0.6, '#d886ff')
-    for (const [xx, zz, rot] of [[-w / 2 + 1.1, 2.4, Math.PI / 2], [w / 2 - 1.1, -2.6, -Math.PI / 2]]) academyDesk(g, xx, zz, rot)
-    for (let i = 0; i < 12; i++) {
-      const jar = new THREE.Mesh(new THREE.SphereGeometry(0.11 + (i % 3) * 0.025, 6, 5), std(['#7fd08a', '#74b7ff', '#d886ff', '#ffc266'][i % 4], { emissive: ['#2b5a36', '#264a6a', '#4a2b5a', '#6b4d19'][i % 4], ei: 0.7 }))
-      jar.position.set(-3.4 + i * 0.62, 1.22, -d / 2 + 0.75); g.add(jar)
-    }
-    academyShelf(g, w / 2 - 0.5, 2.2, -Math.PI / 2, '#2e2a33', 3.0, 2.6)
-    academyChandelier(world, g, 0, h - 0.9, 0)
-  } else if (kind === 'library') {
-    for (const zz of [-2.5, 1.0]) for (const xx of [-4.2, 0, 4.2]) academyShelf(g, xx, zz, zz < 0 ? 0 : Math.PI, '#3d2a1e', 3.6, 3.4)
-    academyDesk(g, 0, 3.8, Math.PI)
-    for (const [xx, yy, zz] of [[-1.2, 2.2, 2.4], [1.4, 2.6, 0.1], [0.2, 2.9, -1.4]]) {
-      const book = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.65), std('#6b2f45'))
-      book.position.set(xx, yy, zz); book.rotation.set(0.3, xx, 0.2); g.add(book)
-      addGlow(world, g, '#c9a6ff', 0.7, xx, yy, zz, 0.25)
-    }
-    // the loose bookcase on the east wall
-    const loose = academyShelf(g, w / 2 - 0.35, -1.2, Math.PI / 2, '#3d2a1e', 3.2, 3.2)
-    loose.rotation.y = Math.PI / 2 + 0.26
-    const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 2.6), new THREE.MeshBasicMaterial({ color: '#9a7be0', transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }))
-    seam.position.set(w / 2 - 0.15, 1.4, 0.4); seam.rotation.y = Math.PI / 2; g.add(seam)
-    academyChandelier(world, g, 0, h - 0.9, 0)
-  } else if (kind === 'arena') {
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(5.4, 5.6, 0.22, 40), std('#6b6070', { rough: 0.95 }))
-    ring.position.y = 0.16; g.add(ring)
-    const inner = new THREE.Mesh(new THREE.CircleGeometry(5.2, 40), std('#7a6d7d', { rough: 1 }))
-    inner.rotation.x = -Math.PI / 2; inner.position.y = 0.29; g.add(inner)
-    const rune = new THREE.Mesh(new THREE.RingGeometry(3.4, 3.55, 48), new THREE.MeshBasicMaterial({ color: '#9a7be0', transparent: true, opacity: 0.45, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
-    rune.rotation.x = -Math.PI / 2; rune.position.y = 0.31; g.add(rune)
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2
-      // leave the southern side clear: the chase camera watches the duel through it
-      if (Math.sin(a) > 0.35) continue
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.34, 4.2, 7), std('#6d6880'))
-      col.position.set(Math.cos(a) * 6.4, 2.1, Math.sin(a) * 6.4); g.add(col)
-      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.13, 7, 6), new THREE.MeshBasicMaterial({ color: '#b79aff', toneMapped: false }))
-      orb.position.set(Math.cos(a) * 6.4, 4.35, Math.sin(a) * 6.4); g.add(orb)
-      addGlow(world, g, '#b79aff', 1.0, Math.cos(a) * 6.4, 4.35, Math.sin(a) * 6.4, 0.5)
-    }
-    for (const bx of [-5.5, 5.5]) academyBanner(g, bx, h * 0.55, -d / 2 + 0.3, '#6b2f45')
-    academyChandelier(world, g, 0, h - 1.0, 0)
-  } else if (kind === 'archive') {
-    for (const xx of [-2.4, 2.4]) academyShelf(g, xx, -2.6, 0, '#2f2018', 3.8, 3.8)
-    for (const xx of [-2.4, 2.4]) academyShelf(g, xx, 2.2, Math.PI, '#2f2018', 3.8, 3.8)
-    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 1.2, 8), std('#5f5a6e'))
-    pedestal.position.set(0, 0.62, 0.2); g.add(pedestal)
-    const feather = new THREE.Mesh(new THREE.ConeGeometry(0.18, 1.4, 5), std('#e8c87a', { emissive: '#6b4d19', ei: 0.7 }))
-    feather.position.set(0, 1.9, 0.2); feather.rotation.z = 0.35; g.add(feather)
-    addGlow(world, g, '#e8c87a', 2.0, 0, 1.8, 0.2, 0.5)
-    academyChandelier(world, g, 0, h - 0.9, 0)
-  } else if (kind === 'undercroft') {
-    for (const [xx, zz] of [[-4.4, -2.4], [4.4, -2.4], [-4.4, 2.4], [4.4, 2.4]]) {
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.5, h, 8), std('#3f3b4c'))
-      col.position.set(xx, h / 2, zz); g.add(col)
-    }
-    const crack = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 6), new THREE.MeshBasicMaterial({ color: '#9a7be0', transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }))
-    crack.rotation.x = -Math.PI / 2; crack.rotation.z = 0.18; crack.position.set(-1.2, 0.24, 0.6); g.add(crack)
-    addGlow(world, g, '#9a7be0', 2.8, -1.2, 0.5, 0.6, 0.4)
-    for (const bx of [-3.4, 3.4]) academyBanner(g, bx, h * 0.5, -d / 2 + 0.3, '#4a2b5a')
-    const reliquary = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.7), std('#5f5a6e'))
-    reliquary.position.set(4.6, 0.45, 3.2); g.add(reliquary)
-  } else {
-    academyDesk(g, 0, 0)
-  }
-
-  g.userData.room = { x, z, w, d, name, kind }
-  return g
-}
-
-/* ---------------------------------------------------------- ACADEMY */
 export function buildAcademy(world) {
   const scene = world.scene
-  const CX = 62, CZ = -34
+  const base = world.heightAt(44, -25)
+  const g = new THREE.Group(); g.position.set(44, base, -25)
+  const stone = '#4d4b5e', stoneLight = '#66637a', roof = '#332a52', purple = '#6a4a9a'
 
-  // ---------------------------------------------------------------- campus wall
-  const wallOpts = { h: 3.4, t: 0.55, color: '#4a475e', trim: '#6d6880' }
-  const wallRuns = [
-    // south wall with the main gate and the arena gallery left open
-    [34, -12, 56, -12], [68, -12, 70.6, -12], [89.4, -12, 90, -12],
-    // west wall with a garden gate
-    [34, -12, 34, -28], [34, -32, 34, -64],
-    // east wall, opened for the hidden archive
-    [90, -12, 90, -24], [90, -40, 90, -64],
-    // north wall, opened for the undercroft behind the Great Hall
-    [34, -64, 50, -64], [74, -64, 90, -64],
-  ]
-  const wallGroup = new THREE.Group(); scene.add(wallGroup)
-  for (const [x1, z1, x2, z2] of wallRuns) academyWall(world, wallGroup, 0, 0, x1, z1, x2, z2, wallOpts)
-
-  // corner towers
-  for (const [tx, tz] of [[34, -12], [90, -12], [34, -64], [90, -64]]) {
-    const ty = world.heightAt(tx, tz)
-    const tower = new THREE.Group(); tower.position.set(tx, ty, tz)
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.35, 9.5, 10), std('#4d4a60', { rough: 0.97 }))
-    shaft.position.y = 4.75; tower.add(shaft)
-    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.7, 4.0, 10), std('#332a52'))
-    roof.position.y = 11.4; tower.add(roof)
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.1, 1.0, 5), std('#d9b978', { emissive: '#6b4d19', ei: 0.4 }))
-    cap.position.y = 13.8; tower.add(cap)
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2
-      const win = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.2), new THREE.MeshBasicMaterial({ color: '#ffcf83', toneMapped: false }))
-      win.position.set(Math.cos(a) * 2.0, 6.0, Math.sin(a) * 2.0); win.rotation.y = -a + Math.PI / 2; tower.add(win)
-    }
-    addGlow(world, tower, '#ffc06a', 2.0, 0, 6.0, 0, 0.3)
-    scene.add(tower)
-    world.addCollider(tx, tz, 2.2, true, 2.8)
+  // main hall
+  const hall = new THREE.Mesh(new THREE.BoxGeometry(16, 8.5, 12), std(stone, { rough: 0.96 }))
+  hall.position.y = 4.25; g.add(hall)
+  const hallTrim = new THREE.Mesh(new THREE.BoxGeometry(16.4, 0.4, 12.4), std(stoneLight))
+  hallTrim.position.y = 8.5; g.add(hallTrim)
+  const hallRoof = new THREE.Mesh(new THREE.ConeGeometry(11.2, 5.6, 4), std(roof, { rough: 0.9 }))
+  hallRoof.rotation.y = Math.PI / 4; hallRoof.position.y = 11.5; g.add(hallRoof)
+  // entrance
+  const door = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.6, 0.3), std('#231b30'))
+  door.position.set(0, 2.3, 6.1); g.add(door)
+  const doorGlow = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 4), new THREE.MeshBasicMaterial({ color: '#8a6ad8', transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false }))
+  doorGlow.position.set(0, 2.4, 6.27); g.add(doorGlow)
+  for (let i = 0; i < 5; i++) {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(1.15, 2.3, 0.15), std('#ffcf83', { emissive: '#b47828', ei: 0.9 }))
+    win.position.set(-5.5 + i * 2.75, 5.3, 6.02); g.add(win)
   }
-
-  // gatehouse
-  const gateY = world.heightAt(62, -12)
-  const gate = new THREE.Group(); gate.position.set(62, gateY, -12)
-  for (const sx of [-1, 1]) {
-    const pilaster = new THREE.Mesh(new THREE.BoxGeometry(1.5, 8.6, 1.5), std('#5a566c', { rough: 0.95 }))
-    pilaster.position.set(sx * 3.6, 4.3, 0); gate.add(pilaster)
-    const finial = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.5, 5), std('#332a52'))
-    finial.position.set(sx * 3.6, 9.3, 0); gate.add(finial)
+  // towers
+  for (const [tx, tz, th] of [[-8.5, -2, 17], [8.5, -3, 14], [-6, 5, 10]]) {
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, th, 10), std(stone, { rough: 0.96 }))
+    tower.position.set(tx, th / 2, tz); g.add(tower)
+    const top = new THREE.Mesh(new THREE.ConeGeometry(3, 4.2, 10), std(roof))
+    top.position.set(tx, th + 2.1, tz); g.add(top)
+    const spire = new THREE.Mesh(new THREE.ConeGeometry(0.1, 1.2, 5), std('#d9b978', { emissive: '#6b4d19', ei: 0.5 }))
+    spire.position.set(tx, th + 4.8, tz); g.add(spire)
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 1.3), new THREE.MeshBasicMaterial({ color: '#ffcf83', toneMapped: false }))
+    win.position.set(tx, th * 0.7, tz + 2.65); g.add(win)
+    addGlow(world, g, '#ffc06a', 2.4, tx, th * 0.7, tz + 2.9, 0.5)
   }
-  const arch = new THREE.Mesh(new THREE.BoxGeometry(8.7, 1.1, 1.6), std('#6d6880'))
-  arch.position.y = 8.5; gate.add(arch)
-  academySign(world, gate, 'ARCANUM', 'academy of the six schools', 0, 9.9, 0.1, 0)
-  addGlow(world, gate, '#9a7be0', 7, 0, 4.4, 0, 0.22)
-  scene.add(gate)
-  world.addCollider(58.4, -12, 1.3, true, 1.8)
-  world.addCollider(65.6, -12, 1.3, true, 1.8)
+  // banners
+  for (const bx of [-6.2, 6.2]) {
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 4.5), new THREE.MeshStandardMaterial({ color: purple, side: THREE.DoubleSide, emissive: '#3a2458', emissiveIntensity: 0.7, roughness: 0.9 }))
+    banner.position.set(bx, 5.4, 6.25); g.add(banner)
+    const star = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), new THREE.MeshBasicMaterial({ map: world.textures.glow, color: '#e6c987', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }))
+    star.position.set(bx, 6.4, 6.3); g.add(star)
+  }
+  addGlow(world, g, '#8a6ad8', 12, 0, 10, 0, 0.22)
+  scene.add(g)
+  world.addCollider(44, -25, 8.7, true, 10.4)
+  world.addCollider(35.5, -27, 3.2, true)
+  world.addCollider(52.5, -28, 3.2, true)
 
-  // ---------------------------------------------------------------- rooms
-  academyRoom(world, { x: 62, z: -51, w: 20, d: 18, h: 7.5, name: 'The Great Hall', sub: 'assizes · feasts · warnings', kind: 'mainhall', doors: [{ side: 'south', at: 0, width: 4.6, }], floorColor: '#5b566b', wall: '#514d63' })
-  academyRoom(world, { x: 42, z: -48, w: 12, d: 12, name: 'Charms', sub: 'Professor Isolde Marrow', kind: 'charms', doors: [{ side: 'east', at: 0, width: 3.0 }] })
-  academyRoom(world, { x: 42, z: -32, w: 12, d: 12, name: 'Defence', sub: 'Professor Alaric Feld', kind: 'defence', doors: [{ side: 'east', at: 0, width: 3.0 }] })
-  academyRoom(world, { x: 42, z: -19, w: 12, d: 10, name: 'Dormitories', sub: 'Ravenwood · first-years', kind: 'dorm', doors: [{ side: 'east', at: 0, width: 3.0 }] })
-  academyRoom(world, { x: 69, z: -34, w: 10, d: 8, name: 'Infirmary', sub: 'Matron Elowen Ash', kind: 'infirmary', doors: [{ side: 'west', at: 0, width: 2.6 }], floorColor: '#565a60' })
-  academyRoom(world, { x: 56, z: -34, w: 8, d: 8, name: 'Wand Studies', sub: 'Professor Jasper Hollis', kind: 'wandworks', doors: [{ side: 'east', at: 0, width: 2.8 }], floorColor: '#585264', wall: '#4c475c' })
-  academyRoom(world, { x: 81, z: -55, w: 14, d: 10, name: 'Transfiguration', sub: 'Professor Mirabel Crowe', kind: 'transfiguration', doors: [{ side: 'south', at: 0, width: 3.0 }] })
-  academyRoom(world, { x: 81, z: -43, w: 14, d: 10, name: 'Potion Laboratory', sub: 'Professor Cinder Voss', kind: 'potions', doors: [{ side: 'south', at: 0, width: 3.0 }], floorColor: '#54505e' })
-  academyRoom(world, { x: 81, z: -31, w: 14, d: 10, name: 'The Library', sub: 'Archivist Wren · silence, mostly', kind: 'library', doors: [{ side: 'west', at: 0, width: 3.0 }, { side: 'east', at: 0, width: 1.8 }] })
-  academyRoom(world, { x: 92, z: -31, w: 8, d: 10, name: 'Restricted Archive', sub: 'it is not locked; it is ashamed', kind: 'archive', doors: [{ side: 'west', at: 0, width: 1.8 }], floorColor: '#4c4858', wall: '#3f3b4c' })
-  academyRoom(world, { x: 80, z: -18, w: 18, d: 14, h: 7.2, name: 'Indoor Arena', sub: 'Tobias Flint · Sable Quinn', kind: 'arena', doors: [{ side: 'west', at: 0, width: 3.4 }, { side: 'south', at: 0, width: 10 }] })
-  world.academyArenaCenter = new THREE.Vector3(80, world.heightAt(80, -18), -18)
-  academyRoom(world, { x: 62, z: -68, w: 12, d: 8, h: 5.0, name: 'The Undercroft', sub: 'the school beneath the school', kind: 'undercroft', doors: [{ side: 'south', at: 0, width: 2.4 }], floorColor: '#43404e', wall: '#3a3746' })
+  // entrance steps
+  const steps = new THREE.Group(); steps.position.set(44, base, -18.7)
+  for (let i = 0; i < 3; i++) {
+    const step = new THREE.Mesh(new THREE.BoxGeometry(6.4 - i * 0.5, 0.22, 1.1), std('#5b586c'))
+    step.position.set(0, 0.11 + i * 0.22, i * 0.8); steps.add(step)
+  }
+  scene.add(steps)
 
-  // ---------------------------------------------------------------- courtyard
-  const courtY = world.heightAt(62, -21)
-  const court = new THREE.Mesh(new THREE.CircleGeometry(8.6, 48), std('#676173', { rough: 1 }))
-  court.rotation.x = -Math.PI / 2; court.position.set(62, courtY + 0.05, -21); scene.add(court)
-  const courtRing = new THREE.Mesh(new THREE.RingGeometry(7.7, 8.25, 48), std('#8a7ba8'))
-  courtRing.rotation.x = -Math.PI / 2; courtRing.position.set(62, courtY + 0.06, -21); scene.add(courtRing)
-  const courtStar = new THREE.Mesh(new THREE.RingGeometry(4.4, 4.55, 6), new THREE.MeshBasicMaterial({ color: '#d9b978', transparent: true, opacity: 0.22, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
-  courtStar.rotation.x = -Math.PI / 2; courtStar.position.set(62, courtY + 0.07, -21); scene.add(courtStar)
-
-  // fountain
-  const fountain = new THREE.Group(); fountain.position.set(62, courtY, -21)
-  const basin = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.6, 0.65, 18), std('#7e788d'))
-  basin.position.y = 0.34; fountain.add(basin)
-  const water = new THREE.Mesh(new THREE.CylinderGeometry(2.08, 2.08, 0.1, 20), new THREE.MeshStandardMaterial({ color: '#2b6b7a', roughness: 0.12, metalness: 0.45, transparent: true, opacity: 0.9, emissive: '#123844', emissiveIntensity: 0.9 }))
-  water.position.y = 0.68; fountain.add(water)
-  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.62, 1.8, 8), std('#8a7ba8'))
-  pedestal.position.y = 1.4; fountain.add(pedestal)
-  const wandStatue = new THREE.Mesh(new THREE.ConeGeometry(0.19, 1.7, 5), std('#d9b978', { emissive: '#6b4d19', ei: 0.35 }))
-  wandStatue.position.set(0, 3.0, 0); wandStatue.rotation.z = 0.4; fountain.add(wandStatue)
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 8), new THREE.MeshBasicMaterial({ color: '#a9d8ff', toneMapped: false }))
-  orb.position.set(-0.33, 3.85, 0); fountain.add(orb)
-  addGlow(world, fountain, '#9fd0ff', 2.6, -0.33, 3.85, 0, 0.65)
-  scene.add(fountain)
-  world.addCollider(62, -21, 2.7)
-  world.fireflies.push({ obj: fountain, kind: 'fountain' })
-
-  // arches and floating candles
-  for (const [ax, az, rot] of [[53, -14.5, 0.6], [71, -14.5, -0.6], [52.5, -27, 2.5], [71.5, -27, -2.5]]) {
+  // courtyard
+  const cy = world.heightAt(42, -17)
+  const court = new THREE.Mesh(new THREE.CircleGeometry(9, 40), std('#5a5566', { rough: 1 }))
+  court.rotation.x = -Math.PI / 2; court.position.set(42, cy + 0.03, -17); scene.add(court)
+  const courtRing = new THREE.Mesh(new THREE.RingGeometry(7.7, 8.1, 40), std('#8a7ba8'))
+  courtRing.rotation.x = -Math.PI / 2; courtRing.position.set(42, cy + 0.04, -17); scene.add(courtRing)
+  // courtyard arches
+  for (const [ax, az, rot] of [[35, -12, Math.PI / 2], [49, -12, -Math.PI / 2], [42, -8, 0]]) {
     const arch = new THREE.Group(); arch.position.set(ax, world.heightAt(ax, az), az); arch.rotation.y = rot
     for (const sx of [-1, 1]) {
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 3.8, 7), std('#6d6880'))
-      col.position.set(sx * 1.55, 1.9, 0); arch.add(col)
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 4.2, 7), std('#625e70'))
+      col.position.set(sx * 1.7, 2.1, 0); arch.add(col)
     }
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.38, 0.45), std('#8a7ba8'))
-    lintel.position.y = 3.85; arch.add(lintel)
-    addGlow(world, arch, '#9a7be0', 1.2, 0, 3.9, 0.2, 0.3)
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.42, 0.5), std('#767184'))
+    lintel.position.y = 4.2; arch.add(lintel)
+    addGlow(world, arch, '#9a7be0', 1.4, 0, 4.25, 0.2, 0.35)
     scene.add(arch)
   }
-  for (let i = 0; i < 13; i++) {
-    const a = (i / 13) * Math.PI * 2
-    const cx = 62 + Math.cos(a) * (3.0 + (i % 3) * 1.4)
-    const cz = -21 + Math.sin(a) * (3.0 + (i % 3) * 1.4)
-    const cy2 = world.heightAt(cx, cz) + 3.2 + (i % 4) * 0.65
+  // floating candles
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2
+    const cx = 42 + Math.cos(a) * (3 + (i % 3) * 1.2)
+    const cz = -17 + Math.sin(a) * (3 + (i % 3) * 1.2)
+    const cy2 = world.heightAt(cx, cz) + 3 + (i % 4) * 0.7
     const candle = new THREE.Group(); candle.position.set(cx, cy2, cz)
-    const wax = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.4, 6), std('#ded3b6', { emissive: '#4a3a22', ei: 0.4 }))
+    const wax = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.45, 6), std('#ded3b6', { emissive: '#4a3a22', ei: 0.4 }))
     candle.add(wax)
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 6), new THREE.MeshBasicMaterial({ color: '#ffd08a', toneMapped: false }))
-    flame.position.y = 0.28; candle.add(flame)
-    addGlow(world, candle, '#ffd08a', 1.0, 0, 0.28, 0, 0.65)
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.22, 6), new THREE.MeshBasicMaterial({ color: '#ffd08a', toneMapped: false }))
+    flame.position.y = 0.32; candle.add(flame)
+    addGlow(world, candle, '#ffd08a', 1.2, 0, 0.32, 0, 0.7)
     scene.add(candle)
-    world.floating.push({ obj: candle, baseY: cy2, phase: i * 0.9, spin: 0.16 })
+    world.floating.push({ obj: candle, baseY: cy2, phase: i * 0.9, spin: 0.2 })
   }
-  // benches and notice board
-  for (const [bx, bz, rot] of [[56.5, -16.5, 0.4], [67.5, -16.5, -0.4], [56.5, -25.5, 2.7], [67.5, -25.5, -2.7]]) {
-    const bench = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.32, 0.62), std('#4b3524'))
-    bench.position.set(bx, world.heightAt(bx, bz) + 0.34, bz); bench.rotation.y = rot; scene.add(bench)
-  }
-  const notice = new THREE.Group(); notice.position.set(54.5, world.heightAt(54.5, -21), -21); notice.rotation.y = Math.PI / 2
-  const noticePost = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.4, 6), std('#3a2b22'))
-  noticePost.position.y = 1.2; notice.add(noticePost)
-  const noticeBoard = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 0.14), std('#241a33'))
-  noticeBoard.position.y = 2.2; notice.add(noticeBoard)
-  const noticeFace = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 1.2), new THREE.MeshBasicMaterial({ map: signTexture(['NOTICES', 'assignments · duels · curfew'], { fg: '#d9b978' }), toneMapped: false }))
-  noticeFace.position.set(0, 2.2, 0.08); notice.add(noticeFace)
-  scene.add(notice)
-  world.addCollider(54.5, -21, 0.65)
+  lamp(world, 32.5, -17, '#c9a6ff', 3.4, 18, 16)
+  lamp(world, 51.5, -17, '#c9a6ff', 3.4, 18, 16)
 
-  // ---------------------------------------------------------------- gardens (west of the wall)
-  const gardenY = world.heightAt(29, -30)
-  const garden = new THREE.Group(); garden.position.set(29, gardenY, -30)
-  const lawn = new THREE.Mesh(new THREE.CircleGeometry(9, 36), std('#354b38', { rough: 1 }))
-  lawn.rotation.x = -Math.PI / 2; lawn.position.y = 0.04; garden.add(lawn)
-  const gardenRing = new THREE.Mesh(new THREE.RingGeometry(7.8, 8.3, 36), std('#6f6650'))
-  gardenRing.rotation.x = -Math.PI / 2; gardenRing.position.y = 0.05; garden.add(gardenRing)
-  // greenhouse
-  const greenhouse = new THREE.Group(); greenhouse.position.set(-4.2, 0, -3.4)
-  const ghBase = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.5, 3.8), std('#5a5566'))
-  ghBase.position.y = 0.25; greenhouse.add(ghBase)
-  const glass = new THREE.Mesh(new THREE.BoxGeometry(5.0, 2.8, 3.6), new THREE.MeshStandardMaterial({ color: '#9fd8c8', transparent: true, opacity: 0.22, roughness: 0.12, metalness: 0.25, side: THREE.DoubleSide }))
-  glass.position.y = 1.9; greenhouse.add(glass)
-  const ghRoof = new THREE.Mesh(new THREE.ConeGeometry(3.6, 1.7, 4), new THREE.MeshStandardMaterial({ color: '#9fd8c8', transparent: true, opacity: 0.28, roughness: 0.12, metalness: 0.25 }))
-  ghRoof.rotation.y = Math.PI / 4; ghRoof.position.y = 3.9; greenhouse.add(ghRoof)
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 3.0, 0.12), std('#6d6880'))
-    post.position.set(sx * 2.45, 1.8, sz * 1.75); greenhouse.add(post)
-  }
-  for (let i = 0; i < 8; i++) {
-    const plant = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22 + (i % 3) * 0.04, 0), std(['#7fd08a', '#9bf0bf', '#6fd8c4'][i % 3], { emissive: '#1f4a34', ei: 0.35 }))
-    plant.position.set(-1.8 + (i % 4) * 1.1, 0.65 + (i > 3 ? 0.7 : 0), -1.0 + Math.floor(i / 4) * 1.3); greenhouse.add(plant)
-  }
-  addGlow(world, greenhouse, '#9bf0bf', 3.0, 0, 2.0, 0, 0.22)
-  garden.add(greenhouse)
-  // herb beds
-  for (let r = 0; r < 3; r++) {
-    const bed = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.24, 1.0), std('#4b3524'))
-    bed.position.set(3.4, 0.14, 0.4 + r * 1.5); garden.add(bed)
-    for (let i = 0; i < 5; i++) {
-      const herb = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.38 + (i % 2) * 0.12, 5), std(['#7f9a5a', '#9bf0bf', '#c9b36a'][i % 3], { emissive: '#2b4a2a', ei: 0.25 }))
-      herb.position.set(1.4 + i * 1.05, 0.44, 0.4 + r * 1.5); garden.add(herb)
-    }
-  }
-  // outdoor practice ring
-  const practice = new THREE.Mesh(new THREE.RingGeometry(3.0, 3.2, 32), new THREE.MeshBasicMaterial({ color: '#d9b978', transparent: true, opacity: 0.25, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
-  practice.rotation.x = -Math.PI / 2; practice.position.set(0.8, 0.09, 0.3); garden.add(practice)
-  academyDummy(garden, -0.4, 2.6, 0.6); academyDummy(garden, 2.0, 2.6, -0.6)
-  // laurel tree
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.34, 2.4, 6), std('#5b4029'))
-  trunk.position.set(-2.0, 1.2, 3.4); garden.add(trunk)
-  const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(1.7, 1), std('#4f6b45', { emissive: '#1c3824', ei: 0.25 }))
-  crown.position.set(-2.0, 3.2, 3.4); garden.add(crown)
-  addGlow(world, garden, '#9bf0bf', 4.4, -2.0, 2.5, 3.4, 0.15)
-  scene.add(garden)
-  world.addCollider(29 - 4.2, -30 - 3.4, 2.6, true, 3.2)
-  for (const [gx, gz] of [[27, -26], [28, -31], [31, -36], [30, -24]]) world.addCollider(gx, gz, 0.35)
-
-  // ---------------------------------------------------------------- south lawn
-  const lawnGroup = new THREE.Group(); lawnGroup.position.set(62, world.heightAt(62, -5), -5); scene.add(lawnGroup)
-  for (const [lx, lz, rot] of [[-12, -0.5, 0.4], [-7, 0.5, -0.5], [-2, 1.2, -0.3]]) academyDummy(lawnGroup, lx, lz, rot)
-
-  // ---------------------------------------------------------------- lamps and gates
-  lamp(world, 56, -13, '#c9a6ff', 3.2, 16, 14)
-  lamp(world, 68, -13, '#c9a6ff', 3.2, 16, 14)
-  lamp(world, 57, -29.5, '#ffc978', 3.0, 14, 12)
-  lamp(world, 67, -29.5, '#ffc978', 3.0, 14, 12)
-  lamp(world, 36, -30, '#9bf0bf', 3.0, 13, 12)
-
-  // academy approach sign, outside the gate
-  const signPost = new THREE.Group(); signPost.position.set(69.5, world.heightAt(69.5, -8), -8)
+  // academy sign at path
+  const signPost = new THREE.Group(); signPost.position.set(30, world.heightAt(30, -8), -8)
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 3.6, 6), std('#3a2b22'))
   post.position.y = 1.8; signPost.add(post)
   const board = new THREE.Mesh(new THREE.BoxGeometry(3.6, 1.7, 0.16), std('#241a33'))
   board.position.y = 3.1; signPost.add(board)
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(3.3, 1.5), new THREE.MeshBasicMaterial({ map: signTexture(['ARCANUM', 'campus · gate · no dark magic indoors'], { fg: '#c9a6ff' }), toneMapped: false }))
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(3.3, 1.5), new THREE.MeshBasicMaterial({ map: signTexture(['ARCANUM', 'academy of the six schools'], { fg: '#c9a6ff' }), toneMapped: false }))
   face.position.set(0, 3.1, 0.09); signPost.add(face)
   scene.add(signPost)
 
-  // courtyard and room glows keep the campus readable at night
-  addGlow(world, scene, '#9a7be0', 24, 62, 5, -30, 0.16)
-  addGlow(world, scene, '#ffc978', 10, 62, 3.5, -21, 0.22)
+  // outdoor training yard behind the east tower
+  const yard = new THREE.Group(); yard.position.set(56, world.heightAt(56, -25), -25); scene.add(yard)
+  const yardFloor = new THREE.Mesh(new THREE.CircleGeometry(5.2, 28), std('#555060', { rough: 1 }))
+  yardFloor.rotation.x = -Math.PI / 2; yardFloor.position.y = 0.03; yard.add(yardFloor)
+  for (const [dx, dz, rot] of [[-1.8, -1.2, 0.4], [1.5, 0.8, -0.9], [2.2, -2.4, 1.7]]) {
+    const d = new THREE.Group(); d.position.set(dx, 0, dz); d.rotation.y = rot; yard.add(d)
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.13, 1.7, 6), std('#5a422c'))
+    post.position.y = 0.85; d.add(post)
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.6, 4, 7), std('#8a7b62'))
+    body.position.y = 1.45; d.add(body)
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), std('#a99778')); head.position.y = 2.03; d.add(head)
+    const arms = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.1, 0.1), std('#5a422c')); arms.position.y = 1.55; d.add(arms)
+    addGlow(world, d, '#9bf0bf', 1.3, 0, 1.55, 0, 0.28)
+  }
+  for (const [rx, rz] of [[-4.2, 1.6], [3.7, 2.9]]) {
+    const stand = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1.5, 1.9), std('#4b3524'))
+    stand.position.set(rx, 0.75, rz); yard.add(stand)
+    for (let i = 0; i < 3; i++) {
+      const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 2.2, 5), std('#8a6a4a'))
+      staff.position.set(rx + 0.1, 1.1, rz - 0.55 + i * 0.5); staff.rotation.z = 0.2; yard.add(staff)
+    }
+  }
+  const yardSign = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.2), new THREE.MeshBasicMaterial({ map: signTexture(['TRAINING', 'mind the dummies'], { fg: '#9bf0bf' }), toneMapped: false }))
+  yardSign.position.set(0, 2.9, 4.3); yardSign.rotation.y = Math.PI; yard.add(yardSign)
+  world.addCollider(56, -25, 1.2)
+}
+
+/* ============================================================
+   ARCANUM INNER HALLS
+   A real interior floorplan built on a levelled shelf inside the
+   same world. The roof is hidden while the player is inside.
+   ============================================================ */
+export function buildAcademyInterior(world) {
+  const scene = world.scene
+  const cx = 42, cz = -58
+  const fy = world.academyFloorY
+  const g = new THREE.Group(); g.position.set(cx, fy, cz)
+  scene.add(g)
+
+  const stone = '#4b495c', stoneDark = '#353344', stoneLight = '#67637a'
+  const wood = '#4b3524', woodLight = '#6b4b2e', cloth = '#5b3a78'
+  const rugA = '#4a2f63', rugB = '#3a4f63', rugC = '#5c3a3a'
+  world.academyRoomZones = []
+
+  const box = (w, h, d, color, x, y, z, opts = {}) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), std(color, opts))
+    m.position.set(x, y, z); g.add(m); return m
+  }
+  const cyl = (rt, rb, h, seg, color, x, y, z, opts = {}) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), std(color, opts))
+    m.position.set(x, y, z); g.add(m); return m
+  }
+  const glow = (color, size, x, y, z, opacity = 0.55) => addGlow(world, g, color, size, x, y, z, opacity)
+  const light = (color, x, y, z, intensity = 12, dist = 13) => world.addLightSource(cx + x, fy + y, cz + z, color, intensity, dist, 2)
+
+  // The wall helper creates both geometry and an axis-aligned collider.
+  const wall = (x1, z1, x2, z2, h = 6.2, t = 0.55, color = stone) => {
+    const w = Math.abs(x2 - x1) || t
+    const d = Math.abs(z2 - z1) || t
+    const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2
+    box(w, h, d, color, mx, h / 2, mz, { rough: 0.97 })
+    world.addBoxCollider(cx + mx, cz + mz, w / 2, d / 2)
+    // a lighter skirting gives the rooms a finished, lived-in edge
+    box(w + 0.08, 0.5, d + 0.08, stoneLight, mx, 0.25, mz, { rough: 0.9 })
+  }
+  const rug = (w, d, x, z, color, rot = 0) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), std(color, { rough: 1 }))
+    m.rotation.x = -Math.PI / 2; m.rotation.z = rot; m.position.set(x, 0.045, z); g.add(m)
+  }
+  const roomZone = (id, x0, x1, z0, z1) => {
+    world.academyRoomZones.push({ id, x0: cx + x0, x1: cx + x1, z0: cz + z0, z1: cz + z1 })
+  }
+  const label = (text, color, x, y, z) => {
+    const sp = world.makeLabel(text, color)
+    sp.position.set(x, y, z); sp.scale.set(3.4, 0.85, 1); g.add(sp); return sp
+  }
+  const candle = (x, y, z, color = '#ffd08a', size = 1.3) => {
+    box(0.07, 0.34, 0.07, '#ded3b6', x, y, z, { emissive: '#4a3a22', ei: 0.35 })
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.18, 6), new THREE.MeshBasicMaterial({ color, toneMapped: false }))
+    flame.position.set(x, y + 0.26, z); g.add(flame)
+    glow(color, size, x, y + 0.26, z, 0.72)
+  }
+  const desk = (x, z, w = 1.5, d = 0.75, color = woodLight) => {
+    box(w, 0.1, d, color, x, 0.92, z)
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.08, 0.86, 0.08, wood, x + sx * (w / 2 - 0.1), 0.45, z + sz * (d / 2 - 0.08))
+  }
+  const bench = (x, z, w = 2.6, rot = 0) => {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, 0.55), std(woodLight))
+    b.position.set(x, 0.48, z); b.rotation.y = rot; g.add(b)
+    for (const s of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.45, 0.5), std(wood))
+      leg.position.set(x + Math.cos(rot) * s * (w / 2 - 0.2), 0.23, z - Math.sin(rot) * s * (w / 2 - 0.2)); leg.rotation.y = rot; g.add(leg)
+    }
+  }
+  const bed = (x, z, rot = 0) => {
+    const b = new THREE.Group(); b.position.set(x, 0, z); b.rotation.y = rot; g.add(b)
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.42, 2.5), std(wood)); base.position.y = 0.3; b.add(base)
+    const mat = new THREE.Mesh(new THREE.BoxGeometry(1.44, 0.26, 2.28), std('#c8b9d8')); mat.position.y = 0.62; b.add(mat)
+    const cover = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), std(cloth)); cover.position.set(0, 0.8, 0.35); b.add(cover)
+    const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.16, 0.42), std('#e3d8c2')); pillow.position.set(0, 0.8, -0.86); b.add(pillow)
+    for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.075, 2.15, 6), std(wood))
+      post.position.set(sx * 0.78, 1.1, -1.14); b.add(post)
+    }
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.12, 2.6), std(cloth, { emissive: '#2a163d', ei: 0.45 }))
+    canopy.position.y = 2.2; b.add(canopy)
+    return b
+  }
+  const bookshelf = (x, z, w = 2.6, h = 2.5, rot = 0) => {
+    const s = new THREE.Group(); s.position.set(x, 0, z); s.rotation.y = rot; g.add(s)
+    const back = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.22), std(wood)); back.position.y = h / 2; s.add(back)
+    for (let i = 0; i < 3; i++) {
+      const shelf = new THREE.Mesh(new THREE.BoxGeometry(w, 0.09, 0.42), std(woodLight)); shelf.position.set(0, 0.55 + i * 0.72, 0.08); s.add(shelf)
+    }
+    for (let i = 0; i < Math.floor(w * 4); i++) {
+      const bh = 0.25 + Math.random() * 0.28
+      const book = new THREE.Mesh(new THREE.BoxGeometry(0.11 + Math.random() * 0.1, bh, 0.28), std(['#7a3f4a', '#3f5e7a', '#4f7a54', '#6b5e45', '#5b3a78'][i % 5]))
+      book.position.set(-w / 2 + 0.2 + i * (w - 0.4) / Math.floor(w * 4), 0.62 + (i % 3) * 0.72 + bh / 2, 0.14)
+      book.rotation.z = (Math.random() - 0.5) * 0.08; s.add(book)
+    }
+    return s
+  }
+  const dummy = (x, z, rot = 0) => {
+    const d = new THREE.Group(); d.position.set(x, 0, z); d.rotation.y = rot; g.add(d)
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 1.7, 6), std(wood)); post.position.y = 0.85; d.add(post)
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.65, 4, 7), std('#8a7b62')); body.position.y = 1.45; d.add(body)
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.23, 8, 6), std('#a99778')); head.position.y = 2.06; d.add(head)
+    const arms = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.1, 0.1), std(wood)); arms.position.y = 1.55; d.add(arms)
+    const target = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), new THREE.MeshBasicMaterial({ color: '#c9a6ff', transparent: true, opacity: 0.55, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+    target.position.set(0, 1.55, 0.31); d.add(target)
+    glow('#c9a6ff', 1.3, x, 1.55, z, 0.3)
+    return d
+  }
+
+  /* -------- shell -------- */
+  box(32.2, 0.24, 32.2, stoneDark, 0, -0.1, 0, { rough: 1 })
+  box(31.4, 0.08, 31.4, '#5c586c', 0, 0.02, 0, { rough: 1 })
+  // outer walls, with a gap for the entrance at the south
+  wall(-15.5, 15.5, -3, 15.5)
+  wall(3, 15.5, 15.5, 15.5)
+  wall(-15.5, -15.5, 15.5, -15.5)
+  wall(-15.5, -15.5, -15.5, 15.5)
+  wall(15.5, -15.5, 15.5, 15.5)
+  // inner walls: north rooms, classrooms, south rooms
+  for (const [a, b] of [[-15.5, -12], [-10, -1.5], [1.5, 10], [12, 15.5]]) wall(a, -4.5, b, -4.5, 5.5, 0.45)
+  for (const [a, b] of [[-4.5, 1], [3, 10.5], [12.5, 15.5]]) {
+    wall(-7.5, a, -7.5, b, 5.5, 0.45)
+    wall(7.5, a, 7.5, b, 5.5, 0.45)
+  }
+  wall(-6.5, -15.5, -6.5, -4.5, 5.5, 0.4)
+  wall(6.5, -15.5, 6.5, -4.5, 5.5, 0.4)
+  for (const [a, b] of [[-6.5, -1], [1, 6.5]]) wall(a, -10.5, b, -10.5, 4.8, 0.4)
+  // door lintels and glowing thresholds
+  for (const [x, z, w, rot] of [[-11, -4.5, 2, 0], [0, -4.5, 3, 0], [11, -4.5, 2, 0], [-7.5, 2, 2, 1], [7.5, 2, 2, 1], [-7.5, 11, 2, 1], [7.5, 11, 2, 1], [0, -10.5, 2, 0], [0, 15.5, 6, 0]]) {
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(rot ? 0.7 : w + 1, 0.55, rot ? w + 1 : 0.7), std(stoneLight))
+    lintel.position.set(x, 4.5, z); g.add(lintel)
+    if (z !== 15.5) glow('#9a7be0', w + 1.1, x, 3.6, z, 0.22)
+  }
+
+  /* -------- floors / rugs -------- */
+  rug(14, 4.8, 0, -8.5, rugA)
+  rug(7.2, 10.5, -11.4, 1.8, rugB)
+  rug(7.2, 10.5, 11.4, 1.8, '#3f5a4a')
+  rug(8.4, 10.5, -11, -10, '#4a3f5e')
+  rug(8.4, 10.5, 11, -10, '#5a4a3f')
+  rug(8.2, 5, -11.5, 11.7, rugC)
+  rug(8.2, 5, 11.5, 11.7, '#3f5a4a')
+  rug(6.5, 6.8, 0, 11.5, '#4a3a5c')
+
+  // central duelling circle and house sigil
+  const circle = new THREE.Mesh(new THREE.RingGeometry(4.4, 4.8, 48), std('#9a7be0', { emissive: '#4b2d7a', ei: 0.5 }))
+  circle.rotation.x = -Math.PI / 2; circle.position.set(0, 0.06, 2.2); g.add(circle)
+  const innerCircle = new THREE.Mesh(new THREE.RingGeometry(2.5, 2.62, 32), new THREE.MeshBasicMaterial({ color: '#d9b978', transparent: true, opacity: 0.38, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+  innerCircle.rotation.x = -Math.PI / 2; innerCircle.position.set(0, 0.07, 2.2); g.add(innerCircle)
+  glow('#9a7be0', 8, 0, 0.2, 2.2, 0.16)
+
+  /* -------- Grand Hall -------- */
+  // long house tables, banners and floating candles
+  for (const tz of [-1.2, 5.4]) {
+    box(6.6, 0.16, 1.1, woodLight, 0, 0.92, tz)
+    for (const sx of [-1, 1]) {
+      box(0.18, 0.92, 0.85, wood, sx * 2.9, 0.46, tz)
+      bench(-2.1, tz + 0.95, 5.6); bench(2.1, tz - 0.95, 5.6)
+    }
+  }
+  for (const [bx, bz] of [[-7.2, -3.9], [0, -3.9], [7.2, -3.9]]) {
+    const banner = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 3.6), std(cloth, { side: THREE.DoubleSide, emissive: '#2a163d', ei: 0.6 }))
+    banner.position.set(bx, 3.1, bz + 0.06); g.add(banner)
+    glow('#e6c987', 1.1, bx, 4.2, bz + 0.1, 0.6)
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2
+    candle(Math.cos(a) * 4.5, 3.4 + (i % 3) * 0.4, 2.2 + Math.sin(a) * 4.5)
+  }
+  label('GRAND HALL', '#e6c987', 0, 4.8, -3.6)
+  glow('#ffd08a', 11, 0, 3.4, 2.2, 0.18)
+  light('#ffcf83', 0, 4.2, 2.2, 24, 22)
+
+  // assignment board
+  box(2.1, 1.5, 0.16, '#241a33', -4.7, 2.5, -4.1)
+  box(2.25, 1.65, 0.08, woodLight, -4.7, 2.5, -4.2)
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(1.85, 1.25), new THREE.MeshBasicMaterial({ map: signTexture(['ASSIGNMENTS', 'first-year notices'], { fg: '#e6c987' }), toneMapped: false }))
+  board.position.set(-4.7, 2.5, -4.0); g.add(board)
+  glow('#e6c987', 1.6, -4.7, 2.5, -3.95, 0.35)
+
+  /* -------- Charms classroom -------- */
+  for (const dz of [-2.7, 0.1, 2.9]) {
+    for (const dx of [-13.2, -10.4]) {
+      desk(dx, dz, 1.55, 0.8)
+      candle(dx + 0.55, 1.02, dz - 0.18, '#ffd08a', 0.8)
+    }
+  }
+  box(0.14, 2.3, 4.6, '#1f2f28', -15.05, 2.7, 1.8, { emissive: '#0d1f18', ei: 0.5 })
+  const board2 = new THREE.Mesh(new THREE.PlaneGeometry(4.1, 2.0), new THREE.MeshBasicMaterial({ map: signTexture(['CHARMS', 'the wrist remembers'], { bg: '#14231d', fg: '#9be8d8', sub: '#6fbfa8' }), toneMapped: false }))
+  board2.position.set(-14.96, 2.7, 1.8); board2.rotation.y = Math.PI / 2; g.add(board2)
+  desk(-9.2, 6.2, 2.1, 0.9)
+  candle(-9.2, 1.1, 6.2, '#9be8d8', 1.1)
+  label('CHARMS', '#9be8d8', -11.4, 4.2, -4.0)
+  light('#78e6a8', -11.5, 3.4, 1.5, 14, 13)
+  glow('#9be8d8', 6, -11.5, 2.6, 1.5, 0.12)
+
+  /* -------- Potion laboratory -------- */
+  for (const [px, pz] of [[10.1, -2.8], [13.6, -0.6], [10.4, 2.1], [13.4, 4.4], [9.2, 5.8]]) {
+    const pot = new THREE.Group(); pot.position.set(px, 0, pz); g.add(pot)
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 10, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55), std('#2e2a36', { metal: 0.4, rough: 0.5 }))
+    bowl.position.y = 0.55; pot.add(bowl)
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.055, 5, 20), std('#4a4554', { metal: 0.5 }))
+    rim.rotation.x = Math.PI / 2; rim.position.y = 0.78; pot.add(rim)
+    const brew = new THREE.Mesh(new THREE.CircleGeometry(0.43, 20), new THREE.MeshBasicMaterial({ color: '#78e6a8', transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }))
+    brew.rotation.x = -Math.PI / 2; brew.position.y = 0.76; pot.add(brew)
+    glow('#78e6a8', 1.5, px, 0.9, pz, 0.45)
+    for (let i = 0; i < 3; i++) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.55, 5), std('#2e2a36'))
+      leg.position.set(px + Math.cos(i * 2.1) * 0.36, 0.22, pz + Math.sin(i * 2.1) * 0.36); g.add(leg)
+    }
+  }
+  for (const sz of [-2.5, 0.5, 3.5, 6.3]) bookshelf(14.9, sz, 2.2, 2.6, -Math.PI / 2)
+  desk(10.4, 7.0, 2.0, 0.85)
+  candle(10.4, 1.1, 7.0, '#9bf0bf', 1.0)
+  label('POTIONS', '#9bf0bf', 11.5, 4.2, -4.0)
+  light('#78e6a8', 11.5, 3.2, 2.0, 18, 15)
+  glow('#78e6a8', 7, 11.5, 2.0, 2.0, 0.14)
+
+  /* -------- Restricted library -------- */
+  for (const sz of [-14.6, -12, -9.4, -6.8]) bookshelf(-15, sz, 2.6, 2.8, Math.PI / 2)
+  bookshelf(-12.8, -14.9, 3.2, 2.8, 0)
+  bookshelf(-9.2, -14.9, 2.6, 2.8, 0)
+  for (const [tx, tz] of [[-11.5, -11.9], [-8.6, -8.3]]) {
+    desk(tx, tz, 2.2, 1.0)
+    candle(tx + 0.7, 1.1, tz - 0.2, '#ffd08a', 0.9)
+  }
+  const readingCircle = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.28, 28), new THREE.MeshBasicMaterial({ color: '#9fd8ff', transparent: true, opacity: 0.3, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+  readingCircle.rotation.x = -Math.PI / 2; readingCircle.position.set(-11, 0.06, -10); g.add(readingCircle)
+  label('LIBRARY', '#9fd8ff', -11, 4.2, -4.9)
+  light('#9fd8ff', -11, 3.2, -10, 14, 14)
+  glow('#9fd8ff', 6, -11, 2.4, -10, 0.12)
+  // the shelf that is trying to look innocent
+  bookshelf(-15.02, -6.3, 2.8, 2.9, Math.PI / 2)
+  glow('#d9b978', 1.7, -14.8, 1.8, -6.3, 0.38)
+
+  /* -------- Wand studies -------- */
+  for (const [wx, wz] of [[9.2, -13.4], [13.8, -10.8], [9.3, -7.2]]) {
+    box(2.4, 0.14, 1.2, woodLight, wx, 0.95, wz)
+    for (const sx of [-1, 1]) box(0.12, 0.95, 0.9, wood, wx + sx * 1.02, 0.48, wz)
+    for (let i = 0; i < 4; i++) {
+      const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.32, 7), std('#8fa8b8', { transparent: true, opacity: 0.5 }))
+      jar.position.set(wx - 0.75 + i * 0.5, 1.18, wz + 0.25); g.add(jar)
+      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), new THREE.MeshBasicMaterial({ color: ['#ff8a66', '#78b9ff', '#9bf0bf', '#d886ff'][i], toneMapped: false }))
+      core.position.copy(jar.position); g.add(core)
+    }
+    candle(wx + 0.75, 1.1, wz - 0.2, '#d9b978', 0.8)
+  }
+  // resonance lens on a brass stand
+  const lensStand = cyl(0.08, 0.16, 1.5, 7, '#8a7a5a', 12.6, 0.75, -5.6, { metal: 0.6 })
+  const lens = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.06, 6, 24), std('#d9b978', { metal: 0.7, emissive: '#6b4d19', ei: 0.4 }))
+  lens.position.set(12.6, 1.58, -5.6); lens.rotation.x = Math.PI / 2; g.add(lens)
+  glow('#e6c987', 2.2, 12.6, 1.58, -5.6, 0.5)
+  label('WAND STUDIES', '#d9b978', 11, 4.2, -4.9)
+  light('#d9b978', 11, 3.2, -9, 15, 14)
+  glow('#d9b978', 6, 11, 2.4, -9, 0.12)
+
+  /* -------- Ravenwood dorms -------- */
+  // common room
+  box(2.1, 0.14, 2.7, '#4a3a2e', 3.8, 0.6, -7.2)
+  box(2.1, 0.5, 0.24, '#5a4634', 3.8, 0.9, -8.5)
+  box(2.1, 0.5, 0.24, '#5a4634', 3.8, 0.9, -5.9)
+  rug(5.4, 4.2, 1, -7.2, '#5a3a4a')
+  // fireplace
+  box(2.6, 2.2, 0.6, '#4a4554', 5.7, 1.1, -4.9)
+  box(1.7, 1.2, 0.45, '#1b1418', 5.7, 0.72, -4.6)
+  glow('#ff9a5a', 2.8, 5.7, 0.7, -4.4, 0.7)
+  light('#ff9a5a', 5.4, 1.2, -4.6, 14, 10)
+  // beds and personal bedroom
+  bed(-4.3, -12.7, 0)
+  bed(3.6, -12.7, 0)
+  bed(0, -8.1, Math.PI)
+  desk(3.9, -14.1, 1.8, 0.75)
+  box(1.2, 2.4, 0.55, wood, -5.6, 1.2, -8.8)
+  candle(-5.6, 2.1, -8.5, '#ffd08a', 0.8)
+  label('RAVENWOOD DORMS', '#c79bff', 0, 4.2, -4.9)
+  label('YOUR ROOM', '#e6c987', 0, 4.0, -10.2)
+  light('#c79bff', 0, 3.2, -10, 13, 14)
+  glow('#c79bff', 6, 0, 2.4, -10, 0.12)
+  // window of stars
+  const window = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.8), new THREE.MeshBasicMaterial({ color: '#7aa8ff', transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }))
+  window.position.set(3.2, 2.7, -15.44); g.add(window)
+  glow('#9fd8ff', 2.2, 3.2, 2.7, -15.2, 0.3)
+
+  /* -------- Indoor duelling chamber -------- */
+  const duelRing = new THREE.Mesh(new THREE.RingGeometry(2.45, 2.7, 40), std('#c9a6ff', { emissive: '#5b3a8a', ei: 0.6 }))
+  duelRing.rotation.x = -Math.PI / 2; duelRing.position.set(-11.5, 0.06, 11.7); g.add(duelRing)
+  const duelRing2 = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.28, 6), new THREE.MeshBasicMaterial({ color: '#d9b978', transparent: true, opacity: 0.38, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+  duelRing2.rotation.x = -Math.PI / 2; duelRing2.position.set(-11.5, 0.07, 11.7); g.add(duelRing2)
+  glow('#c9a6ff', 5.5, -11.5, 0.2, 11.7, 0.2)
+  for (const [px, pz] of [[-14.6, 8.6], [-8.4, 8.6], [-14.6, 14.7], [-8.4, 14.7]]) {
+    cyl(0.26, 0.34, 3.4, 7, stoneLight, px, 1.7, pz)
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), new THREE.MeshBasicMaterial({ color: '#c9a6ff', toneMapped: false }))
+    orb.position.set(px, 3.55, pz); g.add(orb)
+    glow('#c9a6ff', 1.4, px, 3.55, pz, 0.55)
+  }
+  bench(-11.5, 14.7, 5.6)
+  bench(-11.5, 8.5, 3.8)
+  label('DUELLING CHAMBER', '#c9a6ff', -11.5, 4.2, 8.2)
+  light('#c9a6ff', -11.5, 3.4, 11.5, 16, 14)
+
+  /* -------- Training room -------- */
+  for (const [dx, dz, rot] of [[10, 9.2, 0.5], [13.4, 11.4, -0.7], [9.4, 13.7, 2.2]]) dummy(dx, dz, rot)
+  for (const [rx, rz] of [[13.8, 8.9], [8.6, 10.8]]) {
+    box(0.15, 1.5, 2.2, wood, rx, 0.9, rz)
+    for (let i = 0; i < 3; i++) {
+      const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, 2.4, 5), std('#8a6a4a'))
+      staff.position.set(rx + 0.1, 1.2, rz - 0.6 + i * 0.55); staff.rotation.z = 0.22; g.add(staff)
+    }
+  }
+  rug(5.6, 4.6, 11.5, 11.6, '#3f5a4a')
+  label('TRAINING GROUNDS', '#9bf0bf', 11.5, 4.2, 8.2)
+  light('#9bf0bf', 11.5, 3.2, 11.5, 13, 12)
+
+  /* -------- Entrance foyer -------- */
+  for (const sx of [-2.3, 2.3]) {
+    cyl(0.24, 0.3, 3.8, 7, stoneLight, sx, 1.9, 13.2)
+    candle(sx, 3.0, 13.2, '#ffd08a', 1.2)
+  }
+  const door = new THREE.Mesh(new THREE.BoxGeometry(5.4, 4.2, 0.2), std('#2a2038', { emissive: '#3a2458', ei: 0.4 }))
+  door.position.set(0, 2.1, 15.35); g.add(door)
+  glow('#9a7be0', 5, 0, 2.2, 15.2, 0.35)
+  label('INNER HALLS', '#e6c987', 0, 4.3, 14.8)
+  glow('#ffd08a', 4, 0, 2.8, 12, 0.16)
+
+  /* -------- room discovery zones -------- */
+  roomZone('grand_hall', -7.5, 7.5, -4.5, 8)
+  roomZone('charms', -15.5, -7.5, -4.5, 8)
+  roomZone('potions', 7.5, 15.5, -4.5, 8)
+  roomZone('library', -15.5, -6.5, -15.5, -4.5)
+  roomZone('dorms', -6.5, 6.5, -10.5, -4.5)
+  roomZone('bedroom', -6.5, 6.5, -15.5, -10.5)
+  roomZone('wand_studies', 6.5, 15.5, -15.5, -4.5)
+  roomZone('duel_room', -15.5, -7.5, 8, 15.5)
+  roomZone('training', 7.5, 15.5, 8, 15.5)
+
+  /* -------- removable roof / exterior silhouette -------- */
+  const roof = new THREE.Group(); roof.position.set(cx, fy, cz); scene.add(roof)
+  const roofMat = std('#332a52', { rough: 0.9 })
+  const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(33.2, 0.45, 33.2), roofMat)
+  roofSlab.position.y = 6.75; roof.add(roofSlab)
+  const roofPeak = new THREE.Mesh(new THREE.ConeGeometry(18.4, 5.2, 4), std('#3a2f5e', { rough: 0.92 }))
+  roofPeak.rotation.y = Math.PI / 4; roofPeak.position.y = 9.5; roof.add(roofPeak)
+  for (const [tx, tz] of [[-13, 13], [13, 13], [-13, -13], [13, -13]]) {
+    const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.5, 10.4, 8), std(stone, { rough: 0.97 }))
+    tower.position.set(tx, 4.2, tz); roof.add(tower)
+    const top = new THREE.Mesh(new THREE.ConeGeometry(2.9, 4.1, 8), std('#332a52'))
+    top.position.set(tx, 11.4, tz); roof.add(top)
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 1.25), new THREE.MeshBasicMaterial({ color: '#ffcf83', toneMapped: false }))
+    win.position.set(tx, 7.1, tz + 2.22); roof.add(win)
+    addGlow(world, roof, '#ffc06a', 2.2, tx, 7.1, tz + 2.4, 0.45)
+  }
+  // exterior entrance facade, visible from the courtyard side
+  const facade = new THREE.Mesh(new THREE.BoxGeometry(8.4, 1.1, 0.8), std(stoneLight))
+  facade.position.set(0, 4.7, 15.7); roof.add(facade)
+  world.academyRoof = roof
+
+  /* -------- secret Room of Echoes (attached east of the library) -------- */
+  const vx = 62, vz = -62
+  const vg = new THREE.Group(); vg.position.set(vx, fy, vz); scene.add(vg)
+  world.academyRoomZones.push({ id: 'vault', x0: vx - 4.8, x1: vx + 4.8, z0: vz - 4.8, z1: vz + 4.8 })
+  const vbox = (w, h, d, color, x, y, z, opts = {}) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), std(color, opts)); m.position.set(x, y, z); vg.add(m); return m }
+  vbox(9.8, 0.2, 9.8, '#2b2735', 0, -0.08, 0, { rough: 1 })
+  vbox(9.4, 0.06, 9.4, '#3a3448', 0, 0.03, 0, { rough: 1 })
+  for (const [x, z, w, d] of [[0, -4.7, 9.8, 0.5], [0, 4.7, 9.8, 0.5], [-4.7, 0, 0.5, 9.8], [4.7, 0, 0.5, 9.8]]) {
+    vbox(w, 6, d, stoneDark, x, 3, z, { rough: 0.97 })
+    world.addBoxCollider(vx + x, vz + z, w / 2, d / 2)
+  }
+  // broken wand reliquary
+  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 1.2, 8), std('#4a4554'))
+  pedestal.position.set(0, 0.6, -1.4); vg.add(pedestal)
+  const reliquary = new THREE.Mesh(new THREE.OctahedronGeometry(0.52, 0), new THREE.MeshStandardMaterial({ color: '#d9b978', emissive: '#9a7be0', emissiveIntensity: 1.1, roughness: 0.25, metalness: 0.4 }))
+  reliquary.position.set(0, 1.55, -1.4); vg.add(reliquary)
+  addGlow(world, vg, '#c9a6ff', 4.2, 0, 1.55, -1.4, 0.6)
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2
+    const shard = new THREE.Mesh(new THREE.TetrahedronGeometry(0.12 + (i % 2) * 0.05, 0), new THREE.MeshBasicMaterial({ color: '#d9b978', transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }))
+    shard.position.set(Math.cos(a) * 1.5, 1.1 + (i % 3) * 0.35, -1.4 + Math.sin(a) * 1.5); vg.add(shard)
+    world.floating.push({ obj: shard, baseY: shard.position.y, phase: i * 0.9, spin: 0.7, sway: 0.2, local: true })
+  }
+  for (const sz of [-4.5, -2, 0.5, 3]) {
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.6, 2.2), std(wood))
+    shelf.position.set(-4.4, 1.3, sz); vg.add(shelf)
+    for (let i = 0; i < 4; i++) {
+      const book = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.25, 0.32), std(['#6b3f4a', '#3f5e7a', '#4f7a54'][i % 3]))
+      book.position.set(-4.2, 0.7 + (i % 3) * 0.7, sz - 0.6 + (i % 2) * 0.5); vg.add(book)
+    }
+  }
+  for (const [cx2, cz2] of [[-2.8, 1.9], [2.6, 2.2], [2.2, -3.2]]) {
+    const candle2 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.4, 6), std('#ded3b6'))
+    candle2.position.set(cx2, 0.2, cz2); vg.add(candle2)
+    addGlow(world, vg, '#ffd08a', 1.3, cx2, 0.5, cz2, 0.6)
+  }
+  world.addLightSource(vx, fy + 3, vz, 0xc9a6ff, 20, 15, 2)
+  addGlow(world, vg, '#c9a6ff', 9, 0, 2.2, 0, 0.13)
+  const vaultLabel = world.makeLabel('THE ROOM OF ECHOES', '#e6c987')
+  vaultLabel.position.set(0, 4.3, 4.1); vaultLabel.scale.set(4.4, 0.9, 1); vg.add(vaultLabel)
+
+  /* -------- interactable thresholds and stations -------- */
+  const I = world.interactables
+  const addI = o => I.push(o)
+  // courtyard arch → inner halls
+  const arch = new THREE.Group(); arch.position.set(cx, world.heightAt(cx, -9.4), -9.4); scene.add(arch)
+  for (const sx of [-2.1, 2.1]) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.46, 5.2, 8), std('#625e70'))
+    col.position.set(sx, 2.6, 0); arch.add(col)
+    addGlow(world, arch, '#c9a6ff', 2.0, sx, 3.4, 0.4, 0.4)
+  }
+  const archTop = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.6, 0.7), std('#767184'))
+  archTop.position.y = 5.2; arch.add(archTop)
+  const portal = new THREE.Mesh(new THREE.CircleGeometry(1.9, 28), new THREE.MeshBasicMaterial({ color: '#9a7be0', transparent: true, opacity: 0.26, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }))
+  portal.position.set(0, 2.5, 0.06); arch.add(portal)
+  addGlow(world, arch, '#9a7be0', 5, 0, 2.5, 0.2, 0.4)
+  world.addLightSource(cx, world.heightAt(cx, -9.4) + 3, -9.4, 0x9a7be0, 18, 14, 2)
+
+  addI({ id:'enter_halls', label:'Enter Arcanum’s Inner Halls', pos:[cx, -9.4], r:3.4, action:'enter', target:[cx, -53.5], room:'grand_hall' })
+  addI({ id:'leave_halls', label:'Return to the Courtyard', pos:[cx, -44.4], r:2.6, action:'enter', target:[cx, -8.6], room:'courtyard' })
+  addI({ id:'assignment_board', label:'Read the Assignment Board', pos:[cx - 4.7, -55.9], r:2.5, action:'academy' })
+  addI({ id:'brew_station', label:'Brew a Restorative Draught', pos:[cx + 9.5, -60.2], r:2.8, action:'brew' })
+  addI({ id:'dorm_bed', label:'Rest in your room', pos:[cx + 1.8, -70.2], r:2.4, action:'rest' })
+  addI({ id:'library_shelf', label:'Examine the humming shelf', pos:[27.2, -64.3], r:2.3, action:'secret', target:[62, -58.5], secret:'vault', requiresClue:'clue_library' })
+  addI({ id:'dorm_tapestry', label:'Slip behind the tapestry', pos:[46.8, -65.2], r:2.0, action:'passage', target:[cx + 11, -58.5], secret:'dorm_passage', requiresClue:'clue_dorm' })
+  addI({ id:'return_shelf', label:'Return through the shelf', pos:[62, -58.5], r:2.3, action:'enter', target:[27.8, -64.3], room:'library' })
+  addI({ id:'wand_lens', label:'Peer through the resonance lens', pos:[54.6, -63.6], r:2.2, action:'wand' })
 }
 
 export function buildArena(world) {
@@ -887,7 +814,7 @@ export function buildArena(world) {
     orb.position.set(px, py + 5.45, pz); scene.add(orb)
     addGlow(world, scene, '#b79aff', 1.7, px, py + 5.45, pz, 0.75)
     if (i % 2 === 0) {
-      const pl = new THREE.PointLight(0x9a7be0, 9, 13, 2); pl.position.set(px, py + 4.8, pz); scene.add(pl)
+      world.addLightSource(px, py + 4.8, pz, 0x9a7be0, 9, 13, 2)
     }
   }
   // banner poles
