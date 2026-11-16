@@ -13,12 +13,12 @@ export const RARITIES = {
 }
 
 export const CATEGORIES = {
-  offensive:     { label: 'Offensive',     color: '#ff8a66', glyph: '✦', teacher: 'Professor Isolde Marrow', reqRep: 0,  desc: 'The duelist’s art: disarm, stun and overwhelm.' },
-  defensive:     { label: 'Defensive',     color: '#78b9ff', glyph: '⛨', teacher: 'Professor Alaric Feld',   reqRep: 0,  desc: 'Wards, barriers and the discipline of not being hit.' },
-  healing:       { label: 'Healing',       color: '#78e6a8', glyph: '✚', teacher: 'Matron Elowen Ash',       reqRep: 0,  desc: 'Mend flesh, quiet pain and outlast your enemies.' },
-  elemental:     { label: 'Elemental',     color: '#ffc266', glyph: '☄', teacher: 'Professor Cinder Voss',   reqRep: 6,  desc: 'Command fire, frost and the fury of the sky.' },
-  transformation:{ label: 'Transformation',color: '#c79bff', glyph: '✶', teacher: 'Professor Mirabel Crowe',  reqRep: 12, desc: 'Change the shape of the world — and of your foes.' },
-  forbidden:     { label: 'Forbidden',     color: '#ff5f7a', glyph: '☾', teacher: 'The Restricted Archive',   reqRep: 24, desc: 'Power that always takes its price. Tread carefully.' },
+  offensive:     { label: 'Offensive',     color: '#ff8a66', glyph: '✦', teacher: 'Professor Isolde Marrow', room: 'Spellcasting Hall', reqRep: 0,  desc: 'The duelist’s art: disarm, stun and overwhelm.' },
+  defensive:     { label: 'Defensive',     color: '#78b9ff', glyph: '⛨', teacher: 'Professor Alaric Feld',   room: 'Defence Against the Dark Arts', reqRep: 0,  desc: 'Wards, barriers and the discipline of not being hit.' },
+  healing:       { label: 'Healing',       color: '#78e6a8', glyph: '✚', teacher: 'Matron Elowen Ash',       room: 'Infirmary', reqRep: 0,  desc: 'Mend flesh, quiet pain and outlast your enemies.' },
+  elemental:     { label: 'Elemental',     color: '#ffc266', glyph: '☄', teacher: 'Professor Cinder Voss',   room: 'Elemental Laboratory', reqRep: 6,  desc: 'Command fire, frost and the fury of the sky.' },
+  transformation:{ label: 'Transformation',color: '#c79bff', glyph: '✶', teacher: 'Professor Mirabel Crowe',  room: 'Wand Studies Classroom', reqRep: 12, desc: 'Change the shape of the world — and of your foes.' },
+  forbidden:     { label: 'Forbidden',     color: '#ff5f7a', glyph: '☾', teacher: 'The Restricted Archive',   room: 'Restricted Archive', reqRep: 24, desc: 'Power that always takes its price. Tread carefully.' },
 }
 
 /* ---------------------------------------------------------- WOODS */
@@ -137,11 +137,27 @@ export const CATEGORY_SPELLS = Object.fromEntries(
 /* ---------------------------------------------------------- ZONES */
 export const ZONES = [
   { id:'hollowmere', name:'Hollowmere Village', short:'Hollowmere', pos:[0,0], radius:32, reqRep:0, color:'#d9b978', travel:[0,13], desc:'A crooked little village of lanterns, chimneys and gossip. Your shop stands here.' },
-  { id:'academy', name:'Arcanum Academy', short:'Academy', pos:[42,-20], radius:27, reqRep:0, color:'#9a7be0', travel:[34,-9], desc:'The great school of magic, where candles float and every corridor has opinions.' },
-  { id:'forest', name:'Whispering Wood', short:'Whispering Wood', pos:[-46,16], radius:35, reqRep:0, color:'#6fd8a4', travel:[-34,7], desc:'An ancient wood of glowing mushrooms, unicorn trails and trees that remember.' },
-  { id:'ruins', name:'Elder Ruins', short:'Elder Ruins', pos:[14,58], radius:27, reqRep:8, color:'#d8a76f', travel:[13,48], desc:'Broken colonnades of the first wandmakers. Something still practises here.' },
-  { id:'cavern', name:'Glimmer Cavern', short:'Glimmer Cavern', pos:[-62,-42], radius:26, reqRep:18, color:'#7ad8e8', travel:[-53,-34], desc:'A crystal hollow beneath the hills, rich in dragonbone and stranger things.' },
-  { id:'spire', name:'The Hollow Spire', short:'Hollow Spire', pos:[70,52], radius:23, reqRep:30, color:'#d86f8a', travel:[64,43], desc:'A black needle against the sky. Morvane the Hollow waits at its foot.' },
+  { id:'academy', name:'Arcanum Academy', short:'Academy', pos:[68,-40], radius:46, reqRep:0, color:'#9a7be0', travel:[50,-21], desc:'The great school of magic: halls, classrooms, a library, dormitories, gardens and a duelling arena. Every corridor has opinions.' },
+  { id:'forest', name:'Whispering Wood', short:'Whispering Wood', pos:[-52,20], radius:38, reqRep:0, color:'#6fd8a4', travel:[-38,10], desc:'An ancient wood of glowing mushrooms, unicorn trails and trees that remember.' },
+  { id:'ruins', name:'Elder Ruins', short:'Elder Ruins', pos:[18,70], radius:28, reqRep:8, color:'#d8a76f', travel:[17,57], desc:'Broken colonnades of the first wandmakers. Something still practises here.' },
+  { id:'cavern', name:'Glimmer Cavern', short:'Glimmer Cavern', pos:[-72,-48], radius:28, reqRep:18, color:'#7ad8e8', travel:[-62,-38], desc:'A crystal hollow beneath the hills, rich in dragonbone and stranger things.' },
+  { id:'spire', name:'The Hollow Spire', short:'Hollow Spire', pos:[92,66], radius:26, reqRep:30, color:'#d86f8a', travel:[84,54], desc:'A black needle against the sky. Morvane the Hollow waits at its foot.' },
+]
+
+/* Interior landmarks drawn on the academy map and used by the campus builder. */
+export const ACADEMY_LANDMARKS = [
+  { id:'gate', name:'Academy Gate', pos:[48,-18], icon:'⌂' },
+  { id:'court', name:'Entrance Court', pos:[56,-23], icon:'✧' },
+  { id:'hall', name:'Grand Hall', pos:[68,-30], icon:'⌂' },
+  { id:'spell', name:'Spellcasting Hall', pos:[44,-36], icon:'✦' },
+  { id:'dada', name:'Defence Against the Dark Arts', pos:[44,-50], icon:'⛨' },
+  { id:'wandstudies', name:'Wand Studies', pos:[44,-64], icon:'⚕' },
+  { id:'library', name:'Magical Library', pos:[92,-36], icon:'❧' },
+  { id:'potions', name:'Potion Laboratory', pos:[92,-50], icon:'☄' },
+  { id:'dorms', name:'Student Dormitories', pos:[64,-66], icon:'☾' },
+  { id:'arena', name:'Indoor Dueling Arena', pos:[88,-64], icon:'⚔' },
+  { id:'gardens', name:'Gardens & Courtyard', pos:[68,-46], icon:'✿' },
+  { id:'training', name:'Training Grounds', pos:[32,-36], icon:'➶' },
 ]
 
 export function zoneAt(x, z) {
@@ -156,17 +172,19 @@ export function zoneAt(x, z) {
 /* ---------------------------------------------------------- NPCS */
 export const NPCS = [
   {
-    id:'marrow', name:'Professor Isolde Marrow', role:'Charms Mistress', pos:[37,-14], color:'#7b5ea7', accent:'#d9b978',
-    greeting:'Magic is not a gift, child. It is a discipline with a sense of humour. Shall we begin?',
+    id:'marrow', name:'Professor Isolde Marrow', role:'Charms Mistress · Spellcasting Hall', pos:[45,-36], color:'#7b5ea7', accent:'#d9b978',
+    greeting:'Magic is not a gift, child. It is a discipline with a sense of humour. First-years are my favourite: you have not yet learned which mistakes are fashionable.',
     options:[
-      { label:'Attend a lesson', action:'lessons' },
+      { label:'Attend a spellcasting lesson', action:'lessons', cat:'offensive' },
       { label:'Ask about wand compatibility', action:'talk', text:'Your wand is not a tool — it is a partner with opinions. A generous wand forgives a sloppy wrist. A proud one does not. Practise with what suits you, not what looks impressive.' },
+      { label:'Ask about the broken wand', action:'talk', text:'Every year something in this school breaks in a way no spell can explain. This year it is a wand. I would very much like to know why before the governors send someone tedious to investigate.' },
     ],
   },
   {
-    id:'vane', name:'Headmistress Ophelia Vane', role:'Headmistress of Arcanum', pos:[45,-16], color:'#3f5e8a', accent:'#c9d8ee',
-    greeting:'You have the look of someone who intends to matter. Good. Arcanum has little patience for the timid.',
+    id:'vane', name:'Headmistress Ophelia Vane', role:'Headmistress of Arcanum', pos:[68,-31], color:'#3f5e8a', accent:'#c9d8ee',
+    greeting:'You have the look of someone who intends to matter. Good. Arcanum has little patience for the timid — and rather a lot of corridors for the curious.',
     options:[
+      { label:'Ask about the Shattered Wand', action:'talk', text:'Three nights ago the Founder’s Wand cracked in its case. No hand touched it. No spell was cast. Yet a shard is missing. Find the fragments before Morvane does, and the school will owe you more than a house point.' },
       { label:'Ask about the Hollow Spire', action:'talk', text:'Morvane was the finest wandmaker of his age. Then he decided that a wand should not choose its master — that a wizard should cut the choice out of it. Do not face him before your reputation precedes you. Thirty, at least.' },
       { label:'Ask for a blessing', action:'blessing' },
     ],
@@ -189,7 +207,7 @@ export const NPCS = [
     ],
   },
   {
-    id:'rook', name:'Sergeant Rook', role:'Dueling Master', pos:[35.5,-3], color:'#6b3f3f', accent:'#e0677a',
+    id:'rook', name:'Sergeant Rook', role:'Dueling Master · Outdoor Arena', pos:[35.5,-3], color:'#6b3f3f', accent:'#e0677a',
     greeting:'A duel is a conversation. Most wizards shout. The good ones listen. Ready to say something worth hearing?',
     options:[
       { label:'Enter the tournament', action:'tournament' },
@@ -198,37 +216,113 @@ export const NPCS = [
     ],
   },
   {
-    id:'elara', name:'Elara Vex', role:'Rival Duelist', pos:[32,-12], color:'#4f6f8f', accent:'#a8d8ff',
+    id:'elara', name:'Elara Vex', role:'Rival Duelist · Entrance Court', pos:[58,-22], color:'#4f6f8f', accent:'#a8d8ff',
     greeting:'So you are the new wandmaker. I hear you can make a wand that does not explode. How ambitious.',
     options:[
       { label:'Challenge her to a duel', action:'duel', duel:'elara' },
       { label:'Trade friendly insults', action:'talk', text:'I do not dislike you, Vale. I simply find you convenient. Beat me and I will tell everyone you are dangerous. Lose, and I will tell everyone you are charming.' },
+      { label:'Ask what she has heard', action:'talk', text:'The older students say the Founder’s Wand cracked because someone made a promise to it. The professors say it was stress. I say a wand that old has better reasons than stress.' },
     ],
   },
   {
-    id:'garrick', name:'Garrick Sloane', role:'Tournament Regular', pos:[15,-13], color:'#5c4a6e', accent:'#c79bff',
+    id:'garrick', name:'Garrick Sloane', role:'Tournament Regular · Training Grounds', pos:[32,-36], color:'#5c4a6e', accent:'#c79bff',
     greeting:'Another wandmaker with a hero complex. Splendid. The arena has been dreadfully short of tragedy.',
     options:[
       { label:'Duel him', action:'duel', duel:'garrick' },
+      { label:'Ask about the training grounds', action:'talk', text:'Practise on the straw men. They do not gloat when they win, which makes them better company than half the duelling club.' },
     ],
   },
   {
-    id:'pell', name:'Old Pell', role:'Woodcutter & Gossip', pos:[-14,18], color:'#6b5e45', accent:'#c9b98f',
-    greeting:'Careful in the Whispering Wood after dark. The trees have been trading secrets again. Rude ones.',
+    id:'feld', name:'Professor Alaric Feld', role:'Defence Against the Dark Arts', pos:[45,-50], color:'#3d5a7a', accent:'#8fd4ff',
+    greeting:'First rule of defence: the dark does not announce itself politely. Second rule: neither should you. Take a ward. You will need it before the term is out.',
     options:[
-      { label:'Ask about rare woods', action:'talk', text:'Elder grows where grief has soaked the ground. Moon Ash only blooms under a full moon. And Starglass? Starglass is not grown, child. It falls. Best not be underneath.' },
-      { label:'Ask about the ruins', action:'talk', text:'The Elder Ruins were a wandmakers’ college before Arcanum was a hole in the ground. They left a phoenix feather on the altar. It has been waiting a very long time for someone polite.' },
+      { label:'Attend a defence lesson', action:'lessons', cat:'defensive' },
+      { label:'Ask about the scorch mark', action:'talk', text:'There is a hole in my practice dummy that no spell of mine made. Clean edges. Cold ash. The same cold I felt in the corridor the night the Founder’s Wand broke.' },
     ],
   },
   {
-    id:'fen', name:'Fen', role:'Apprentice Healer', pos:[3,-3], color:'#4f7a64', accent:'#9bf0bf',
-    greeting:'You are the wandmaker! If you make a wand that helps people, I will tell every healer in the valley. If you make one that explodes, I will also tell them. Honestly.',
+    id:'voss', name:'Professor Cinder Voss', role:'Potion Brewing & Elemental Magic', pos:[92,-50], color:'#8a4f2f', accent:'#ffb072',
+    greeting:'Mind the cauldron. It has opinions about visitors, and most of them are unkind. You are here for the elemental lesson, or for something to drink?',
     options:[
-      { label:'Talk about healing wands', action:'talk', text:'Willow and unicorn hair. Pear and demiguise. A healing wand should feel like a hand on your shoulder, not a hand around your throat.' },
+      { label:'Attend an elemental lesson', action:'lessons', cat:'elemental' },
+      { label:'Brew a Clarity Draught', action:'brew' },
+      { label:'Ask about the residue', action:'talk', text:'Cauldron seven held something that was not a potion: wand varnish, dissolved in moon-water. Someone has been unmaking a wand in my laboratory. When I find them, they will clean every cauldron with a toothbrush.' },
     ],
   },
   {
-    id:'morvane', name:'Morvane the Hollow', role:'The Dark Wandmaker', pos:[70,54], color:'#2b1f33', accent:'#ff5f7a',
+    id:'crowe', name:'Professor Mirabel Crowe', role:'Wand Studies & Transformation', pos:[45,-64], color:'#6b4a8a', accent:'#c79bff',
+    greeting:'Wands are not sticks with delusions of grandeur. They are promises with grain. Sit. We will discuss what yours has been promised.',
+    options:[
+      { label:'Attend a transformation lesson', action:'lessons', cat:'transformation' },
+      { label:'Study wandcraft', action:'wand' },
+      { label:'Ask about wand lore', action:'talk', text:'A wand can be repaired. It cannot be unbroken. Those are different words, and the difference has killed people. If you find a shard of the Founder’s Wand, bring it to me — not to the Headmistress, and certainly not to the Restricted Archive.' },
+    ],
+  },
+  {
+    id:'ash', name:'Matron Elowen Ash', role:'Healer · Student Dormitories', pos:[62,-66], color:'#3f6f5a', accent:'#9bf0bf',
+    greeting:'Another first-year with a pulse and a wand. Sit down before you faint; the stone floor is unforgiving and I have just mopped it.',
+    options:[
+      { label:'Attend a healing lesson', action:'lessons', cat:'healing' },
+      { label:'Ask about the missing student', action:'talk', text:'Nobody is missing, officially. But a bed in the east dormitory has been cold for three nights, and its owner left a note that says only: “The wand remembers me. I wish it would stop.”' },
+    ],
+  },
+  {
+    id:'sable', name:'Sable Quill', role:'Keeper of the Magical Library', pos:[91,-34], color:'#4a3f6a', accent:'#e6c987',
+    greeting:'The library is open. The Restricted Archive is not. If you hear a book whisper your name, do not answer — it is rude, and it encourages them.',
+    options:[
+      { label:'Study a discoverable spell', action:'library' },
+      { label:'Research a wand recipe', action:'recipe' },
+      { label:'Ask about the Founder’s Wand', action:'talk', text:'The Founder’s Wand was not the first wand. It was the first wand that chose to stay. When it cracked, the shelves rearranged themselves. One shelf is still wrong. I have stopped correcting it.' },
+    ],
+  },
+  {
+    id:'tobias', name:'Tobias Flint', role:'Academy Champion · Indoor Arena', pos:[88,-72], color:'#6b4f3f', accent:'#e9b45c',
+    greeting:'You are the new student everyone keeps mentioning. Good. The duelling club has a shortage of people worth beating.',
+    options:[
+      { label:'Challenge Tobias', action:'duel', duel:'tobias' },
+      { label:'Ask about the duelling club', action:'talk', text:'The indoor arena is older than the school. It was built around a circle of stone that predates the first classroom. Some nights the runes light themselves. I have learned not to ask.' },
+    ],
+  },
+  {
+    id:'cassian', name:'Cassian Pyre', role:'Academy Rival · Indoor Arena', pos:[84,-69], color:'#5a2f45', accent:'#ff8aa8',
+    greeting:'So you are the scholarship case. Marrow says you have talent. Marrow also says thestrals are misunderstood. I will judge for myself.',
+    options:[
+      { label:'Duel Cassian', action:'duel', duel:'cassian' },
+      { label:'Ask about the fragments', action:'talk', text:'I found a black shard in the arena sand. Warm, like a coal. Pyre is my family name, so everyone assumes I know about fire. I know about wanting things that burn. That is enough.' },
+    ],
+  },
+  {
+    id:'ivy', name:'Ivy Thorne', role:'Duel Club Captain · Indoor Arena', pos:[94,-60], color:'#2f5a4a', accent:'#7fe8c4',
+    greeting:'Captain Thorne. I run the club, Rook runs the tournament, and the older students run their mouths. If you can keep your feet, I can teach you something.',
+    options:[
+      { label:'Duel the Captain', action:'duel', duel:'ivy' },
+      { label:'Ask for duelling advice', action:'talk', text:'A duel is won by the first good decision, not the last dramatic one. Hold your shield until the glow peaks. Step through, not back. And never let a Pyre choose the ground.' },
+    ],
+  },
+  {
+    id:'nell', name:'Nell Farthing', role:'First-Year Student · Gardens', pos:[68,-46], color:'#4f6a4a', accent:'#a6e8a0',
+    greeting:'Oh! You are the new one. I have been trying to grow moon-thistle in the gardens. It keeps growing teeth instead. Do you think that is a bad sign?',
+    options:[
+      { label:'Ask about the school', action:'talk', text:'The Grand Hall has more doors than walls. The library has a shelf that moves. The east dormitory has a bed nobody sleeps in. And the portrait of the Founder watches the courtyard, except when it does not.' },
+      { label:'Ask about the whispers', action:'talk', text:'After curfew, something in the west corridor whispers in a voice like splintering wood. The prefects say it is the pipes. The pipes have never asked anyone for a wand before.' },
+    ],
+  },
+  {
+    id:'peregrine', name:'Peregrine Cox', role:'Second-Year Student · Entrance Court', pos:[72,-24], color:'#4a5a7a', accent:'#a8c8ff',
+    greeting:'You are in my Potions group, aren’t you? If Voss asks who left the cauldron bubbling, we have never met.',
+    options:[
+      { label:'Ask about hidden passages', action:'talk', text:'There is a tapestry behind the Defence classroom that does not hang straight. And the library’s north shelf has a draft. If you find a room nobody has dusted in a century, take me with you. Or at least take notes.' },
+    ],
+  },
+  {
+    id:'moss', name:'Old Moss', role:'Academy Caretaker', pos:[52,-52], color:'#5a5a42', accent:'#c9c08a',
+    greeting:'Mind the wet stone. Mind the dry stone. Mind the stone that looks like it is not there. This school was built by people who thought corridors were a form of punctuation.',
+    options:[
+      { label:'Ask about the passages', action:'talk', text:'The builders left spaces between the walls for servants, secrets and things that did not want to be found. The tapestry behind Feld’s classroom covers one. The north shelf in the library covers another. I have never used either. I am a caretaker, not a plot device.' },
+    ],
+  },
+  {
+    id:'morvane', name:'Morvane the Hollow', role:'The Dark Wandmaker', pos:[92,68], color:'#2b1f33', accent:'#ff5f7a',
     greeting:'You came. Of course you came. Every wandmaker eventually climbs this hill, carrying their little wooden hopes. Show me what you have made, child — and I will show you what a wand is for.',
     options:[
       { label:'Face Morvane', action:'boss' },
@@ -236,7 +330,7 @@ export const NPCS = [
     ],
   },
   {
-    id:'gloomfang', name:'Gloomfang', role:'Terror of the Wood', pos:[-53,24], color:'#31402f', accent:'#8ad86f',
+    id:'gloomfang', name:'Gloomfang', role:'Terror of the Wood', pos:[-58,28], color:'#31402f', accent:'#8ad86f',
     greeting:'A low growl rolls through the clearing. The beast’s eyes catch the moonlight like two green coals. It does not intend to discuss wands.',
     options:[
       { label:'Stand your ground', action:'duel', duel:'gloomfang' },
@@ -244,7 +338,7 @@ export const NPCS = [
     ],
   },
   {
-    id:'warden', name:'Crystal Warden', role:'Keeper of the Glimmer', pos:[-58,-45], color:'#3f6f7a', accent:'#8fe6ff',
+    id:'warden', name:'Crystal Warden', role:'Keeper of the Glimmer', pos:[-67,-50], color:'#3f6f7a', accent:'#8fe6ff',
     greeting:'The crystal giant unfolds with a sound like glass wind chimes. “LEAVE,” it hums. “OR PROVE YOURSELF WORTHY OF THE DEEP.”',
     options:[
       { label:'Prove yourself', action:'duel', duel:'warden' },
