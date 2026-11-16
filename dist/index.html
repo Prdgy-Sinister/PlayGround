@@ -6,8 +6,9 @@
     <meta name="theme-color" content="#141210" />
     <title>The Way of the Samurai — A Mountain Crafting Life</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23b53a2d'/><text x='50' y='70' font-size='58' text-anchor='middle' fill='%23f3ece0' font-family='serif'>侍</text></svg>" />
-    <script type="module" crossorigin src="./assets/index-BiVW1BRv.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-wbBHK-A0.css">
+    <style>html,body{margin:0;background:#0d0c0a;color:#f4eddd}</style>
+    <script type="module" crossorigin src="./assets/index-DvMx_kRf.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CMDHjjZv.css">
   </head>
   <body>
     <div id="app">
@@ -105,5 +106,46 @@
 
       <div id="modal-root"></div>
     </div>
+    <script>
+      // Boot watchdog: if the module never starts (stale cached HTML pointing at
+      // deleted JS/CSS chunks is the usual cause), explain it instead of leaving
+      // a white page with dead buttons.
+      (function () {
+        function showFallback() {
+          if (window.SAMURAI) return;
+          if (document.getElementById('boot-fallback')) return;
+          var box = document.createElement('div');
+          box.id = 'boot-fallback';
+          box.setAttribute('role', 'alert');
+          box.style.cssText = 'position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:24px;background:#0d0c0a;color:#f4eddd;font-family:Georgia,serif;text-align:center';
+          box.innerHTML =
+            '<div style="max-width:460px">' +
+            '<div style="font-size:34px;color:#b33a2b;margin-bottom:14px">侍</div>' +
+            '<h1 style="font-size:22px;font-weight:500;letter-spacing:.08em;margin:0 0 12px">The mountain did not load</h1>' +
+            '<p style="font-size:14px;line-height:1.6;color:#c8b99f;margin:0 0 18px">The game script is missing or still downloading. This usually means the page is cached from an older build.</p>' +
+            '<button onclick="location.reload()" style="font:inherit;padding:10px 22px;border:1px solid #b6914f;background:#1c1813;color:#f4eddd;border-radius:2px;cursor:pointer">Reload the page</button>' +
+            '<p style="font-size:11px;color:#8d7f6a;margin-top:16px">If reloading does not help, clear the site cache or try a private window.</p>' +
+            '</div>';
+          document.body.appendChild(box);
+        }
+        window.addEventListener('load', function () {
+          setTimeout(showFallback, 7000);
+          var tries = 0;
+          var timer = setInterval(function () {
+            tries += 1;
+            if (window.SAMURAI) {
+              clearInterval(timer);
+              var box = document.getElementById('boot-fallback');
+              if (box) box.remove();
+            } else if (tries > 60) {
+              clearInterval(timer);
+            }
+          }, 500);
+        });
+        window.addEventListener('error', function (event) {
+          if (event && event.target && event.target.tagName === 'SCRIPT') showFallback();
+        }, true);
+      })();
+    </script>
   </body>
 </html>

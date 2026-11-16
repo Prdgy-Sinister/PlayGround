@@ -206,9 +206,15 @@ export class UI {
   startGame() {
     if (this.started) return;
     this.started = true;
-    this.audio.init();
-    this.audio.soundOn = true;
-    this.audio.setMusic(true);
+    // Audio is optional. A blocked or unavailable AudioContext must never
+    // prevent the world from starting (common on strict mobile browsers).
+    try {
+      this.audio.init();
+      this.audio.soundOn = true;
+      this.audio.setMusic(true);
+    } catch (err) {
+      console.warn('[samurai] Audio unavailable:', err);
+    }
     this.game.started = true;
     this.el.intro.classList.add('gone');
     setTimeout(() => { this.el.intro.style.display = 'none'; }, 1100);
@@ -219,7 +225,7 @@ export class UI {
     }
     this.el.loading.classList.add('gone');
     this.refreshHUD();
-    this.game.audio?.setMood('estate');
+    try { this.game.audio?.setMood('estate'); } catch (err) { console.warn('[samurai] Audio mood failed:', err); }
     this.showZone(LOCATIONS.estate);
     this.world.snapCamera();
     const save = this.game.state;
@@ -347,8 +353,8 @@ export class UI {
       this.game.saveGame();
     }
     this.el.zone.innerHTML = `
-      <div style="font-family:var(--jp);font-size:34px;line-height:1;letter-spacing:.2em;color:#f1e4cb">${loc.kanji}</div>
-      <div style="font-family:var(--serif);font-size:17px;letter-spacing:.3em;margin-top:8px">${loc.name.toUpperCase()}</div>
+      <div class="zone-kanji">${loc.kanji}</div>
+      <div class="zone-name">${loc.name.toUpperCase()}</div>
       <small>${loc.jp} · ${loc.blurb}</small>`;
     this.el.zone.classList.remove('show');
     void this.el.zone.offsetWidth;

@@ -137,9 +137,12 @@ canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: bl
   color: #f5edda; font-family: var(--jp); font-size: 30px; letter-spacing: .35em;
   text-shadow: 0 2px 30px rgba(0,0,0,.8), 0 0 4px rgba(0,0,0,.6);
   opacity: 0; transition: opacity 1s; pointer-events: none; text-align: center;
+  width: min(86vw, 640px);
 }
+.zone-kanji { font-family: var(--jp); font-size: 34px; line-height: 1; letter-spacing: .2em; color: #f1e4cb; }
+.zone-name { font-family: var(--serif); font-size: 17px; letter-spacing: .3em; margin-top: 8px; }
 .zone-tag.show { opacity: 1; animation: zonefade 3.6s forwards; }
-.zone-tag small { display: block; font-family: var(--serif); font-size: 12px; letter-spacing: .5em; color: #d8c393; margin-top: 6px; }
+.zone-tag small { display: block; font-family: var(--serif); font-size: 12px; letter-spacing: .28em; line-height: 1.5; color: #d8c393; margin-top: 6px; }
 @keyframes zonefade { 0% { opacity: 0; } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
 
 .prompt {
@@ -673,26 +676,30 @@ canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: bl
   .brand .crest { width: 40px; height: 40px; font-size: 22px; }
 }
 @media (max-width: 700px) {
-  #hud { padding: 10px 12px; gap: 8px; }
-  .stats { gap: 4px; }
-  .stat { min-width: 0; padding: 5px 8px; gap: 6px; }
-  .stat .stat-k { width: 24px; height: 24px; font-size: 16px; }
-  .stat small { font-size: 6.5px; }
-  .stat b { font-size: 13px; }
-  .stat.money b { font-size: 14px; }
+  #hud { padding: 10px 10px 8px; gap: 6px; row-gap: 6px; flex-wrap: wrap; }
+  #hud .brand { order: 0; }
+  #hud .hud-actions { order: 1; margin-left: auto; gap: 2px; }
+  .stats { order: 2; flex: 1 1 100%; gap: 4px; justify-content: center; flex-wrap: nowrap; }
+  .stat { min-width: 0; padding: 4px 8px; gap: 5px; flex: 0 1 auto; }
+  .stat .stat-k { width: 21px; height: 21px; font-size: 14px; }
+  .stat small { font-size: 6px; letter-spacing: .12em; }
+  .stat b { font-size: 12px; }
+  .stat.money b { font-size: 13px; }
   .stat.date b { font-size: 10px; }
   .stat.rep { display: none; }
-  .hud-actions { gap: 3px; }
-  .icon-btn { width: 38px; height: 38px; font-size: 13px; }
+  .icon-btn { width: 34px; height: 34px; font-size: 12px; }
   .icon-btn small { display: none; }
-  .brand .crest { width: 36px; height: 36px; font-size: 20px; }
+  .brand .crest { width: 34px; height: 34px; font-size: 19px; }
   #dock { width: calc(100% - 16px); justify-content: space-between; bottom: 8px; }
   #dock button { width: 16.6%; padding: 5px 0 4px; }
   #dock button span { font-size: 18px; width: 28px; height: 28px; }
   #dock button b { font-size: 7px; letter-spacing: .06em; }
   #dock button small { display: none; }
   #focus-wrap { bottom: 90px; left: 12px; width: 120px; }
-  #toasts { top: 64px; right: 10px; max-width: 260px; }
+  #toasts { top: 92px; right: 10px; max-width: 260px; }
+  .zone-kanji { font-size: 24px; }
+  .zone-name { font-size: 12px; letter-spacing: .18em; }
+  .zone-tag small { font-size: 9px; letter-spacing: .12em; }
   .toast { font-size: 11.5px; padding: 7px 10px; }
   .overlay { padding: 8px; }
   .sheet { width: 100%; max-height: 94vh; }
@@ -755,3 +762,27 @@ body.is-night .grain { opacity: .16; }
   .sheet-head .sheet-title h2 { font-size: 18px; }
   .map-wrap { height: 240px; }
 }
+
+/* ————— boot / graphics failure notice ————— */
+.boot-notice {
+  position: fixed; inset: 0; z-index: 120; display: grid; place-items: center;
+  padding: 20px; background: rgba(10, 8, 6, .72); backdrop-filter: blur(4px);
+  animation: bootin .35s ease;
+}
+@keyframes bootin { from { opacity: 0; } }
+.boot-card {
+  width: min(460px, 100%); padding: 26px 24px 20px; text-align: center;
+  background: linear-gradient(165deg, #221d16, #14110d);
+  border: 1px solid rgba(216, 195, 147, .38); border-radius: 3px;
+  box-shadow: var(--shadow); color: var(--paper);
+}
+.boot-card .boot-kanji {
+  width: 42px; height: 42px; margin: 0 auto 14px; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid rgba(216, 195, 147, .5);
+  color: var(--verm-bright); font-family: var(--jp); font-size: 22px;
+}
+.boot-card h2 { margin: 0 0 10px; font-size: 21px; font-weight: 500; letter-spacing: .05em; }
+.boot-card p { margin: 0 0 18px; font-size: 13.5px; line-height: 1.6; color: #c8b99f; overflow-wrap: anywhere; }
+.boot-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.boot-card .btn-quiet { background: transparent; color: #c8b99f; border: 1px solid rgba(216,195,147,.32); }
+.boot-card .boot-hint { display: block; margin-top: 16px; font-size: 10px; line-height: 1.5; letter-spacing: .08em; color: #8d7f6a; }

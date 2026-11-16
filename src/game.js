@@ -50,15 +50,15 @@ export class Game {
     for (const key of ['seeds', 'materials', 'hires', 'stats', 'flags', 'gathered', 'buyers']) {
       if (!s[key] || typeof s[key] !== 'object') s[key] = key === 'hires' ? { gardener: 0, assistant: 0 } : key === 'stats' ? {} : {};
     }
-    s.trees = (s.trees || []).filter((t) => t && SPECIES[t.sp]);
-    s.weapons = (s.weapons || []).filter((w) => w && WEAPON_TYPES[w.type]);
-    s.decor = (s.decor || []).filter((d) => DECOR[d]);
-    s.blueprints = s.blueprints || [];
-    s.commissions = s.commissions || [];
+    const arr = (key) => { if (!Array.isArray(s[key])) s[key] = []; return s[key]; };
+    arr('trees'); arr('weapons'); arr('decor'); arr('blueprints'); arr('commissions');
+    arr('questsDone'); arr('log'); arr('oniStock'); arr('discovered');
+    s.trees = s.trees.filter((t) => t && SPECIES[t.sp]);
+    s.weapons = s.weapons.filter((w) => w && WEAPON_TYPES[w.type]);
+    s.decor = s.decor.filter((d) => DECOR[d]);
+    if (!s.discovered.includes('estate')) s.discovered.unshift('estate');
     s.seeds = { ...Object.fromEntries(Object.keys(SPECIES).map((k) => [k, 0])), ...s.seeds };
     s.materials = { ...Object.fromEntries(Object.keys(MATERIALS).map((k) => [k, 0])), ...s.materials };
-    s.questsDone = s.questsDone || [];
-    s.log = s.log || [];
     s.hour = Math.floor((s.minutes ?? 480) / 60);
     s.oniStock = s.oniStock || [];
     s.oniStockDay = s.oniStockDay || 0;
@@ -577,6 +577,9 @@ export class Game {
       case 'cherry-gather': this.gatherNode('cherry'); break;
       case 'bamboo-gather': this.gatherNode('bamboo'); break;
       case 'mine-gather': this.gatherNode('mine'); break;
+      case 'quarry-gather': this.gatherNode('quarry'); break;
+      case 'shrine-offer': this.foxOffering(); break;
+      case 'shrine-rest': this.restAt('cherry'); break;
       case 'oni-gate':
         if (!isNight(s.hour)) {
           this.toast(`The red gate is cold and sealed. It opens only after nightfall. (Now ${String(Math.floor(s.minutes / 60)).padStart(2, '0')}:${String(s.minutes % 60).padStart(2, '0')})`, 'warn');
