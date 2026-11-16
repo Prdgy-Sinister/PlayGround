@@ -3,7 +3,7 @@
 // It mirrors the World API used by Game and UI so every panel, interaction
 // and travel destination keeps working; only the presentation changes.
 import { LOCATIONS } from './world.js';
-import { SEASONS, WEATHERS, isNight, seasonIndex } from './data.js';
+import { SEASONS, WEATHERS, isNight, seasonIndex, locationStoryAccess } from './data.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -59,6 +59,13 @@ const SPOTS = {
   ],
   quarry: [
     { id: 'quarry-gather', label: 'Split silver, jade and star-stone', kanji: '石', x: 0, z: 1.5, radius: 4.6 },
+  ],
+  kiln: [
+    { id: 'kiln-gather', label: 'Gather porcelain, lacquer and bronze', kanji: '窯', x: 0, z: 1.5, radius: 4.6 },
+  ],
+  ridge: [
+    { id: 'ridge-beacon', label: 'Light the high beacon', kanji: '火', x: 0, z: -8.5, radius: 5.2 },
+    { id: 'ridge-rest', label: 'Listen to the wind above the clouds', kanji: '風', x: 6, z: 4, radius: 3.8 },
   ],
 };
 
@@ -288,6 +295,11 @@ export class LiteWorld {
 
   travelTo(locId) {
     const loc = LOCATIONS[locId] || LOCATIONS.estate;
+    const access = locationStoryAccess(this.game.state, loc.id);
+    if (!access.unlocked) {
+      this.game.toast(`This path opens in Chapter ${access.chapter?.numeral || '?'}: ${access.chapter?.title || 'an earlier chapter'}.`, 'warn');
+      return;
+    }
     this.loc = loc;
     this.player.position.x = loc.spawn.x;
     this.player.position.z = loc.spawn.z;
@@ -566,14 +578,20 @@ export class LiteWorld {
   }
 
   paintGround(ctx, w, h, pal) {
+    const snowy = this.loc?.id === 'ridge';
+    const base = snowy
+      ? mix(hexToRgb(0x263038), hexToRgb(0xdfe8e9), pal.dayF)
+      : pal.ground;
     const g = ctx.createLinearGradient(0, h * 0.45, 0, h);
-    g.addColorStop(0, rgb(mix(pal.ground, pal.bottom, 0.35)));
-    g.addColorStop(1, rgb(mix(pal.ground, [18, 25, 20], 0.25)));
+    g.addColorStop(0, rgb(mix(base, pal.bottom, 0.35)));
+    g.addColorStop(1, rgb(mix(base, snowy ? [96, 112, 118] : [18, 25, 20], snowy ? 0.28 : 0.25)));
     ctx.fillStyle = g;
     ctx.fillRect(0, h * 0.46, w, h * 0.54);
 
     // pale approach path
-    ctx.fillStyle = rgba(mix(pal.ground, [214, 203, 174], 0.55), 0.55);
+    ctx.fillStyle = snowy
+      ? rgba(mix(base, [176, 188, 192], 0.5), 0.62)
+      : rgba(mix(pal.ground, [214, 203, 174], 0.55), 0.55);
     ctx.beginPath();
     ctx.moveTo(w * 0.47, h * 0.47);
     ctx.lineTo(w * 0.53, h * 0.47);
@@ -583,13 +601,25 @@ export class LiteWorld {
     ctx.fill();
 
     // stones and grass tufts
-    ctx.fillStyle = rgba([40, 48, 38], 0.18);
+    ctx.fillStyle = snowy ? rgba([92, 108, 114], 0.24) : rgba([40, 48, 38], 0.18);
     for (let i = 0; i < 20; i++) {
       const x = ((i * 97) % 100) / 100 * w;
       const y = h * (0.58 + ((i * 53) % 38) / 100);
       ctx.beginPath();
       ctx.ellipse(x, y, 8 + (i % 4) * 5, 3 + (i % 3) * 2, 0, 0, TAU);
       ctx.fill();
+    }
+    if (snowy) {
+      // Wind-carved drifts instead of summer grass.
+      ctx.fillStyle = rgba(mix(base, [255, 255, 255], 0.35), 0.4);
+      for (let i = 0; i < 9; i++) {
+        const x = ((i * 73 + 11) % 100) / 100 * w;
+        const y = h * (0.54 + ((i * 41) % 42) / 100);
+        ctx.beginPath();
+        ctx.ellipse(x, y, 18 + (i % 4) * 8, 4 + (i % 3) * 2, -0.12, 0, TAU);
+        ctx.fill();
+      }
+      return;
     }
     ctx.strokeStyle = rgba(mix(pal.leaf, [20, 30, 18], 0.3), 0.6);
     ctx.lineWidth = 1.4;
@@ -811,6 +841,88 @@ export class LiteWorld {
       tree(ctx, w * 0.18, h * 0.64, 0.85, 0x5f7a4c, 0x57402e, night);
       tree(ctx, w * 0.85, h * 0.64, 0.8, 0x5f7a4c, 0x57402e, night);
       lantern(ctx, w * 0.33, h * 0.64, 0.8, night);
+    } else if (id === 'kiln') {
+      // three beehive kilns
+      for (let i = 0; i < 3; i++) {
+        const kx = cx + (i - 1) * w * 0.16;
+        const ky = h * (0.58 + (i % 2) * 0.015);
+        ctx.fillStyle = dim(i === 1 ? 0x6f4b38 : 0x9a6a4a, night);
+        ctx.beginPath();
+        ctx.ellipse(kx, ky, 36, 48, 0, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = dim(i === 1 ? 0x5b3c2d : 0x805640, night);
+        ctx.beginPath();
+        ctx.ellipse(kx, ky + 12, 38, 16, 0, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,151,82,.55)';
+        ctx.beginPath();
+        ctx.ellipse(kx, ky + 26, 8, 11, 0, 0, TAU);
+        ctx.fill();
+        // smoke
+        ctx.fillStyle = `rgba(220,220,210,${0.08 + pal.dayF * 0.06})`;
+        for (let s = 0; s < 3; s++) {
+          ctx.beginPath();
+          ctx.ellipse(kx + Math.sin(this.time * 0.6 + i + s) * 10, ky - 52 - s * 15, 9 + s * 3, 5 + s * 2, 0, 0, TAU);
+          ctx.fill();
+        }
+      }
+      // drying shed
+      house(ctx, w * 0.72, h * 0.55, s * 0.55, 0xded2b6, 0x4a3a32, night, 1);
+      for (let i = 0; i < 5; i++) {
+        ctx.fillStyle = dim(i % 2 ? 0xd8cdb6 : 0x3a1418, night);
+        ctx.beginPath();
+        ctx.ellipse(w * (0.16 + i * 0.035), h * 0.68, 9, 13, 0, 0, TAU);
+        ctx.fill();
+      }
+      for (let i = 0; i < 3; i++) tree(ctx, w * (0.1 + i * 0.4), h * 0.6, 0.8, pal.accent, 0x57402e, night);
+      lantern(ctx, w * 0.28, h * 0.63, 0.8, night);
+      lantern(ctx, w * 0.8, h * 0.64, 0.8, night);
+    } else if (id === 'ridge') {
+      // snow-dusted pines
+      for (const [tx, ty, sc] of [[0.14, 0.58, 0.95], [0.24, 0.6, 0.75], [0.84, 0.57, 0.9], [0.74, 0.61, 0.7]]) {
+        tree(ctx, w * tx, h * ty, sc, 0xa8bfba, 0x4a382c, night);
+      }
+      // snowy outcrops
+      for (let i = 0; i < 5; i++) {
+        rock(ctx, w * (0.12 + i * 0.19), h * (0.66 + (i % 2) * 0.015), 22 + (i % 3) * 7, i % 2 ? 0x7a8588 : 0xd6e0e1, night);
+      }
+      torii(ctx, cx, h * 0.57, 0.85, night);
+      // Low stone signal fire, matching the pass's 3D beacon.
+      ctx.fillStyle = dim(0x525b5d, night);
+      ctx.beginPath();
+      ctx.ellipse(cx, h * 0.615, 24, 9, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillRect(cx - 19, h * 0.575, 38, 22);
+      ctx.fillStyle = dim(0x899496, night);
+      ctx.fillRect(cx - 22, h * 0.568, 44, 7);
+      ctx.fillStyle = dim(0x343b3c, night);
+      ctx.beginPath();
+      ctx.ellipse(cx, h * 0.575, 12, 4, 0, 0, TAU);
+      ctx.fill();
+      const lit = !!this.state.flags?.ridgeBeacon;
+      if (lit) {
+        const glow = ctx.createRadialGradient(cx, h * 0.555, 2, cx, h * 0.555, 46);
+        glow.addColorStop(0, 'rgba(255,175,90,.9)');
+        glow.addColorStop(1, 'rgba(255,120,40,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(cx, h * 0.555, 46, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,196,100,.95)';
+        ctx.beginPath();
+        ctx.moveTo(cx, h * 0.505);
+        ctx.quadraticCurveTo(cx + 10, h * 0.545, cx, h * 0.57);
+        ctx.quadraticCurveTo(cx - 10, h * 0.545, cx, h * 0.505);
+        ctx.fill();
+      }
+      // prayer flags
+      for (let i = 0; i < 6; i++) {
+        ctx.fillStyle = dim([0xd8d2c0, 0xb33a2b, 0x3f6d8a, 0xc9a45c][i % 4], night);
+        ctx.fillRect(w * (0.3 + i * 0.065), h * (0.49 + Math.sin(i) * 0.008), 9, 13);
+      }
+      for (let i = 0; i < 2; i++) tree(ctx, w * (0.16 + i * 0.68), h * 0.61, 0.9, 0x536b58, 0x57402e, night);
+      lantern(ctx, w * 0.4, h * 0.6, 0.8, night);
+      lantern(ctx, w * 0.6, h * 0.6, 0.8, night);
     }
   }
 

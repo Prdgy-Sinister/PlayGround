@@ -297,6 +297,128 @@ export const QUESTS = [
   { id: 'legendary', text: 'Craft a legendary weapon', reward: 3000, rep: 80, tip: 'Buy a forbidden blueprint from the Oni.' },
 ];
 
+// ————— the main story —————
+// Chapters are ordered. A chapter opens only when the previous one is finished,
+// and each mission pays out once. The loose Trials above remain optional.
+export const STORY_CHAPTERS = [
+  {
+    id: 'ch1', numeral: 'I', title: 'The Inherited Blade', jp: '継がれた刃', kanji: '始',
+    location: 'estate',
+    intro: 'You came up the mountain with a war name and a bundle of tools. The old smith who owned this estate left you three trees, a cold forge, and a note: “A blade is only a life you have not yet lived.” Begin again — slowly, and by hand.',
+    outro: 'A blade has left your forge and a stranger paid for it. Word begins to travel down the mountain road. The name of this estate is spoken again.',
+    reward: 600, rep: 12,
+    missions: ['m_water3', 'm_forge1', 'm_sell1'],
+  },
+  {
+    id: 'ch2', numeral: 'II', title: "The Quarry's Song", jp: '響石の唄', kanji: '響',
+    location: 'quarry',
+    intro: 'The village elder sends a boy up the path with a chipped silver cup. “The echo quarry has opened a new seam,” he says. “The stone sings when it is struck. Bring back what it remembers — and do a favour for the village while you are down there.”',
+    outro: 'The quarry answers your hammer. Silver dust clings to your sleeves, and the village has begun to save a place for you at its table.',
+    reward: 800, rep: 16,
+    missions: ['m_quarry1', 'm_silver2', 'm_commission1'],
+  },
+  {
+    id: 'ch3', numeral: 'III', title: 'A Debt to Foxes', jp: '狐への借り', kanji: '狐',
+    location: 'shrine',
+    intro: 'A white fox has been seen on the shrine steps at dusk. The abbot says it is not an omen but a creditor: every craftsman on this mountain owes the fox spirits something. Leave an offering, fire the kiln, and make one small thing with no thought of selling it.',
+    outro: 'The fox fire fades from the shrine bowl. Your small ornament sits on the altar, perfect and useless. In the kiln valley, the smoke rises straight for the first time in years.',
+    reward: 1000, rep: 20,
+    missions: ['m_shrine1', 'm_kiln1', 'm_ornament1'],
+  },
+  {
+    id: 'ch4', numeral: 'IV', title: 'The Red Gate', jp: '朱の門', kanji: '鬼',
+    location: 'bamboo',
+    intro: 'The bamboo whispers a different name each night. At the red gate, the Oni trade in things the daylight will not hold. Go carefully. Buy one thing. Then take what the night taught you back to the forge and make it sing.',
+    outro: 'The gate closes behind you with a sound like a held breath. Your hands are cold, your purse is lighter, and somewhere in the dark a blade remembers your name.',
+    reward: 2000, rep: 35,
+    missions: ['m_oniVisit', 'm_oniBuy', 'm_forgeLegend'],
+  },
+  {
+    id: 'ch5', numeral: 'V', title: "The Mountain's Name", jp: '山の名', kanji: '山',
+    location: 'ridge',
+    intro: 'Pilgrims have begun to ask the way to your estate. The high beacon on the snow ridge has gone unlit for a generation. Light it, let the mountain see your work, and decide what kind of name you will leave behind.',
+    outro: 'The beacon burns above the clouds. From the valley, your estate is a small warm light on a dark mountain. The old smith\'s note is finished; the rest is yours to write.',
+    reward: 5000, rep: 100,
+    missions: ['m_ridgeBeacon', 'm_rep400', 'm_masterpiece', 'm_heirloom1', 'm_final'],
+  },
+];
+
+// New story regions open after the chapter that introduces them is reached.
+// The value is the minimum zero-based active chapter index for access.
+export const STORY_LOCATION_GATES = {
+  quarry: 1,
+  shrine: 2,
+  kiln: 2,
+  bamboo: 3,
+  ridge: 4,
+};
+
+export function locationStoryAccess(state, locationId) {
+  const requiredChapter = STORY_LOCATION_GATES[locationId];
+  const currentChapter = Math.max(0, Number(state?.story?.chapter) || 0);
+  return {
+    unlocked: requiredChapter === undefined || currentChapter >= requiredChapter,
+    requiredChapter,
+    chapter: requiredChapter === undefined ? null : STORY_CHAPTERS[requiredChapter],
+  };
+}
+
+export const MISSIONS = [
+  // Chapter I
+  { id: 'm_water3', chapter: 'ch1', title: 'The First Cup', text: 'Water your bonsai three times.', hint: 'Open Bonsai and give each tree a drink. Focus returns while you rest.', location: 'estate', goal: { type: 'stat', key: 'watered', need: 3 }, reward: 180, rep: 4, done: 'The maples drink and straighten. Your hands remember the old rhythm.' },
+  { id: 'm_forge1', chapter: 'ch1', title: 'Fold the First Blade', text: 'Forge a weapon at your workshop.', hint: 'Heat, hammer, fold, sharpen and polish. Any recipe will do.', location: 'estate', goal: { type: 'stat', key: 'crafted', need: 1 }, reward: 350, rep: 10, done: 'The first blade cools on the rack. It is not perfect. It is yours.' },
+  { id: 'm_sell1', chapter: 'ch1', title: 'A Name at Auction', text: 'Sell one item at auction.', hint: 'Travel to the Mountain Auction Grounds and open the auction.', location: 'auction', goal: { type: 'stat', key: 'auctions', need: 1 }, reward: 500, rep: 14, done: 'A buyer counts out coin. The estate has an income again.' },
+
+  // Chapter II
+  { id: 'm_quarry1', chapter: 'ch2', title: 'Wake the Quarry', text: 'Gather stone at the Echo Quarry.', hint: 'The quarry lies west of the temple road. Split a seam and listen.', location: 'quarry', goal: { type: 'gathered', key: 'quarry', need: 1 }, reward: 420, rep: 8, done: 'The quarry rings back at you, one note behind. The seam is alive.' },
+  { id: 'm_silver2', chapter: 'ch2', title: 'Two Ounces of Moonlight', text: 'Hold at least 2 Mountain Silver.', hint: 'Silver comes from the Echo Quarry. One good seam should be enough.', location: 'quarry', goal: { type: 'material', key: 'silver', need: 2 }, reward: 520, rep: 10, done: 'The silver sits cool in your palm, bright as a winter stream.' },
+  { id: 'm_commission1', chapter: 'ch2', title: "The Village's Errand", text: 'Complete a patron commission.', hint: 'Ask the village elder for work, then deliver the finished piece.', location: 'village', goal: { type: 'stat', key: 'commissionsDone', need: 1 }, reward: 650, rep: 14, done: 'The patron bows. Kagaribi Village will remember the favour.' },
+
+  // Chapter III
+  { id: 'm_shrine1', chapter: 'ch3', title: 'A Coin for the Fox', text: 'Make an offering at the Kitsune Shrine.', hint: 'The shrine stands north-west of the waterfall. Bring 150 ryō.', location: 'shrine', goal: { type: 'stat', key: 'shrineOfferings', need: 1 }, reward: 500, rep: 10, done: 'The coin disappears. A white shape watches from between the maples.' },
+  { id: 'm_kiln1', chapter: 'ch3', title: "The Kiln's Breath", text: 'Gather porcelain and lacquer at the Kiln Valley.', hint: 'The kiln valley lies south-west of the village, below the terraces. The kilns give porcelain, lacquer and bronze.', location: 'kiln', goal: { type: 'gathered', key: 'kiln', need: 1 }, reward: 480, rep: 9, items: { porcelain: 2, lacquer: 1 }, done: 'The kiln breathes out. Porcelain and lacquer come away warm.' },
+  { id: 'm_ornament1', chapter: 'ch3', title: 'A Small Thing, Made Well', text: 'Forge a Tsuba Ornament.', hint: 'Open the Forge, choose the Tsuba Ornament, and finish every stage.', location: 'estate', goal: { type: 'stat', key: 'ornaments', need: 1 }, reward: 700, rep: 16, done: 'A guard no wider than a plum blossom. It is already perfect.' },
+
+  // Chapter IV
+  { id: 'm_oniVisit', chapter: 'ch4', title: 'The Gate After Dark', text: 'Enter the Oni night market.', hint: 'Travel to the bamboo forest after 19:00 and approach the red gate.', location: 'bamboo', goal: { type: 'stat', key: 'oniVisits', need: 1 }, reward: 800, rep: 20, done: 'The gate opens on a market lit by candles that give no warmth.' },
+  { id: 'm_oniBuy', chapter: 'ch4', title: 'A Bargain in the Dark', text: 'Buy one ware from the Oni.', hint: 'Night wares include steel, spirit wood, seeds and forbidden plans.', location: 'bamboo', goal: { type: 'stat', key: 'oniBuys', need: 1 }, reward: 900, rep: 22, items: { onisteel: 1 }, done: 'The Oni take your coin without smiling. The bargain is binding.' },
+  { id: 'm_forgeLegend', chapter: 'ch4', title: 'Steel That Remembers', text: 'Forge a legendary weapon.', hint: 'Use oni steel or meteor iron with a supernatural design.', location: 'estate', goal: { type: 'stat', key: 'legendaryCrafted', need: 1 }, reward: 2500, rep: 45, done: 'The blade rings once when it leaves the water. The workshop is silent.' },
+
+  // Chapter V
+  { id: 'm_ridgeBeacon', chapter: 'ch5', title: 'Light the High Beacon', text: 'Light the signal fire on Snow Ridge Pass.', hint: 'The pass rises north of your estate. Climb to the stone signal fire.', location: 'ridge', goal: { type: 'stat', key: 'ridgeBeacons', need: 1 }, reward: 900, rep: 20, done: 'Fire climbs the stone bowl. The whole mountain can see your estate.' },
+  { id: 'm_rep400', chapter: 'ch5', title: 'A Name the Mountain Knows', text: 'Reach 400 reputation.', hint: 'Sell, complete commissions, and finish masterworks.', location: 'estate', goal: { type: 'rep', need: 400 }, reward: 1200, rep: 0, done: 'They no longer ask whose apprentice you are. They ask for your work.' },
+  { id: 'm_masterpiece', chapter: 'ch5', title: 'One Tree, Perfectly Itself', text: 'Create a masterpiece bonsai.', hint: 'Style ≥ 82, age ≥ 5 and health ≥ 60. Patience, then a little nerve.', location: 'estate', goal: { type: 'masterpiece', need: 1 }, reward: 2000, rep: 40, done: 'The tree does not look shaped. It looks as if it was always so.' },
+  { id: 'm_heirloom1', chapter: 'ch5', title: 'For Those Who Come After', text: 'Name a tree as a family heirloom.', hint: 'Open a tree and choose “Heirloom” so it stays on the estate.', location: 'estate', goal: { type: 'heirloom', need: 1 }, reward: 800, rep: 18, done: 'You tie the white cord around the pot. The tree is no longer for sale.' },
+  { id: 'm_final', chapter: 'ch5', title: "The Mountain's Name", text: 'Finish the other tasks of the final chapter.', hint: 'Light the beacon, reach 400 reputation, make a masterpiece and name an heirloom.', location: 'ridge', goal: { type: 'storyDone', need: 4, ids: ['m_ridgeBeacon', 'm_rep400', 'm_masterpiece', 'm_heirloom1'] }, reward: 5000, rep: 80, done: 'The beacon, the tree, the name. The mountain answers.' },
+];
+
+export function missionProgress(mission, state, story) {
+  const g = mission?.goal || {};
+  const need = Math.max(1, g.need ?? 1);
+  let current = 0;
+  switch (g.type) {
+    case 'stat': current = Number(state.stats?.[g.key] || 0); break;
+    case 'gathered': current = Number(state.stats?.[`gathered_${g.key}`] || 0); break;
+    case 'material': current = Number(state.materials?.[g.key] || 0); break;
+    case 'rep': current = Number(state.rep || 0); break;
+    case 'masterpiece': current = (state.stats?.masterpieceSold > 0 || (state.trees || []).some((t) => isMasterpiece(t))) ? 1 : 0; break;
+    case 'heirloom': current = (state.trees || []).some((t) => t.heirloom) ? 1 : 0; break;
+    case 'flag': current = state.flags?.[g.key] ? 1 : 0; break;
+    case 'storyDone': current = (g.ids || []).filter((id) => story?.done?.includes(id)).length; break;
+    default: current = 0;
+  }
+  return { current: Math.min(current, need), need, done: current >= need };
+}
+
+export function storyMissionsLeft(state) {
+  const story = state.story || {};
+  const chapter = STORY_CHAPTERS[story.chapter || 0];
+  if (!chapter) return [];
+  return chapter.missions
+    .map((id) => MISSIONS.find((m) => m.id === id))
+    .filter((m) => m && !(story.done || []).includes(m.id));
+}
+
 // ————— helpers —————
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 

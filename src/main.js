@@ -143,6 +143,9 @@ try {
 // the 2D view rather than leaving the player with a frozen scene.
 canvas?.addEventListener('webglcontextlost', (event) => {
   event.preventDefault();
+  // Ignore the loss fired by a renderer we deliberately disposed while
+  // switching to the 2D view; only the active WebGL canvas matters.
+  if (boot.mode !== 'webgl' || event.target !== canvas) return;
   boot.contextLost = true;
   if (world) world.contextLost = true;
   notice('Graphics paused', 'The graphics context was lost. Trying to restore it…', { sticky: false });
@@ -152,7 +155,8 @@ canvas?.addEventListener('webglcontextlost', (event) => {
     }
   }, 2200);
 });
-canvas?.addEventListener('webglcontextrestored', () => {
+canvas?.addEventListener('webglcontextrestored', (event) => {
+  if (boot.mode !== 'webgl' || event.target !== canvas) return;
   boot.contextLost = false;
   if (world) {
     world.contextLost = false;

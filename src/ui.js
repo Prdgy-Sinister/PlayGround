@@ -2,6 +2,7 @@ import {
   SPECIES, SEASONS, POTS, MATERIALS, WEAPON_TYPES, BLUEPRINTS, DECOR, UPGRADES, HIRES, QUESTS,
   BUYER_TYPES, RANKS, WEATHERS, seasonOf, seasonIndex, dayOfSeason, rankFor, nextRank, isNight,
   treeValue, isMasterpiece, treeQuality, weaponValue, weaponRarity, appraisal, fmt, money,
+  STORY_CHAPTERS, MISSIONS, missionProgress, locationStoryAccess,
 } from './data.js';
 import { treeCapacity, beautyOf, dailyWages, visitorIncome } from './state.js';
 import {
@@ -29,7 +30,8 @@ const TABS = {
   market: [['seeds', 'Seeds'], ['materials', 'Materials']],
   estate: [['grounds', 'Grounds & Forge'], ['staff', 'Household'], ['decor', 'Decor'], ['heirlooms', 'Heirlooms']],
   oni: [['wares', 'Night Wares'], ['lot', 'Night Auction']],
-  codex: [['guide', 'Guide'], ['recipes', 'Recipes'], ['species', 'Trees'], ['patrons', 'Patrons'], ['quests', 'Trials'], ['settings', 'Settings']],
+  story: [],
+  codex: [['story', 'Story'], ['guide', 'Guide'], ['recipes', 'Recipes'], ['species', 'Trees'], ['patrons', 'Patrons'], ['quests', 'Trials'], ['settings', 'Settings']],
   map: [], temple: [], meditate: [],
 };
 
@@ -175,6 +177,7 @@ export class UI {
       btn.addEventListener('click', () => this.openPanel(btn.dataset.panel));
     });
     document.getElementById('btn-map').addEventListener('click', () => this.openPanel('map'));
+    document.getElementById('btn-story').addEventListener('click', () => this.openPanel('story'));
     this.el.meditateBtn.addEventListener('click', () => this.openPanel('meditate'));
     document.getElementById('btn-help').addEventListener('click', () => this.openPanel('codex'));
     this.el.soundBtn.addEventListener('click', () => this.toggleSound());
@@ -248,10 +251,23 @@ export class UI {
       this.toast(`Welcome back, ${rankFor(save.rep).name}. The mountain has waited.`, 'good');
     } else {
       this.toast('You have left the war behind. Water your trees, forge a blade, and find your first buyer.', 'good');
-      setTimeout(() => this.toast('Tip: press M for the mountain map. The auction grounds lie east.', ''), 4200);
+      setTimeout(() => { if (!this.panel) this.toast('Tip: press M for the mountain map. The auction grounds lie east.', ''); }, 4200);
     }
     if (this.world.lite) {
-      setTimeout(() => this.toast('Scroll view active — this browser is using the 2D world. Every panel, journey and interaction still works.', 'good'), 1400);
+      setTimeout(() => {
+        if (!this.panel) this.toast('Scroll view active — this browser is using the 2D world. Every panel, journey and interaction still works.', 'good');
+      }, 1400);
+    }
+    const story = save.story || {};
+    if (!story.seen?.length && !story.done?.length) {
+      setTimeout(() => {
+        if (this.started && !this.panel) {
+          // The story sheet is the first-run welcome; clear transient toasts
+          // so they do not cover its title and opening paragraphs.
+          this.el.toasts?.replaceChildren();
+          this.openPanel('story');
+        }
+      }, 1100);
     }
     this.game.saveGame();
   }
@@ -305,17 +321,47 @@ export class UI {
     if (this.el.focusNum) this.el.focusNum.textContent = Math.round(s.focus);
   }
 
+  storyFocus() {
+    const s = this.game.state;
+    const story = s.story || {};
+    const chapter = STORY_CHAPTERS[story.chapter || 0] || null;
+    const missions = chapter
+      ? chapter.missions.map((id) => MISSIONS.find((m) => m.id === id)).filter((m) => m && !story.done.includes(m.id))
+      : [];
+    return { chapter, missions };
+  }
+
   refreshQuests() {
     const s = this.game.state;
     if (!this.el.questList) return;
-    const pending = QUESTS.filter((q) => !s.questsDone.includes(q.id)).slice(0, 3);
-    if (!pending.length) {
+    const rows = [];
+    const { chapter, missions } = this.storyFocus();
+    if (chapter && missions.length) {
+      const m = missions[0];
+      const p = missionProgress(m, s, s.story);
+      const progress = p.need > 1 ? `${p.current}/${p.need}` : `+${fmt(m.reward)}`;
+      rows.push(`<div class="quest story-quest"><span class="qmark story">章</span><span><b>${esc(m.title)}</b><small>Chapter ${chapter.numeral} · ${esc(m.text)}</small></span><span class="qr">${progress}</span></div>`);
+    } else if (!chapter) {
+      rows.push(`<div class="quest story-quest"><span class="qmark story">終</span><span><b>The mountain's tale is complete.</b><small>The rest of the story is yours.</small></span></div>`);
+    }
+    const pending = QUESTS.filter((q) => !s.questsDone.includes(q.id)).slice(0, Math.max(0, 3 - rows.length));
+    if (!pending.length && !rows.length) {
       this.el.questList.innerHTML = `<div class="tiny muted" style="padding:4px 0">All trials complete. Your craft speaks for itself.</div>`;
       return;
     }
-    this.el.questList.innerHTML = pending.map((q) => `
+    this.el.questList.innerHTML = rows.join('') + pending.map((q) => `
       <div class="quest"><span class="qmark"></span><span>${esc(q.text)}</span><span class="qr">+${fmt(q.reward)}</span></div>
     `).join('');
+  }
+
+  markStorySeen() {
+    const s = this.game.state;
+    const chapter = STORY_CHAPTERS[s.story?.chapter || 0];
+    if (chapter && !s.story.seen.includes(chapter.id)) {
+      s.story.seen.push(chapter.id);
+      this.refreshBadges();
+      this.game.saveGame();
+    }
   }
 
   refreshBadges() {
@@ -335,6 +381,19 @@ export class UI {
     set('auction', s.commissions.length ? String(s.commissions.length) : '');
     set('map', isNight(s.hour) ? '夜' : '');
     set('estate', s.money >= 3400 ? '↑' : '');
+
+    const storyBtn = document.getElementById('btn-story');
+    if (storyBtn) {
+      const { chapter, missions } = this.storyFocus();
+      const unseen = chapter && !(s.story?.seen || []).includes(chapter.id);
+      const text = unseen ? '!' : (missions.length ? String(missions.length) : '');
+      let b = storyBtn.querySelector('.badge');
+      if (!text) { if (b) b.remove(); }
+      else {
+        if (!b) { b = document.createElement('span'); b.className = 'badge'; storyBtn.appendChild(b); }
+        b.textContent = text;
+      }
+    }
   }
 
   toast(message, kind = '') {
@@ -426,6 +485,7 @@ export class UI {
     if (opts.tab) this.tabs[name] = opts.tab;
     if (opts.preselect) this.selectedAuctionId = opts.preselect;
     if (opts.treeId) this.selectedTreeId = opts.treeId;
+    if (name === 'story') this.markStorySeen();
     this.game.paused = true;
     this.world.locked = true;
     this.game.sfx('open');
@@ -1519,15 +1579,21 @@ export class UI {
     const s = this.game.state;
     const p = this.world.player.position;
     const nearest = Object.values(LOCATIONS).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
-    const mx = (x) => 40 + ((x + 175) / 350) * 540;
-    const my = (z) => 30 + ((z + 175) / 350) * 370;
+    const mx = (x) => 40 + ((x + 235) / 470) * 540;
+    const my = (z) => 30 + ((z + 235) / 470) * 370;
     const night = isNight(s.hour);
+    const { missions: focusMissions } = this.storyFocus();
+    const missionLocs = new Set(focusMissions.map((m) => m.location));
     const pins = Object.values(LOCATIONS).map((loc) => {
       const active = loc.id === nearest?.id;
-      return `<g class="map-pin" data-act="travel" data-loc="${loc.id}" role="button" tabindex="0">
-        <circle cx="${mx(loc.x)}" cy="${my(loc.z)}" r="${active ? 10 : 7}" fill="${active ? '#b33a2b' : '#2c271e'}" stroke="#f3e9d2" stroke-width="${active ? 2.5 : 1.5}"/>
-        <text x="${mx(loc.x)}" y="${my(loc.z) + 4}" text-anchor="middle" font-size="10" fill="#f3e9d2" style="pointer-events:none">${loc.kanji}</text>
-        <text x="${mx(loc.x)}" y="${my(loc.z) + 20}" text-anchor="middle" class="lbl" style="pointer-events:none">${loc.name.replace('Your ', '').toUpperCase()}</text>
+      const mission = missionLocs.has(loc.id);
+      const access = locationStoryAccess(s, loc.id);
+      const lockAttrs = access.unlocked ? `data-act="travel" data-loc="${loc.id}" role="button" tabindex="0"` : `aria-disabled="true" title="Unlock in Chapter ${access.chapter?.numeral || '?'}: ${access.chapter?.title || 'an earlier chapter'}"`;
+      return `<g class="map-pin${access.unlocked ? '' : ' locked'}" ${lockAttrs}>
+        ${mission ? `<circle cx="${mx(loc.x)}" cy="${my(loc.z)}" r="14" fill="none" stroke="#b33a2b" stroke-width="1.6" stroke-dasharray="3 3" opacity=".8"/>` : ''}
+        <circle cx="${mx(loc.x)}" cy="${my(loc.z)}" r="${active ? 10 : 7}" fill="${access.unlocked ? (active ? '#b33a2b' : '#2c271e') : '#777366'}" stroke="#f3e9d2" stroke-width="${active ? 2.5 : 1.5}"/>
+        <text x="${mx(loc.x)}" y="${my(loc.z) + 4}" text-anchor="middle" font-size="10" fill="#f3e9d2" style="pointer-events:none">${access.unlocked ? loc.kanji : '？'}</text>
+        <text x="${mx(loc.x)}" y="${my(loc.z) + 20}" text-anchor="middle" class="lbl" style="pointer-events:none">${loc.name.replace('Your ', '').toUpperCase()}${access.unlocked ? '' : ' · LOCKED'}</text>
       </g>`;
     }).join('');
     const pathLines = Object.values(LOCATIONS).filter((l) => l.id !== 'estate').map((loc) => `<line x1="${mx(0)}" y1="${my(0)}" x2="${mx(loc.x)}" y2="${my(loc.z)}" stroke="#b8ab8d" stroke-width="1.2" stroke-dasharray="4 4" opacity=".75"/>`).join('');
@@ -1561,10 +1627,13 @@ export class UI {
     const list = Object.values(LOCATIONS).map((loc) => {
       const active = loc.id === nearest?.id;
       const dist = Math.round(Math.hypot(loc.x - p.x, loc.z - p.z));
-      return `<button class="location ${active ? 'current' : ''}" data-act="travel" data-loc="${loc.id}">
-        <span class="l-kanji">${loc.kanji}</span>
-        <span class="grow"><b>${loc.name} ${active ? '<span class="tag red" style="margin-left:4px">HERE</span>' : ''}</b><small>${loc.jp} · ${loc.blurb} · ${dist}m</small></span>
-        <span class="go">${active ? 'STAY' : 'TRAVEL'}</span>
+      const mission = missionLocs.has(loc.id);
+      const access = locationStoryAccess(s, loc.id);
+      const gate = access.unlocked ? '' : ` · Unlock in Chapter ${access.chapter?.numeral || '?'}: ${access.chapter?.title || 'earlier story'}`;
+      return `<button class="location ${active ? 'current' : ''} ${access.unlocked ? '' : 'locked'}" data-act="travel" data-loc="${loc.id}" ${access.unlocked ? '' : 'disabled'}>
+        <span class="l-kanji">${access.unlocked ? loc.kanji : '？'}</span>
+        <span class="grow"><b>${loc.name} ${active ? '<span class="tag red" style="margin-left:4px">HERE</span>' : ''}${mission ? '<span class="tag gold" style="margin-left:4px">MISSION</span>' : ''}${access.unlocked ? '' : '<span class="tag" style="margin-left:4px">LOCKED</span>'}</b><small>${loc.jp} · ${loc.blurb}${gate} · ${dist}m</small></span>
+        <span class="go">${active ? 'STAY' : access.unlocked ? 'TRAVEL' : 'LOCKED'}</span>
       </button>`;
     }).join('');
     return this.sheet({
@@ -1588,6 +1657,13 @@ export class UI {
   }
 
   travel(locId) {
+    const loc = LOCATIONS[locId];
+    if (!loc) return;
+    const access = locationStoryAccess(this.game.state, locId);
+    if (!access.unlocked) {
+      this.toast(`This path opens in Chapter ${access.chapter?.numeral || '?'}: ${access.chapter?.title || 'an earlier chapter'}.`, 'warn');
+      return;
+    }
     this.closePanel();
     this.audio.sfx('open');
     this.el.fade.classList.add('show');
@@ -1793,12 +1869,108 @@ export class UI {
     }, 1200);
   }
 
+  // ————— STORY —————
+  panel_story() {
+    const s = this.game.state;
+    const story = s.story || {};
+    const idx = story.chapter || 0;
+    const chapter = STORY_CHAPTERS[idx];
+    const doneCount = (story.done || []).length;
+    const total = MISSIONS.length;
+
+    const last = STORY_CHAPTERS.find((c) => c.id === story.lastCompleted);
+    const lastBlock = last ? `<div class="story-outro"><div class="tiny muted">THE ROAD BEHIND · CHAPTER ${last.numeral}</div><p>${esc(last.outro)}</p></div>` : '';
+
+    if (!chapter) {
+      return this.sheet({
+        title: "The Mountain's Name", sub: 'STORY COMPLETE · 山', seal: '終',
+        body: `<div class="story-hero"><div class="story-seal">終</div><div class="story-text">
+            <div class="tiny muted">THE TALE IS YOURS</div><h3>The mountain knows your name.</h3>
+            <p>All ${total} story missions are complete. The beacon burns, the benches are full, and the red gate opens for you without asking why. Keep the estate. Keep the trees. Keep making.</p>
+            <div class="tiny">Chapters finished: <b class="gold">${story.chaptersDone?.length || 0} / ${STORY_CHAPTERS.length}</b></div>
+          </div></div>
+          ${lastBlock}
+          <div class="rule"></div>
+          <div class="tiny muted">The Trials in the Codex and the open commissions remain available forever.</div>`,
+        footer: `<div class="tiny muted grow">“The way of the artisan is found in every dawn after.”</div><button class="btn" data-act="close">Return to the mountain</button>`,
+      });
+    }
+
+    const chapterDone = chapter.missions.filter((id) => story.done?.includes(id)).length;
+    const missionCards = chapter.missions.map((id) => {
+      const m = MISSIONS.find((x) => x.id === id);
+      if (!m) return '';
+      const done = story.done?.includes(id);
+      const p = missionProgress(m, s, story);
+      const loc = LOCATIONS[m.location];
+      return `<div class="story-mission ${done ? 'done' : ''}">
+        <div class="story-mission-head"><span class="story-check">${done ? '✓' : '•'}</span><b>${esc(m.title)}</b>${done ? '<span class="tag green">complete</span>' : `<span class="tag gold">${esc(loc?.name || '')}</span>`}</div>
+        <p>${esc(m.text)}</p>
+        <div class="tiny muted">${esc(done ? m.done : m.hint)}</div>
+        <div class="story-progress"><u style="width:${Math.round((p.current / p.need) * 100)}%"></u></div>
+        <div class="row between mt6"><span class="tiny muted">${p.need > 1 ? `${p.current} / ${p.need}` : (done ? 'done' : 'not yet')}</span><span class="gold tiny">+${money(m.reward)}${m.rep ? ` · +${m.rep} rep` : ''}</span></div>
+        ${!done && loc ? `<button class="btn btn-xs btn-ghost mt6" data-act="travel" data-loc="${m.location}">Travel to ${esc(loc.name)}</button>` : ''}
+      </div>`;
+    }).join('');
+
+    const timeline = STORY_CHAPTERS.map((c, i) => {
+      const cls = story.chaptersDone?.includes(c.id) ? 'done' : i === idx ? 'current' : '';
+      return `<div class="story-step ${cls}"><span>${c.numeral}</span><b>${esc(c.title)}</b></div>`;
+    }).join('');
+
+    return this.sheet({
+      title: chapter.title,
+      sub: `CHAPTER ${chapter.numeral} · ${chapter.jp} · STORY & MISSIONS`,
+      seal: chapter.kanji,
+      body: `<div class="story-hero">
+          <div class="story-seal">${chapter.numeral}</div>
+          <div class="story-text">
+            <div class="tiny muted">${esc(chapter.jp)} · ${chapterDone} / ${chapter.missions.length} missions</div>
+            <h3>${esc(chapter.title)}</h3>
+            <p>${esc(chapter.intro)}</p>
+            <div class="tiny">Chapter reward: <b class="gold">${money(chapter.reward)}</b>${chapter.rep ? ` · +${chapter.rep} rep` : ''}</div>
+            ${this.world.lite ? '<div class="tiny muted mt6">Scroll view active — the 2D world keeps every panel, journey and interaction.</div>' : ''}
+          </div>
+        </div>
+        ${lastBlock}
+        <div class="story-timeline">${timeline}</div>
+        <div class="section-label">Missions</div>
+        <div class="story-missions">${missionCards}</div>
+        <div class="rule"></div>
+        <div class="tiny muted">Chapter ${chapterDone} of ${chapter.missions.length} complete. Story missions pay automatically when their conditions are met; the Trials in the Codex are optional.</div>`,
+      footer: `<div class="tiny muted grow">Missions complete: ${doneCount} / ${total}</div>
+        <button class="btn btn-ghost" data-act="goto" data-panel="map">Open the map</button>
+        <button class="btn" data-act="close">Return to the mountain</button>`,
+    });
+  }
+
+  codexStory() {
+    const s = this.game.state;
+    const story = s.story || {};
+    const idx = story.chapter || 0;
+    const chapter = STORY_CHAPTERS[idx];
+    const timeline = STORY_CHAPTERS.map((c, i) => {
+      const cls = story.chaptersDone?.includes(c.id) ? 'done' : i === idx ? 'current' : '';
+      return `<div class="story-step ${cls}"><span>${c.numeral}</span><b>${esc(c.title)}</b></div>`;
+    }).join('');
+    const current = chapter
+      ? chapter.missions.map((id) => MISSIONS.find((m) => m.id === id)).filter((m) => m && !story.done?.includes(m.id))
+      : [];
+    return `<div class="codex-section">
+      <div class="story-timeline">${timeline}</div>
+      ${chapter ? `<div class="codex-card"><b><span class="k">${chapter.kanji}</span>${esc(chapter.title)}</b><p>${esc(chapter.intro)}</p>
+        <p class="tiny muted">${current.length ? current.map((m) => esc(m.title)).join(' · ') : 'Ready for the next chapter.'}</p>
+        <button class="btn btn-sm mt6" data-act="goto" data-panel="story">Open story & missions</button></div>`
+        : `<div class="codex-card"><b>The tale is complete.</b><p>The mountain keeps your name. Keep making, selling and tending — the Trials remain.</p></div>`}
+    </div>`;
+  }
+
   // ————— CODEX —————
   panel_codex() {
     const tab = this.tabs.codex;
     return this.sheet({
       title: 'The Artisan\'s Codex', sub: 'GUIDE · RECIPES · PEOPLE · TRIALS', seal: '巻',
-      body: this.tabsHTML('codex') + (tab === 'guide' ? this.codexGuide() : tab === 'recipes' ? this.codexRecipes() : tab === 'species' ? this.codexSpecies() : tab === 'patrons' ? this.codexPatrons() : tab === 'quests' ? this.codexQuests() : this.codexSettings()),
+      body: this.tabsHTML('codex') + (tab === 'story' ? this.codexStory() : tab === 'guide' ? this.codexGuide() : tab === 'recipes' ? this.codexRecipes() : tab === 'species' ? this.codexSpecies() : tab === 'patrons' ? this.codexPatrons() : tab === 'quests' ? this.codexQuests() : this.codexSettings()),
       footer: `<div class="tiny muted grow">“The way of the samurai is found in death. The way of the artisan is found in every dawn after.”</div>
         <button class="btn" data-act="close">Close the scroll</button>`,
     });

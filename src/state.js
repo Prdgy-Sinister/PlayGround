@@ -73,9 +73,11 @@ export function initialState() {
     stats: {
       watered: 0, shaped: 0, crafted: 0, sold: 0, seedsBought: 0, oniVisits: 0,
       upgraded: 0, totalEarned: 0, masterpieceSold: 0, legendaryCrafted: 0, auctions: 0,
-      commissionsDone: 0, planted: 0, gathered: 0,
+      commissionsDone: 0, planted: 0, gathered: 0, shrineOfferings: 0, oniBuys: 0,
+      ornaments: 0, heirloomMarked: 0, ridgeBeacons: 0, bellRings: 0,
     },
     questsDone: [],
+    story: { chapter: 0, done: [], chaptersDone: [], seen: [], lastDone: null, lastCompleted: null },
     commissions: [],
     buyers: {},
     flags: {},

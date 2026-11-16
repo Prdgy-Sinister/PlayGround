@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SPECIES, SEASONS, WEATHERS, DECOR, isNight, seasonIndex, treeValue } from './data.js';
+import { SPECIES, SEASONS, WEATHERS, DECOR, isNight, seasonIndex, treeValue, locationStoryAccess } from './data.js';
 import { createBonsai } from './bonsai.js';
 import { createWeaponDisplay } from './weapons.js';
 import { treeCapacity, beautyOf } from './state.js';
@@ -17,6 +17,10 @@ export const LOCATIONS = {
   cherry: { id: 'cherry', name: 'Sakura Valley', jp: '桜谷', kanji: '桜', x: -130, z: 20, radius: 26, spawn: { x: -114, z: 20 }, blurb: 'Petals, picnic blankets, and rare seeds.', color: '#a4556b' },
   waterfall: { id: 'waterfall', name: "Dragon's Tears Falls", jp: '龍涙の滝', kanji: '滝', x: 30, z: -142, radius: 26, spawn: { x: 30, z: -123 }, blurb: 'Cold mist and a clear mind.', color: '#4d7a8b' },
   mine: { id: 'mine', name: 'Iron Vein Cave', jp: '鉄脈洞', kanji: '鉱', x: 150, z: 6, radius: 24, spawn: { x: 137, z: 7 }, blurb: 'Iron, tamahagane, and things that glow.', color: '#6b6257' },
+  shrine: { id: 'shrine', name: 'Kitsune Shrine', jp: '狐社', kanji: '狐', x: -46, z: -128, radius: 22, spawn: { x: -46, z: -112 }, blurb: 'Fox fire, quiet wishes, and a bowl that remembers.', color: '#a4556b' },
+  quarry: { id: 'quarry', name: 'Echo Quarry', jp: '響石切場', kanji: '石', x: -172, z: -38, radius: 24, spawn: { x: -156, z: -38 }, blurb: 'Silver, jade, and stone that repeats your name.', color: '#8b887b' },
+  kiln: { id: 'kiln', name: 'Kiln Valley', jp: '窯谷', kanji: '窯', x: -142, z: 128, radius: 22, spawn: { x: -142, z: 112 }, blurb: 'Clay, lacquer, and the slow breath of the kiln.', color: '#a36a48' },
+  ridge: { id: 'ridge', name: 'Snow Ridge Pass', jp: '雪峠', kanji: '峠', x: 0, z: -220, radius: 20, spawn: { x: 0, z: -204 }, blurb: 'A beacon above the clouds, and a tengu who watches.', color: '#879ba8' },
 };
 
 // ————— canvas texture helpers —————
@@ -196,6 +200,10 @@ export class World {
     this.buildCherryValley();
     this.buildWaterfall();
     this.buildMine();
+    this.buildKitsuneShrine();
+    this.buildQuarry();
+    this.buildKilnValley();
+    this.buildSnowRidge();
     this.buildAmbientParticles();
     this.buildPlayer();
     this.bindInput();
@@ -257,9 +265,12 @@ export class World {
       uniforms: this.skyUniforms,
       side: THREE.BackSide, depthWrite: false, fog: false,
       vertexShader: `
-        varying vec3 vWorld;
+        varying vec3 vDir;
         void main() {
-          vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
+          // The dome follows the player, so the local position is the view
+          // direction. Using world position skewed the horizon at every
+          // location that was not the origin.
+          vDir = normalize(position);
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -269,9 +280,9 @@ export class World {
         uniform vec3 sunDir;
         uniform vec3 sunColor;
         uniform float sunStrength;
-        varying vec3 vWorld;
+        varying vec3 vDir;
         void main() {
-          vec3 dir = normalize(vWorld);
+          vec3 dir = normalize(vDir);
           float h = smoothstep(-0.05, 0.72, dir.y);
           vec3 col = mix(bottomColor, topColor, h);
           float d = max(dot(dir, normalize(sunDir)), 0.0);
@@ -366,7 +377,9 @@ export class World {
       const n = Math.sin(x * 0.11) * Math.cos(z * 0.09) * 0.5 + Math.sin(x * 0.037 + z * 0.041) * 0.5;
       const shade = 0.82 + n * 0.16;
       colors.push(shade * 0.92, shade, shade * 0.84);
-      if (d > 215) pos.setY(i, Math.min(18, (d - 215) * 0.22 + n * 2));
+      // A low, distant lip keeps the horizon closed without walling in the
+      // outer locations (the old 18m rim swallowed entire locations).
+      if (d > 246) pos.setY(i, Math.max(0, Math.min(4, (d - 246) * 0.12 + n * 0.8)));
     }
     geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     geo.computeVertexNormals();
@@ -383,6 +396,10 @@ export class World {
     this.addGroundPatch(-98, 86, 25, 20, 0xb6aa8a, 0.018);
     this.addGroundPatch(-110, -82, 22, 16, 0xb7b2a1, 0.018);
     this.addGroundPatch(92, -88, 24, 22, 0x6e7d58, 0.014);
+    this.addGroundPatch(-46, -128, 19, 15, 0xb2aa96, 0.017);
+    this.addGroundPatch(-172, -38, 22, 18, 0xbcb49f, 0.017);
+    this.addGroundPatch(-142, 128, 19, 15, 0xb08360, 0.017);
+    this.addGroundPatch(0, -220, 30, 24, 0xdde6e7, 0.017);
   }
 
   addGroundPatch(x, z, w, d, color, y = 0.02) {
@@ -407,6 +424,10 @@ export class World {
       [[-8, 12], [-40, 14], [-76, 18], [-114, 20]],
       [[12, 6], [18, -20], [24, -56], [27, -94], [30, -124]],
       [[18, 4], [52, 5], [92, 4], [124, 6], [138, 7]],
+      [[-8, 12], [-18, -18], [-30, -56], [-40, -92], [-46, -112]],
+      [[-30, -10], [-62, -18], [-100, -26], [-132, -33], [-152, -37]],
+      [[-26, 28], [-58, 50], [-92, 74], [-122, 98], [-140, 112]],
+      [[12, 6], [18, -20], [14, -62], [10, -110], [4, -152], [2, -182], [0, -204]],
     ];
     const stoneGeo = new THREE.CylinderGeometry(0.42, 0.48, 0.09, 6);
     const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTexture(), color: 0xa8a090, roughness: 0.95, flatShading: true });
@@ -465,32 +486,43 @@ export class World {
   }
 
   buildMountains() {
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x4c554b, roughness: 1, flatShading: true });
-    const snowMat = new THREE.MeshStandardMaterial({ color: 0xe9edee, roughness: 0.9, flatShading: true });
+    // Distant, low ridges. The previous tall cones sat close enough to the
+    // outer locations that they filled the whole sky with unlit rock.
+    // Unlit silhouettes: a shaded cone at this distance is nearly black and
+    // reads as a hole in the sky. Flat colour plus fog reads as a far ridge.
+    const rockMat = new THREE.MeshBasicMaterial({ color: 0x899b95, fog: true });
+    const snowMat = new THREE.MeshBasicMaterial({ color: 0xe4ecec, fog: true });
     const group = new THREE.Group();
-    const count = 17;
+    const count = 19;
     for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + Math.random() * 0.2;
-      const r = 238 + Math.random() * 75;
-      const h = 58 + Math.random() * 95;
-      const w = 48 + Math.random() * 45;
-      const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 6 + Math.floor(Math.random() * 3), 3), rockMat);
-      m.position.set(Math.cos(a) * r, h / 2 - 4, Math.sin(a) * r);
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.18;
+      const r = 310 + Math.random() * 60;
+      const h = 22 + Math.random() * 26;
+      const w = 104 + Math.random() * 62;
+      const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 6 + Math.floor(Math.random() * 3), 2), rockMat);
+      m.position.set(Math.cos(a) * r, h / 2 - 10, Math.sin(a) * r);
       m.rotation.y = Math.random() * Math.PI;
       group.add(m);
-      const snow = new THREE.Mesh(new THREE.ConeGeometry(w * 0.35, h * 0.35, 6, 2), snowMat);
-      snow.position.set(m.position.x, h * 0.84 - 4, m.position.z);
+      const snow = new THREE.Mesh(new THREE.ConeGeometry(w * 0.38, h * 0.32, 6, 1), snowMat);
+      snow.position.set(m.position.x, h * 0.8 - 10, m.position.z);
       snow.rotation.y = m.rotation.y;
+      snow.userData.snowCap = true;
       group.add(snow);
     }
     this.scene.add(group);
     this.mountains = group;
+    this.mountainRockMat = rockMat;
+    this.mountainSnowMat = snowMat;
+    this.mountainRockDay = new THREE.Color(0x899b95);
+    this.mountainRockNight = new THREE.Color(0x1d2734);
+    this.mountainSnowDay = new THREE.Color(0xe4ecec);
+    this.mountainSnowNight = new THREE.Color(0x2a3646);
   }
 
   buildForest() {
     const forestSpots = [];
     const pineSpots = [];
-    const avoid = Object.values(LOCATIONS).map((l) => ({ x: l.x, z: l.z, r: l.radius + 10 }));
+    const avoid = Object.values(LOCATIONS).map((l) => ({ x: l.x, z: l.z, r: l.radius + 18 }));
     for (let i = 0; i < 620; i++) {
       const a = Math.random() * Math.PI * 2;
       const r = 45 + Math.pow(Math.random(), 0.75) * 150;
@@ -858,13 +890,13 @@ export class World {
     const item = { id, label, kanji, pos: new V3(x, 0, z), radius, sprite, ring, group, action, baseY: y };
     this.interactions.push(item);
     this.markers.push(item);
+    sprite.userData.interactionId = id;
     if (group) {
       group.traverse((o) => { o.userData.interactionId = id; });
       this.pickables.push(group);
-    } else {
-      sprite.userData.interactionId = id;
-      this.pickables.push(sprite);
     }
+    // The floating kanji marker is clickable too, whether or not the prop is.
+    this.pickables.push(sprite);
     return item;
   }
 
@@ -2035,6 +2067,459 @@ export class World {
     this.addInteraction({ id: 'mine-gather', label: 'Gather iron and tamahagane', kanji: '鉱', x: loc.x + 3, z: loc.z + 4, y: 2.4, group: nodeGroup, radius: 4.8 });
   }
 
+  // ————— kitsune shrine —————
+  buildKitsuneShrine() {
+    const loc = LOCATIONS.shrine;
+    const g = new THREE.Group();
+    g.position.set(loc.x, 0, loc.z);
+    this.scene.add(g);
+    this.shrineGroup = g;
+
+    const torii = this.makeTorii(1.05, 0xa9362a, '狐');
+    torii.position.set(0, 0, 12);
+    g.add(torii);
+
+    const hall = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.6, 5.2), MAT.stone());
+    base.position.y = 0.3; hall.add(base);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(5.5, 2.6, 3.8), new THREE.MeshStandardMaterial({ color: 0x4a392b, roughness: 0.92 }));
+    body.position.y = 1.9; hall.add(body);
+    const roof = new THREE.Mesh(this.roofGeometry(6.9, 5.1, 1.6, 0.9, 0.7), MAT.roof());
+    roof.position.y = 3.35; hall.add(roof);
+    const plaque = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 1.15), new THREE.MeshStandardMaterial({
+      map: glyphTexture('狐', { bg: 'rgba(34,24,18,.94)', fg: '#f0d7a4', ring: '#c9a45c' }), transparent: true, roughness: 1,
+    }));
+    plaque.position.set(0, 2.35, 1.93); hall.add(plaque);
+    hall.position.set(0, 0, -8); g.add(hall);
+    this.registerCameraBlockers(hall);
+
+    // offering box and bowl
+    const offerBox = new THREE.Group();
+    const box = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.9, 1.2), MAT.darkWood());
+    box.position.y = 0.45; offerBox.add(box);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.32, 0.3, 10), MAT.gold());
+    bowl.position.y = 1.08; offerBox.add(bowl);
+    offerBox.position.set(0, 0, -4.4);
+    g.add(offerBox);
+
+    // fox guardians
+    const foxMat = new THREE.MeshStandardMaterial({ color: 0xd3cbb8, roughness: 0.95, flatShading: true });
+    const bibMat = new THREE.MeshStandardMaterial({ color: 0xa9362a, roughness: 0.8 });
+    for (const sx of [-1, 1]) {
+      const fox = new THREE.Group();
+      const pedestal = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.0, 1.05), MAT.stone());
+      pedestal.position.y = 0.5; fox.add(pedestal);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 1.05, 6), foxMat);
+      body.position.y = 1.55; fox.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 7, 6), foxMat);
+      head.position.set(0, 2.14, 0.08); fox.add(head);
+      for (const ex of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.3, 4), foxMat);
+        ear.position.set(ex * 0.14, 2.4, 0.06); fox.add(ear);
+      }
+      const tail = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.95, 5), foxMat);
+      tail.position.set(0, 1.65, -0.42);
+      tail.rotation.x = -0.55; fox.add(tail);
+      const bib = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.34, 0.06), bibMat);
+      bib.position.set(0, 1.9, 0.25); fox.add(bib);
+      fox.position.set(sx * 2.35, 0, -1.6);
+      fox.rotation.y = sx * 0.18;
+      g.add(fox);
+    }
+
+    // lanterns, maples and a small wish rack
+    for (const [x, z] of [[-4.5, 2], [4.5, 2], [-4.5, -5], [4.5, -5]]) {
+      const l = this.makeStoneLantern(0.9, true);
+      l.position.set(x, 0, z);
+      g.add(l);
+    }
+    for (const [x, z, sc] of [[-8, 7, 1.0], [8, 7, 0.9], [-10, -2, 0.8], [10, -3, 0.85]]) {
+      const t = this.makeTree('maple', sc, this.season.id);
+      t.position.set(x, 0, z);
+      g.add(t);
+    }
+    const rack = new THREE.Group();
+    for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.9, 0.16), MAT.darkWood());
+      post.position.set(sx * 1.3, 0.95, 0); rack.add(post);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.14, 0.18), MAT.darkWood());
+    beam.position.y = 1.85; rack.add(beam);
+    for (let i = 0; i < 5; i++) {
+      const wish = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.4), new THREE.MeshStandardMaterial({ color: 0xe6dcc2, roughness: 1, side: THREE.DoubleSide }));
+      wish.position.set(-0.9 + i * 0.45, 1.6, 0.02);
+      rack.add(wish);
+    }
+    rack.position.set(7.5, 0, 4.8);
+    g.add(rack);
+
+    this.addInteraction({ id: 'shrine-offer', label: 'Make an offering to the fox spirits', kanji: '狐', x: loc.x, z: loc.z - 3.5, y: 2.5, group: offerBox, radius: 4.4 });
+    this.addInteraction({ id: 'shrine-rest', label: 'Sit beneath the shrine maples', kanji: '憩', x: loc.x + 6, z: loc.z + 5, y: 2.4, radius: 3.8 });
+  }
+
+  // ————— echo quarry —————
+  buildQuarry() {
+    const loc = LOCATIONS.quarry;
+    const g = new THREE.Group();
+    g.position.set(loc.x, 0, loc.z);
+    this.scene.add(g);
+    this.quarryGroup = g;
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x8a877c, roughness: 1, flatShading: true });
+    const darkStone = new THREE.MeshStandardMaterial({ color: 0x6a675f, roughness: 1, flatShading: true });
+
+    // terraced cliff
+    for (let tier = 0; tier < 3; tier++) {
+      for (let i = 0; i < 5; i++) {
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(2.8 + Math.random() * 2.2, 0), tier === 1 ? darkStone : stoneMat);
+        // Keep the terraced face on the far (west) side so it frames the
+        // quarry instead of looming over the eastern approach.
+        rock.position.set(-23 + i * 6.2, 0.8 + tier * 2.0, -9 - tier * 2.4 + (i % 2) * 1.2);
+        rock.scale.set(1.2, 0.9 + tier * 0.15, 1.1);
+        rock.rotation.set(Math.random(), Math.random(), Math.random() * 0.4);
+        g.add(rock);
+      }
+    }
+    // loose boulders and cutting marks
+    for (let i = 0; i < 12; i++) {
+      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.45 + Math.random() * 0.8, 0), i % 3 ? stoneMat : darkStone);
+      r.position.set(-20 + Math.random() * 22, 0.3, -3 + Math.random() * 12);
+      r.rotation.set(Math.random(), Math.random(), Math.random());
+      g.add(r);
+    }
+    // silver and jade veins
+    for (let i = 0; i < 9; i++) {
+      const jade = i % 3 === 1;
+      const vein = new THREE.Mesh(new THREE.ConeGeometry(0.24 + Math.random() * 0.16, 1.0 + Math.random() * 0.8, 5),
+        jade
+          ? new THREE.MeshStandardMaterial({ color: 0x5fc4a0, emissive: 0x1a6a52, emissiveIntensity: 0.35, roughness: 0.35 })
+          : new THREE.MeshStandardMaterial({ color: 0xd6dde0, metalness: 0.65, roughness: 0.3, emissive: 0x30383c, emissiveIntensity: 0.25 }));
+      vein.position.set(-12 + Math.random() * 24, 0.55, -7 + Math.random() * 9);
+      vein.rotation.z = (Math.random() - 0.5) * 0.5;
+      g.add(vein);
+    }
+    // winch and cutting shed
+    const winch = new THREE.Group();
+    for (const sx of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4.2, 0.3), MAT.darkWood());
+      leg.position.set(sx * 1.4, 2.1, 0); winch.add(leg);
+    }
+    const cross = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.28, 0.28), MAT.darkWood());
+    cross.position.y = 3.8; winch.add(cross);
+    const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 4), new THREE.MeshStandardMaterial({ color: 0x9a8358, roughness: 1 }));
+    rope.position.y = 2.4; winch.add(rope);
+    const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.26, 0.5, 8), darkStone);
+    bucket.position.y = 1.05; winch.add(bucket);
+    winch.position.set(5.5, 0, 1.5);
+    g.add(winch);
+    const shed = this.makeHouse({ w: 4.4, d: 3.4, h: 2.0, color: 0xb9ad94 });
+    shed.position.set(-6.5, 0, 4.5);
+    shed.rotation.y = 0.3;
+    g.add(shed);
+
+    const sign = this.makeSign('響 石', 'ECHO QUARRY');
+    sign.position.set(-2.5, 0, 7.6);
+    sign.rotation.y = 0.12;
+    g.add(sign);
+    for (const [x, z] of [[-5, 7.5], [5, 8]]) {
+      const l = this.makeStoneLantern(0.9, true);
+      l.position.set(x, 0, z);
+      g.add(l);
+    }
+
+    const nodeGroup = new THREE.Group();
+    for (let i = 0; i < 5; i++) {
+      const node = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.24, 0), new THREE.MeshStandardMaterial({
+        color: i % 2 ? 0xc9d2d6 : 0x8a877c, metalness: 0.55, roughness: 0.45, emissive: 0x23272a, emissiveIntensity: 0.3, flatShading: true,
+      }));
+      node.position.set(-1.6 + Math.random() * 3.2, 0.35, -1.4 + Math.random() * 2.8);
+      node.rotation.set(Math.random(), Math.random(), Math.random());
+      nodeGroup.add(node);
+    }
+    nodeGroup.position.set(0, 0, 1.5);
+    g.add(nodeGroup);
+
+    this.addInteraction({ id: 'quarry-gather', label: 'Split silver, jade and star-stone', kanji: '石', x: loc.x, z: loc.z + 1.5, y: 2.4, group: nodeGroup, radius: 4.6 });
+  }
+
+  // ————— kiln valley —————
+  buildKilnValley() {
+    const loc = LOCATIONS.kiln;
+    const g = new THREE.Group();
+    g.position.set(loc.x, 0, loc.z);
+    this.scene.add(g);
+    this.kilnGroup = g;
+    const clay = new THREE.MeshStandardMaterial({ color: 0x9a6a4a, roughness: 1, flatShading: true });
+    const darkClay = new THREE.MeshStandardMaterial({ color: 0x6f4b38, roughness: 1, flatShading: true });
+
+    // beehive kilns
+    for (let i = 0; i < 3; i++) {
+      const kiln = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(2.0 - i * 0.15, 2.4 - i * 0.15, 3.0, 10), i === 1 ? darkClay : clay);
+      body.position.y = 1.5; kiln.add(body);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(2.2 - i * 0.15, 1.2, 10), i === 1 ? darkClay : clay);
+      cap.position.y = 3.55; kiln.add(cap);
+      const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.55, 0.7, 8), new THREE.MeshStandardMaterial({ color: 0x1b120d, roughness: 1 }));
+      mouth.rotation.x = Math.PI / 2;
+      // Mouths face the southern approach, where travellers arrive.
+      mouth.position.set(0, 0.9, -(2.05 - i * 0.12));
+      kiln.add(mouth);
+      kiln.position.set(-7 + i * 6.4, 0, -4 - (i % 2) * 1.5);
+      g.add(kiln);
+      const ember = new THREE.PointLight(0xff8848, 0.65, 7, 2);
+      ember.position.set(-7 + i * 6.4, 1.0, -4 - (i % 2) * 1.5 - 2.4);
+      g.add(ember);
+    }
+    // drying shed
+    const shed = new THREE.Group();
+    for (const [x, z] of [[-2.4, -1.6], [2.4, -1.6], [-2.4, 1.6], [2.4, 1.6]]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.4, 0.18), MAT.darkWood());
+      post.position.set(x, 1.2, z); shed.add(post);
+    }
+    const roof = new THREE.Mesh(this.roofGeometry(6, 4.2, 0.9, 0.6, 0.4), MAT.roofWarm());
+    roof.position.y = 2.5; shed.add(roof);
+    for (let i = 0; i < 3; i++) {
+      const shelf = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.12, 0.6), MAT.darkWood());
+      shelf.position.set(0, 0.7 + i * 0.55, -0.4 + i * 0.35); shed.add(shelf);
+      for (let j = 0; j < 4; j++) {
+        const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 0.3, 7), new THREE.MeshStandardMaterial({ color: 0xd8cdb6, roughness: 0.9 }));
+        pot.position.set(-1.7 + j * 1.1, 0.9 + i * 0.55, -0.4 + i * 0.35); shed.add(pot);
+      }
+    }
+    shed.position.set(5.4, 0, 5.2);
+    shed.rotation.y = -0.2;
+    g.add(shed);
+
+    // wood stacks and pots
+    for (let i = 0; i < 3; i++) {
+      const stack = new THREE.Group();
+      for (let j = 0; j < 4; j++) {
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 2.0, 5), MAT.bark());
+        log.rotation.z = Math.PI / 2;
+        log.position.set(0, 0.2 + (j % 2) * 0.32, -0.3 + Math.floor(j / 2) * 0.36);
+        stack.add(log);
+      }
+      stack.position.set(-9, 0, -7 - i * 1.2);
+      g.add(stack);
+    }
+    for (let i = 0; i < 7; i++) {
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.4, 0.55 + Math.random() * 0.5, 7), i % 3 ? clay : new THREE.MeshStandardMaterial({ color: 0x3a1418, roughness: 0.55 }));
+      pot.position.set(-3 + Math.random() * 10, 0.3, -7 - Math.random() * 2.5);
+      g.add(pot);
+    }
+    const sign = this.makeSign('窯 谷', 'KILN VALLEY');
+    sign.position.set(5.8, 0, -9.6);
+    sign.rotation.y = Math.PI - 0.15;
+    g.add(sign);
+    for (const [x, z] of [[-8, 3], [8, 2]]) {
+      const l = this.makeStoneLantern(0.85, true);
+      l.position.set(x, 0, z);
+      g.add(l);
+    }
+    for (const [x, z, sc] of [[-11, 10, 0.9], [11, -8, 0.85]]) {
+      const t = this.makeTree('maple', sc, this.season.id);
+      t.position.set(x, 0, z);
+      g.add(t);
+    }
+
+    const nodeGroup = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const shard = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.5, 5), new THREE.MeshStandardMaterial({ color: 0xe8e2d2, roughness: 0.6 }));
+      shard.position.set(-0.9 + i * 0.6, 0.25, 0);
+      shard.rotation.z = (i - 1.5) * 0.16;
+      nodeGroup.add(shard);
+    }
+    nodeGroup.position.set(0, 0, 1.5);
+    g.add(nodeGroup);
+    this.addInteraction({ id: 'kiln-gather', label: 'Gather porcelain, lacquer and bronze', kanji: '窯', x: loc.x, z: loc.z + 1.5, y: 2.4, group: nodeGroup, radius: 4.6 });
+  }
+
+  // ————— snow ridge —————
+  buildSnowRidge() {
+    const loc = LOCATIONS.ridge;
+    const g = new THREE.Group();
+    g.position.set(loc.x, 0, loc.z);
+    this.scene.add(g);
+    this.ridgeGroup = g;
+    const snow = new THREE.MeshStandardMaterial({ color: 0xdfe8e9, roughness: 0.92, flatShading: true });
+    const rock = new THREE.MeshStandardMaterial({ color: 0x6f7a7d, roughness: 1, flatShading: true });
+
+    // A broad snowfield covers the pass, so the valley's green grass does not
+    // show through beneath the torii and the beacon. The rim is deliberately
+    // uneven: a perfect white disc reads as a painted mat from a distance.
+    const fieldGeo = new THREE.CircleGeometry(52, 64);
+    fieldGeo.rotateX(-Math.PI / 2);
+    const fieldPos = fieldGeo.attributes.position;
+    for (let i = 0; i < fieldPos.count; i++) {
+      const x = fieldPos.getX(i), z = fieldPos.getZ(i);
+      const r = Math.hypot(x, z);
+      if (r > 1) {
+        const a = Math.atan2(z, x);
+        const wobble = 1 + Math.sin(a * 3 + 0.7) * 0.055 + Math.sin(a * 7 + 2.1) * 0.035 + Math.sin(a * 13 + 4.4) * 0.02;
+        fieldPos.setX(i, x * wobble);
+        fieldPos.setZ(i, z * wobble);
+        fieldPos.setY(i, 0.001 + Math.sin(a * 4) * 0.004 + Math.sin(a * 9) * 0.002);
+      }
+    }
+    fieldGeo.computeVertexNormals();
+    const field = new THREE.Mesh(fieldGeo, new THREE.MeshStandardMaterial({ color: 0xe4ecec, roughness: 0.96, flatShading: true }));
+    field.position.y = 0.006;
+    field.receiveShadow = true;
+    g.add(field);
+
+    // Low drifts across the snowfield break up the flat white and soften the
+    // transition to the grass beyond.
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + 0.3;
+      const rad = 22 + (i % 5) * 5 + Math.random() * 6;
+      const drift = new THREE.Mesh(new THREE.SphereGeometry(3 + Math.random() * 4, 6, 4), snow);
+      drift.position.set(Math.cos(a) * rad, -0.9 + Math.random() * 0.5, Math.sin(a) * rad);
+      drift.scale.set(1.9, 0.28 + Math.random() * 0.16, 1.2);
+      drift.rotation.y = a;
+      drift.receiveShadow = true;
+      g.add(drift);
+    }
+
+    // The far snow ridge hides the edge of the snowfield, so the green valley
+    // floor does not show as a band beneath the horizon. The ground rises just
+    // north of the pass, so these sit close and tall enough to cover that lip.
+    // Basic materials keep the sky's green ground bounce from tinting the snow.
+    const farSnow = new THREE.MeshBasicMaterial({ color: 0xdbe5e7, fog: true });
+    const farRock = new THREE.MeshBasicMaterial({ color: 0x778286, fog: true });
+    for (let i = 0; i < 11; i++) {
+      const a = -Math.PI * (0.12 + 0.76 * (i / 10));
+      const rad = 30 + (i % 4) * 6;
+      const h = 7 + (i % 5) * 2.2;
+      const peak = new THREE.Mesh(new THREE.DodecahedronGeometry(h, 0), i % 5 === 0 ? farRock : farSnow);
+      peak.position.set(Math.cos(a) * rad, h * 0.16, Math.sin(a) * rad);
+      peak.scale.set(1.7, 0.8, 1.15);
+      peak.rotation.y = a;
+      g.add(peak);
+    }
+    for (let i = 0; i < 7; i++) {
+      const a = -Math.PI * (0.18 + 0.64 * (i / 6));
+      const peak = new THREE.Mesh(new THREE.DodecahedronGeometry(12 + (i % 3) * 3, 0), farSnow);
+      peak.position.set(Math.cos(a) * (46 + (i % 2) * 8), 0, Math.sin(a) * (46 + (i % 2) * 8));
+      peak.scale.set(1.9, 0.85, 1.3);
+      peak.rotation.y = a;
+      g.add(peak);
+    }
+    // A central backdrop closes the last gap directly behind the beacon.
+    const backdrop = new THREE.Mesh(new THREE.DodecahedronGeometry(13, 0), farSnow);
+    backdrop.position.set(0, 0, -24);
+    backdrop.scale.set(2.1, 0.9, 1.2);
+    g.add(backdrop);
+
+    // snowy outcrops that frame the pass
+    for (let i = 0; i < 10; i++) {
+      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(2 + Math.random() * 3, 0), i % 3 ? rock : snow);
+      const side = i % 2 ? 1 : -1;
+      r.position.set(side * (9 + Math.random() * 7), 0.8, -8 + Math.random() * 16);
+      r.scale.set(1.1, 0.8 + Math.random() * 0.9, 1.1);
+      r.rotation.set(Math.random(), Math.random(), Math.random());
+      g.add(r);
+      this.addCollider(loc.x + r.position.x, loc.z + r.position.z, 1.9 + (r.geometry?.parameters?.radius || 3) * 0.55);
+      if (i % 2) {
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.8, 5, 4), snow);
+        cap.position.set(r.position.x, 2.4 + Math.random(), r.position.z);
+        cap.scale.set(1.5, 0.4, 1.5);
+        g.add(cap);
+      }
+    }
+    // stone stair
+    for (let i = 0; i < 8; i++) {
+      const step = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.18, 0.9), MAT.stone());
+      step.position.set(0, 0.09 + i * 0.16, 11 - i * 0.95);
+      g.add(step);
+    }
+    const torii = this.makeTorii(1.15, 0xa9362a, '峠');
+    torii.position.set(0, 0, 12.5);
+    g.add(torii);
+    // Beacon: a stone signal fire on the pass. Kept low enough to clear the
+    // HUD and to read as a bonfire rather than a roofed watchtower.
+    const beacon = new THREE.Group();
+    beacon.position.set(0, 0, -8.5);
+    g.add(beacon);
+    this.addCollider(loc.x, loc.z - 8.5, 4.6);
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 4.4, 1.6, 9), rock);
+    plinth.position.y = 0.8;
+    beacon.add(plinth);
+    const plinthCap = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.45, 0.3, 9), snow);
+    plinthCap.position.y = 1.55;
+    beacon.add(plinthCap);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.1, 1.2, 9), MAT.stone());
+    bowl.position.y = 2.2;
+    beacon.add(bowl);
+    for (let i = 0; i < 3; i++) {
+      const band = new THREE.Mesh(new THREE.TorusGeometry(1.5 - i * 0.16, 0.06, 4, 14), MAT.darkWood());
+      band.rotation.x = Math.PI / 2;
+      band.position.y = 2.4 + i * 0.22;
+      beacon.add(band);
+    }
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(1.25, 3.2, 7), new THREE.MeshStandardMaterial({
+      color: 0xffa646, emissive: 0xff7a20, emissiveIntensity: 1.9, transparent: true, opacity: 0.94, flatShading: true,
+    }));
+    flame.position.y = 4.6;
+    beacon.add(flame);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: softParticleTexture('255,170,80'), color: 0xff9a4a, transparent: true, opacity: 0.68,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+    }));
+    glow.scale.set(7.5, 7.5, 1);
+    glow.position.y = 4.7;
+    beacon.add(glow);
+    const beaconLight = new THREE.PointLight(0xff9a4a, 0, 34, 2);
+    beaconLight.position.y = 4.9;
+    beacon.add(beaconLight);
+    this.beaconFlame = flame;
+    this.beaconGlow = glow;
+    this.beaconLight = beaconLight;
+    this.registerCameraBlockers(beacon);
+
+    // prayer flags
+    for (let i = 0; i < 7; i++) {
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.62), new THREE.MeshStandardMaterial({
+        color: [0xd8d2c0, 0xb33a2b, 0x3f6d8a, 0xc9a45c][i % 4], roughness: 1, side: THREE.DoubleSide,
+      }));
+      flag.position.set(-6 + i * 2, 4.3 - Math.sin(i * 0.7) * 0.4, 6.5);
+      flag.rotation.y = 0.2;
+      g.add(flag);
+    }
+    for (const [x, z] of [[-6, 6], [6, 6]]) {
+      const t = this.makeTree('pine', 1.15, this.season.id);
+      t.position.set(x, 0, z);
+      g.add(t);
+      const l = this.makeStoneLantern(0.9, true);
+      l.position.set(x * 0.65, 0, z + 3.5);
+      g.add(l);
+    }
+    for (const [x, z, sc] of [[-13, 1, 0.9], [13, 2, 0.85], [-11, -12, 0.8], [12, -10, 0.95]]) {
+      const t = this.makeTree('pine', sc, this.season.id);
+      t.position.set(x, 0, z);
+      g.add(t);
+    }
+    // Snow-laden pines: keep a frost tint through every season.
+    const frost = new THREE.Color(0xe8f0f1);
+    for (const child of g.children) {
+      if (child.userData?.kind !== 'pine') continue;
+      child.userData.snowy = true;
+      child.userData.leafMeshes?.forEach((m) => m.material.color.lerp(frost, 0.62));
+    }
+    const sign = this.makeSign('雪 峠', 'SNOW RIDGE PASS');
+    sign.position.set(4.5, 0, 9.2);
+    sign.rotation.y = -0.2;
+    g.add(sign);
+
+    this.addInteraction({ id: 'ridge-beacon', label: 'Light the high beacon', kanji: '火', x: loc.x, z: loc.z - 8.5, y: 7.6, radius: 5.2, group: beacon });
+    this.addInteraction({ id: 'ridge-rest', label: 'Listen to the wind above the clouds', kanji: '風', x: loc.x + 6, z: loc.z + 4, y: 2.4, radius: 3.8 });
+    this.setBeacon(!!this.game.state.flags?.ridgeBeacon);
+  }
+
+  setBeacon(lit) {
+    if (this.beaconFlame) this.beaconFlame.visible = !!lit;
+    if (this.beaconGlow) this.beaconGlow.visible = !!lit;
+    if (this.beaconLight) this.beaconLight.intensity = lit ? 2.8 : 0;
+  }
+
   // ————— player & npc —————
   makePerson(type = 'samurai') {
     const g = new THREE.Group();
@@ -2409,12 +2894,12 @@ export class World {
     for (const t of this.treeFoliage) {
       const sp = SPECIES[t.kind];
       if (!sp) continue;
-      const col = sp.leaf[next.id] ?? sp.leaf.summer;
+      const col = t.group.userData.snowy ? 0xdce8e9 : (sp.leaf[next.id] ?? sp.leaf.summer);
       t.group.userData.leafMeshes?.forEach((m) => m.material.color.setHex(col));
     }
     if (this.mountains) {
       this.mountains.children.forEach((m) => {
-        if (m.material.color.getHex() === 0xe9edee) m.visible = next.id === 'winter' || next.id === 'autumn';
+        if (m.userData.snowCap) m.visible = next.id === 'winter' || next.id === 'autumn';
       });
     }
   }
@@ -2545,7 +3030,7 @@ export class World {
     const point = new V3();
     if (ray.ray.intersectPlane(plane, point)) {
       const len = Math.hypot(point.x, point.z);
-      if (len > 182) { point.multiplyScalar(182 / len); }
+      if (len > 240) { point.multiplyScalar(240 / len); }
       this.clickTarget = point;
       this.queued = null;
     }
@@ -2567,6 +3052,11 @@ export class World {
   travelTo(locId) {
     const loc = LOCATIONS[locId];
     if (!loc) return;
+    const access = locationStoryAccess(this.game.state, locId);
+    if (!access.unlocked) {
+      this.game.toast(`This path opens in Chapter ${access.chapter?.numeral || '?'}: ${access.chapter?.title || 'an earlier chapter'}.`, 'warn');
+      return;
+    }
     this.player.position.set(loc.spawn.x, 0, loc.spawn.z);
     this.clickTarget = null;
     this.queued = null;
@@ -2643,8 +3133,10 @@ export class World {
 
     const topDay = new THREE.Color(this.season.id === 'winter' ? 0x7d9ab3 : 0x6f9bbd);
     const botDay = new THREE.Color(this.season.id === 'winter' ? 0xdfe7e6 : this.season.id === 'autumn' ? 0xf1dcb7 : 0xe4e6cf);
-    const topNight = new THREE.Color(0x070d1d);
-    const botNight = new THREE.Color(0x1d2638);
+    // Deep night still has to stay walkable, so keep a moonlit blue floor
+    // instead of letting unlit ground fall to black.
+    const topNight = new THREE.Color(0x0c1630);
+    const botNight = new THREE.Color(0x27334b);
     const topDawn = new THREE.Color(0x495a78);
     const botDawn = new THREE.Color(0xe9a276);
     const topDusk = new THREE.Color(0x3f4264);
@@ -2661,28 +3153,35 @@ export class World {
     const sunDir = new V3(Math.cos(sunAngle) * 0.8, Math.sin(sunAngle), 0.35).normalize();
     this.skyUniforms.sunDir.value.copy(isNightTime ? new V3(-0.4, 0.8, 0.3).normalize() : sunDir);
     this.skyUniforms.sunColor.value.setHex(dawn > 0.4 || dusk > 0.4 ? 0xffb87a : 0xfff2cf);
-    this.skyUniforms.sunStrength.value = 0.15 + dayF * 0.9;
+    this.skyUniforms.sunStrength.value = 0.22 + dayF * 0.85;
 
     // lights
-    const sunInt = 0.15 + dayF * 1.55;
+    const sunInt = 0.26 + dayF * 1.5;
     this.sun.intensity = sunInt;
-    this.sun.color.setHex(night > 0.6 ? 0x8fa8d0 : dusk > 0.4 || dawn > 0.4 ? 0xffc394 : 0xfff2db);
+    this.sun.color.setHex(night > 0.6 ? 0x9db4dc : dusk > 0.4 || dawn > 0.4 ? 0xffc394 : 0xfff2db);
     const lightDir = isNightTime ? new V3(-0.4, 0.8, 0.3).normalize() : sunDir;
     this.sun.position.copy(this.player.position).addScaledVector(lightDir, 120);
     this.sun.target.position.copy(this.player.position);
-    this.hemi.intensity = 0.28 + dayF * 0.62;
-    this.hemi.color.setHex(night > 0.6 ? 0x6a7da0 : 0xcfe0ea);
-    this.hemi.groundColor.setHex(night > 0.6 ? 0x2a2c26 : 0x5a5a42);
-    this.fill.intensity = 0.08 + dayF * 0.18;
+    this.hemi.intensity = 0.44 + dayF * 0.5;
+    this.hemi.color.setHex(night > 0.6 ? 0x8fa4c8 : 0xcfe0ea);
+    this.hemi.groundColor.setHex(night > 0.6 ? 0x3a3b34 : 0x5a5a42);
+    this.fill.intensity = 0.14 + dayF * 0.16;
+    // Unlit mountain silhouettes must follow the light, or they stay
+    // day-bright in the middle of the night.
+    if (this.mountainRockMat) {
+      this.mountainRockMat.color.copy(this.mountainRockNight).lerp(this.mountainRockDay, dayF);
+      this.mountainSnowMat.color.copy(this.mountainSnowNight).lerp(this.mountainSnowDay, dayF);
+    }
+    this.renderer.toneMappingExposure = 1.03 + night * 0.26;
 
     // fog & ambient
     const fog = new THREE.Color(0xd2dbce);
-    const nightFog = new THREE.Color(0x101722);
+    const nightFog = new THREE.Color(0x1a2432);
     fog.lerpColors(nightFog, fog, dayF);
     fog.lerp(new THREE.Color(0xd9a27a), Math.max(dawn, dusk) * 0.35);
     this.scene.fog.color.copy(fog);
-    this.scene.fog.near = 55 + dayF * 30;
-    this.scene.fog.far = 250 + dayF * 70;
+    this.scene.fog.near = 55 + dayF * 35;
+    this.scene.fog.far = 265 + dayF * 120;
 
     // sun/moon visual
     this.sunMesh.position.copy(this.player.position).addScaledVector(sunDir, 430);
@@ -2835,7 +3334,10 @@ export class World {
       const d = this.clickTarget.clone().sub(this.player.position);
       d.y = 0;
       const dist = d.length();
-      if (dist < 0.35) {
+      // Stop at the interaction's reach instead of at the object's centre, so
+      // click-to-walk does not carry the player inside a beacon or a shrine box.
+      const reach = this.queued ? this.queued.radius + 1.2 : 0.35;
+      if (dist <= Math.max(0.35, reach)) {
         this.clickTarget = null;
         if (this.queued) {
           const q = this.queued; this.queued = null;
@@ -2851,7 +3353,8 @@ export class World {
       const speed = 9;
       this.player.position.addScaledVector(dir, speed * dt);
       const r = Math.hypot(this.player.position.x, this.player.position.z);
-      if (r > 184) { this.player.position.x *= 184 / r; this.player.position.z *= 184 / r; }
+      // The walkable area must reach Snow Ridge Pass at z = -220.
+      if (r > 242) { this.player.position.x *= 242 / r; this.player.position.z *= 242 / r; }
       const targetAngle = Math.atan2(dir.x, dir.z);
       let diff = targetAngle - this.player.rotation.y;
       while (diff > Math.PI) diff -= Math.PI * 2;
@@ -2932,6 +3435,12 @@ export class World {
     this.state = this.game.state;
     this.setSeason();
     this.setTime(dt);
+    if (this.beaconFlame?.visible) {
+      const t = this.time;
+      this.beaconFlame.scale.set(1 + Math.sin(t * 7) * 0.05, 1 + Math.sin(t * 11) * 0.08, 1 + Math.cos(t * 6) * 0.05);
+      if (this.beaconGlow) this.beaconGlow.material.opacity = 0.55 + Math.sin(t * 5) * 0.1;
+      if (this.beaconLight) this.beaconLight.intensity = 2.5 + Math.sin(t * 8) * 0.4;
+    }
     this.updatePlayer(dt);
     this.updateCamera(dt);
     this.updateNPCs(dt);

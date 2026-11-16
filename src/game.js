@@ -6,6 +6,7 @@ import {
   SPECIES, POTS, MATERIALS, WEAPON_TYPES, BLUEPRINTS, DECOR, UPGRADES, HIRES, QUESTS,
   SEASONS, WEATHERS, RANKS, rankFor, nextRank, seasonOf, seasonIndex, isNight, treeValue,
   isMasterpiece, treeQuality, weaponValue, clamp, fmt, money, newId, craftName,
+  STORY_CHAPTERS, MISSIONS, missionProgress,
 } from './data.js';
 import { generateCommission, commissionMatches, itemLabel, itemQuality, itemCategory, itemSupernatural, settleAuction } from './auction.js';
 
@@ -43,6 +44,7 @@ export class Game {
     this.world.rebuildDecor();
     this.world.rebuildBonsai();
     this.world.rebuildWeaponRack();
+    this.checkStory();
   }
 
   _ensure() {
@@ -66,8 +68,16 @@ export class Game {
     s.stats = {
       watered: 0, shaped: 0, crafted: 0, sold: 0, seedsBought: 0, oniVisits: 0, upgraded: 0,
       totalEarned: 0, masterpieceSold: 0, legendaryCrafted: 0, auctions: 0, commissionsDone: 0,
-      planted: 0, gathered: 0, ...s.stats,
+      planted: 0, gathered: 0, shrineOfferings: 0, oniBuys: 0, ornaments: 0, heirloomMarked: 0,
+      ridgeBeacons: 0, bellRings: 0, ...s.stats,
     };
+    if (!s.story || typeof s.story !== 'object') s.story = {};
+    if (!Array.isArray(s.story.done)) s.story.done = [];
+    if (!Array.isArray(s.story.chaptersDone)) s.story.chaptersDone = [];
+    if (!Array.isArray(s.story.seen)) s.story.seen = [];
+    s.story.chapter = clamp(Number(s.story.chapter) || 0, 0, STORY_CHAPTERS.length);
+    s.story.lastDone = s.story.lastDone || null;
+    s.story.lastCompleted = s.story.lastCompleted || null;
     s.settings = s.settings || { sound: true, music: true };
     s.auction = s.auction || { lastDay: 0, count: 0, special: false };
   }
@@ -170,6 +180,12 @@ export class Game {
         this.log(`${t.name} grew a season older.`);
       }
     }
+    // A masterpiece can emerge through ordinary care and simulation, so don't
+    // make its story mission wait for an unrelated action or a new day.
+    const masterpieceMission = 'm_masterpiece';
+    if (s.story?.chapter === STORY_CHAPTERS.length - 1 && !s.story.done.includes(masterpieceMission) && s.trees.some(isMasterpiece)) {
+      this.checkQuests();
+    }
     // assistants quietly keep the workshop warm
     if (s.weather === 'storm') s.weaponWeather = true;
   }
@@ -256,7 +272,11 @@ export class Game {
       this.advanceTime(2, { save: true });
       this.toast('The roar of the falls washes your thoughts clean. Focus restored.', 'good');
       this.sfx('water');
+    } else if (kind === 'ridge') {
+      this.advanceTime(2, { save: true });
+      this.toast('You listen to the wind above the clouds. Focus restored.', 'good');
     } else if (kind === 'bell') {
+      this.state.stats.bellRings = (this.state.stats.bellRings || 0) + 1;
       this.advanceTime(3, { save: true });
       this.toast('The bell fades into the valley. Your hands feel steady again.', 'good');
       this.audio?.bell(220, this.audio.ctx?.currentTime || 0, 0.05);
@@ -339,6 +359,7 @@ export class Game {
       this.sfx('success');
     } else if (action === 'heirloom') {
       t.heirloom = !t.heirloom;
+      if (t.heirloom) this.state.stats.heirloomMarked = (this.state.stats.heirloomMarked || 0) + 1;
       this.toast(t.heirloom ? `${t.name} is now a family heirloom, displayed with honour.` : `${t.name} may be sold again.`, 'good');
       this.world?.rebuildBonsai();
     } else if (action === 'rename') {
@@ -444,6 +465,7 @@ export class Game {
     });
     s.weapons.push(w);
     s.stats.crafted++;
+    if (typeId === 'ornament') s.stats.ornaments++;
     if (legendary) s.stats.legendaryCrafted++;
     this.addMoney(-(decoration ? 350 : 0));
     this.addRep(Math.max(2, Math.round(quality / 14)));
@@ -464,6 +486,7 @@ export class Game {
     if (!this.useFocus(9)) return null;
     s.gathered[node] = s.day;
     s.stats.gathered++;
+    s.stats[`gathered_${node}`] = (s.stats[`gathered_${node}`] || 0) + 1;
     const got = [];
     const give = (kind, key, n) => {
       if (kind === 'seed') s.seeds[key] = (s.seeds[key] || 0) + n;
@@ -499,7 +522,7 @@ export class Game {
       if (Math.random() < 0.25) give('mat', 'keyaki', 1);
       this.sfx('hammer');
     } else if (node === 'quarry') {
-      give('mat', 'silver', 1 + Math.floor(Math.random() * 2));
+      give('mat', 'silver', 2 + Math.floor(Math.random() * 2));
       if (Math.random() < 0.35) give('mat', 'keyaki', 1);
       if (Math.random() < 0.14) give('mat', 'meteor', 1);
       if (Math.random() < 0.2) give('mat', 'jade', 1);
@@ -534,6 +557,7 @@ export class Game {
     const s = this.state;
     if (s.money < 150) { this.toast('The fox statues want a coin. An offering of 150 ryō would do.', 'warn'); return false; }
     this.addMoney(-150);
+    s.stats.shrineOfferings++;
     const roll = Math.random();
     if (roll < 0.3) {
       this.focus(999);
@@ -559,6 +583,28 @@ export class Game {
     return true;
   }
 
+  lightBeacon() {
+    const s = this.state;
+    if (s.flags.beaconDay === s.day) {
+      this.toast('The beacon already burns. Let it be a signal, not a bonfire.', 'warn');
+      return false;
+    }
+    if (!this.useFocus(10)) return false;
+    s.flags.beaconDay = s.day;
+    s.flags.ridgeBeacon = true;
+    s.stats.ridgeBeacons = (s.stats.ridgeBeacons || 0) + 1;
+    this.focus(999);
+    this.world?.setBeacon?.(true);
+    this.addRep(4);
+    this.toast('The beacon catches. Fire climbs the stone bowl and the valley turns its face upward.', 'good');
+    this.sfx('success');
+    this.log('Lit the high beacon on Snow Ridge Pass.');
+    this.checkQuests();
+    this.saveGame();
+    this.ui?.refreshHUD();
+    return true;
+  }
+
   worldAction(id) {
     const s = this.state;
     switch (id) {
@@ -578,6 +624,9 @@ export class Game {
       case 'bamboo-gather': this.gatherNode('bamboo'); break;
       case 'mine-gather': this.gatherNode('mine'); break;
       case 'quarry-gather': this.gatherNode('quarry'); break;
+      case 'kiln-gather': this.gatherNode('kiln'); break;
+      case 'ridge-beacon': this.lightBeacon(); break;
+      case 'ridge-rest': this.restAt('ridge'); break;
       case 'shrine-offer': this.foxOffering(); break;
       case 'shrine-rest': this.restAt('cherry'); break;
       case 'oni-gate':
@@ -857,6 +906,7 @@ export class Game {
       const t = createTree(entry.key, { age: 7, style: 58, pot: 3, health: 90, water: 70 });
       s.trees.push(t);
     }
+    s.stats.oniBuys = (s.stats.oniBuys || 0) + 1;
     this.addRep(5);
     this.toast(`The Oni accept your coin. ${entry.name} is yours.`, 'good');
     this.sfx('oni');
@@ -923,6 +973,60 @@ export class Game {
     }
   }
 
+  // ————— story missions —————
+  currentStoryChapter() {
+    return STORY_CHAPTERS[this.state.story?.chapter || 0] || null;
+  }
+
+  checkStory() {
+    const s = this.state;
+    if (!s.story) return false;
+    let changed = false;
+    let guard = 0;
+    while (guard++ < STORY_CHAPTERS.length + 2) {
+      const chapter = STORY_CHAPTERS[s.story.chapter];
+      if (!chapter) break;
+      let chapterComplete = true;
+      for (const id of chapter.missions) {
+        if (s.story.done.includes(id)) continue;
+        const mission = MISSIONS.find((m) => m.id === id);
+        if (!mission) { s.story.done.push(id); continue; }
+        const progress = missionProgress(mission, s, s.story);
+        if (!progress.done) { chapterComplete = false; continue; }
+        s.story.done.push(id);
+        s.story.lastDone = id;
+        if (mission.reward) s.money += mission.reward;
+        if (mission.rep) s.rep += mission.rep;
+        for (const [key, qty] of Object.entries(mission.items || {})) {
+          s.materials[key] = (s.materials[key] || 0) + qty;
+        }
+        this.log(`Mission complete: ${mission.title}`);
+        this.toast(`Mission complete — ${mission.title}. +${money(mission.reward || 0)}${mission.rep ? ` · +${mission.rep} rep` : ''}`, 'good');
+        this.sfx('success');
+        changed = true;
+      }
+      if (!chapterComplete) break;
+      if (!s.story.chaptersDone.includes(chapter.id)) {
+        s.story.chaptersDone.push(chapter.id);
+        s.story.lastCompleted = chapter.id;
+        if (chapter.reward) s.money += chapter.reward;
+        if (chapter.rep) s.rep += chapter.rep;
+        this.log(`Chapter complete: ${chapter.title} — ${chapter.outro || ''}`);
+        this.toast(`Chapter ${chapter.numeral} complete — ${chapter.title}. +${money(chapter.reward || 0)}`, 'good');
+        this.sfx('success');
+        changed = true;
+      }
+      s.story.chapter = Math.min(STORY_CHAPTERS.length, s.story.chapter + 1);
+      if (s.story.chapter >= STORY_CHAPTERS.length) break;
+    }
+    if (changed) {
+      this.checkRank();
+      this.ui?.refreshHUD();
+      this.saveGame();
+    }
+    return changed;
+  }
+
   // ————— quests —————
   checkQuests() {
     const s = this.state;
@@ -951,6 +1055,7 @@ export class Game {
         this.sfx('success');
       }
     }
+    this.checkStory();
   }
 
   // ————— offline/state persistence —————
