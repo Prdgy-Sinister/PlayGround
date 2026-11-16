@@ -154,7 +154,7 @@ export class World {
     this.cameraBlockers = [];
     this.camRay = new THREE.Raycaster();
     this.camRay.near = 0.2;
-    this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 220);
+    this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 130);
     this.player = null;
     this.walkTime = 0;
     this.clickTarget = null;
@@ -170,15 +170,17 @@ export class World {
     this.season = SEASONS[0];
     this.state = game.state;
 
+    this.lowQuality = false;
+    this.targetPixelRatio = 1;
     this.renderer = this.createRenderer(canvas);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.coarsePointer ? 1 : 1.25));
+    this.renderer.setPixelRatio(1);
     this.renderer.setSize(window.innerWidth || 1, window.innerHeight || 1, false);
-    this.renderer.shadowMap.enabled = !this.coarsePointer;
+    this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = THREE.BasicShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.03;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.scene.fog = new THREE.Fog(0xc7d0c2, 60, 180);
+    this.scene.fog = new THREE.Fog(0xc7d0c2, 35, 95);
 
     this.buildEnvironment();
     this.buildLights();
@@ -205,6 +207,7 @@ export class World {
     this.setSeason(true);
     this.setTime(0);
     this.snapCamera();
+    this.applyQuality(true);
   }
 
   createRenderer(canvas) {
@@ -239,8 +242,8 @@ export class World {
     const tex = new THREE.CanvasTexture(envCanvas);
     tex.mapping = THREE.EquirectangularReflectionMapping;
     tex.colorSpace = THREE.SRGBColorSpace;
-    this.scene.environment = tex;
-    this.scene.environmentIntensity = 0.55;
+    // this.scene.environment = tex;
+    this.scene.environmentIntensity = 0;
 
     this.skyUniforms = {
       topColor: { value: new THREE.Color(0x7ea0bb) },
@@ -249,7 +252,7 @@ export class World {
       sunColor: { value: new THREE.Color(0xffd9a0) },
       sunStrength: { value: 1 },
     };
-    const skyGeo = new THREE.SphereGeometry(600, 16, 8);
+    const skyGeo = new THREE.SphereGeometry(600, 8, 4);
     const skyMat = new THREE.ShaderMaterial({
       uniforms: this.skyUniforms,
       side: THREE.BackSide, depthWrite: false, fog: false,
@@ -286,7 +289,7 @@ export class World {
 
     // stars
     const starPos = [];
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0; i < 200; i++) {
       const a = Math.random() * Math.PI * 2;
       const y = 0.12 + Math.random() * 0.85;
       const r = Math.sqrt(1 - y * y);
@@ -312,7 +315,7 @@ export class World {
     // clouds
     this.clouds = new THREE.Group();
     const cloudTex = softParticleTexture('255,255,255');
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 5; i++) {
       const g2 = new THREE.Group();
       const n = 3 + Math.floor(Math.random() * 3);
       for (let j = 0; j < n; j++) {
@@ -334,10 +337,10 @@ export class World {
     this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffe9c8, 1.6);
     this.sun.position.set(60, 100, 40);
-    this.sun.castShadow = !this.coarsePointer;
+    this.sun.castShadow = false;
     this.sun.shadow.mapSize.set(512, 512);
     this.sun.shadow.camera.near = 1;
-    this.sun.shadow.camera.far = 180;
+    this.sun.shadow.camera.far = 100;
     this.sun.shadow.camera.left = -55;
     this.sun.shadow.camera.right = 55;
     this.sun.shadow.camera.top = 55;
@@ -353,7 +356,7 @@ export class World {
   }
 
   buildGround() {
-    const geo = new THREE.PlaneGeometry(520, 520, 40, 40);
+    const geo = new THREE.PlaneGeometry(520, 520, 20, 20);
     geo.rotateX(-Math.PI / 2);
     const colors = [];
     const pos = geo.attributes.position;
@@ -1886,7 +1889,7 @@ export class World {
     pool.position.set(0, 0.05, -10);
     g.add(pool);
     // foam
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 5; i++) {
       const foam = new THREE.Mesh(new THREE.CircleGeometry(0.4 + Math.random() * 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xd6ebe9, transparent: true, opacity: 0.25, depthWrite: false }));
       foam.rotation.x = -Math.PI / 2;
       foam.position.set((Math.random() - 0.5) * 7, 0.08, -16 + Math.random() * 4);
@@ -1999,7 +2002,7 @@ export class World {
       rail.position.set(6, 0.1, z);
       rails.add(rail);
     }
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 5; i++) {
       const tie = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, 1.6), MAT.darkWood());
       tie.position.set(1 + i, 0.05, 0);
       rails.add(tie);
@@ -2334,7 +2337,7 @@ export class World {
 
   // ————— ambient particles, smoke, weather —————
   buildAmbientParticles() {
-    const count = 120;
+    const count = 40;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     this.particleData = [];
@@ -2352,11 +2355,11 @@ export class World {
       depthWrite: false, sizeAttenuation: true, blending: THREE.NormalBlending,
     });
     this.ambientParticles = new THREE.Points(geo, this.particleMat);
-    this.ambientParticles.frustumCulled = false;
+    this.ambientParticles.frustumCulled = true;
     this.scene.add(this.ambientParticles);
 
     // fireflies
-    const fCount = 28;
+    const fCount = 12;
     const fPos = new Float32Array(fCount * 3);
     this.fireflyData = [];
     for (let i = 0; i < fCount; i++) {
@@ -2368,11 +2371,11 @@ export class World {
     fGeo.setAttribute('position', new THREE.BufferAttribute(fPos, 3));
     this.fireflyMat = new THREE.PointsMaterial({ map: softParticleTexture('255,235,150'), size: 0.55, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe28a });
     this.fireflies = new THREE.Points(fGeo, this.fireflyMat);
-    this.fireflies.frustumCulled = false;
+    this.fireflies.frustumCulled = true;
     this.scene.add(this.fireflies);
 
     // smoke
-    const sCount = 24;
+    const sCount = 8;
     const sPos = new Float32Array(sCount * 3);
     this.smokeData = [];
     for (let i = 0; i < sCount; i++) {
@@ -2383,7 +2386,7 @@ export class World {
     sGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
     this.smokeMat = new THREE.PointsMaterial({ map: softParticleTexture('230,225,215'), size: 1.2, transparent: true, opacity: 0.22, depthWrite: false, color: 0xd8d2c4 });
     this.smoke = new THREE.Points(sGeo, this.smokeMat);
-    this.smoke.frustumCulled = false;
+    this.smoke.frustumCulled = true;
     this.scene.add(this.smoke);
   }
 
@@ -2592,6 +2595,20 @@ export class World {
     return desired;
   }
 
+  applyQuality(low) {
+    this.lowQuality = !!low;
+    const showFx = !low;
+    if (this.ambientParticles) this.ambientParticles.visible = showFx;
+    if (this.fireflies) this.fireflies.visible = showFx;
+    if (this.smoke) this.smoke.visible = showFx;
+    if (this.clouds) this.clouds.visible = showFx;
+    if (this.stars) this.stars.visible = showFx;
+    const ratio = low ? 0.6 : 1;
+    this.targetPixelRatio = ratio;
+    this.renderer.setPixelRatio(ratio);
+    this.resize();
+  }
+
   snapCamera() {
     const target = new V3(this.player.position.x, 2.0, this.player.position.z);
     this.camTarget.copy(target);
@@ -2610,8 +2627,8 @@ export class World {
     const w = window.innerWidth, h = window.innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.renderer.setPixelRatio(this.targetPixelRatio || 1);
     this.renderer.setSize(w, h, false);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   }
 
   // ————— update —————

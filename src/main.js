@@ -175,6 +175,8 @@ let frames = 0;
 let loopFailures = 0;
 let firstFrameAt = 0;
 let warnedSlow = false;
+let frameTimes = [];
+let qualityDecided = false;
 
 function step(label, fn) {
   try {
@@ -203,6 +205,7 @@ function loop(now) {
   step('ui', () => ui.tick(dt));
   step('render', () => {
     if (world.contextLost) return;
+    if (world.lowQuality && (frames % 2 !== 0)) return;
     world.render();
     if (!firstFrameAt) {
       firstFrameAt = now;
@@ -210,6 +213,18 @@ function loop(now) {
     }
   });
   frames++;
+
+  // Start in low quality; upgrade to high only if the device is fast enough.
+  if (!qualityDecided && world && !world.lite) {
+    if (frames > 30 && frameTimes.length < 60) {
+      frameTimes.push(dt);
+    }
+    if (frameTimes.length >= 60) {
+      const avg = frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length;
+      try { world.applyQuality(avg > 0.02); } catch (e) { record('quality', e); }
+      qualityDecided = true;
+    }
+  }
 
   // If nothing has drawn after a few seconds, say so rather than showing a blank screen.
   if (!warnedSlow && frames > 30 && !firstFrameAt) {
