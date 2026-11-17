@@ -606,7 +606,7 @@ export function albumDetailScreen(albumId) {
             const items = itemsOfCard(card.id);
             if (!items.length) return `<div data-open-card="${esc(card.id)}">${slotHTML(card)}</div>`;
             const best = [...items].sort((a, b) => FINISH_ORDER.indexOf(b.finish) - FINISH_ORDER.indexOf(a.finish))[0];
-            return cardHTML(card, { finish: best.finish, serial: best.serial, count: items.length, itemUid: best.uid });
+            return cardHTML(card, { finish: best.finish, serial: best.serial, count: items.length, itemUid: best.uid, grading: best.grading });
           }).join('')}
         </div>
       </section>`;

@@ -9,7 +9,7 @@ import { cardArt, flagSVG, rgba } from './art.js';
 import { sfx } from './audio.js';
 import {
   marketValue, itemMarketValue, priceInfo, gradeMultiplier, gradeLabel, gradeTone,
-  GRADING_SERVICES, gradeForecast, marketIndex, topMovers, priceHistory,
+  GRADING_SERVICES, gradeForecast, gradingProfile, marketIndex, topMovers, priceHistory,
 } from './pricing.js';
 
 export const fmt = formatNumber;
@@ -145,6 +145,16 @@ export function refreshLivePrices(root = document) {
 /* ------------------------------------------------------------
    CARD
    ------------------------------------------------------------ */
+export function slabHTML(grading) {
+  if (!grading) return '';
+  const profile = gradingProfile(grading.kind || 'card');
+  const label = grading.caseLabel || profile.caseLabel;
+  return `<div class="card-slab" aria-label="${esc(label)} ${grading.score} — ${esc(grading.summary || grading.reason || '')}" role="img">
+    <span class="slab-brand">APEX <i>${esc(profile.case === 'slab' ? 'CERTIFIED' : 'ARCHIVE')}</i></span>
+    <span class="slab-cert">${esc(grading.cert || '')}</span>
+  </div>`;
+}
+
 export function cardHTML(card, opts = {}) {
   if (!card) return '';
   const finish = opts.finish || 'base';
@@ -174,7 +184,7 @@ export function cardHTML(card, opts = {}) {
       <div class="card-foil"></div>
       <div class="card-shine"></div>
       <div class="card-frame"></div>
-      ${gradeHTML}${editionRibbon}${serialHTML}${championship}${signature}
+      ${slabHTML(grading)}${gradeHTML}${editionRibbon}${serialHTML}${championship}${signature}
       <div class="card-top">
         <div class="ovr"><b>${card.overall}</b><i>OVR</i></div>
         <div class="card-tags">
@@ -213,7 +223,7 @@ export function slotHTML(card) {
 
 export function cardCellForGroup(group, mode = 'vault') {
   const bestItem = group.items.find(i => i.finish === group.best) || group.items[0];
-  return cardHTML(group.card, { finish: group.best, serial: bestItem?.serial, count: group.count, itemUid: bestItem?.uid, isNew: false, locked: mode === 'all' && !group.count });
+  return cardHTML(group.card, { finish: group.best, serial: bestItem?.serial, count: group.count, itemUid: bestItem?.uid, grading: bestItem?.grading, isNew: false, locked: mode === 'all' && !group.count });
 }
 
 /* ------------------------------------------------------------
@@ -456,15 +466,22 @@ export function openCardDetail(card, items, opts = {}) {
     ? `<div class="dc-owned"><span>In your vault</span><b>${items.length} ${items.length === 1 ? 'copy' : 'copies'}${best && best.finish !== 'base' ? ' · ' + esc(finishName(best.finish)) : ''}${grading ? ' · slabbed' : ''}</b></div>`
     : `<div class="dc-owned"><span>Not collected yet</span><b>Find it in packs</b></div>`;
   const forecast = gradeForecast(card, finish);
-  const subgrid = grading?.subgrades ? `<div class="gp-subs">${Object.entries(grading.subgrades).map(([k, v]) => `<div class="gp-sub"><span>${esc(k)}</span><b>${v.toFixed(1)}</b><i style="width:${v * 10}%"></i></div>`).join('')}</div>` : '';
+  const subLabels = {centering:'Centering', corners:'Corners', edges:'Edges', surface:'Surface'};
+  const subgrid = grading?.subgrades ? `<div class="gp-subs">${Object.entries(grading.subgrades).map(([k, v]) => `<div class="gp-sub"><span>${esc(subLabels[k] || k)}</span><b>${v.toFixed(1)}</b><i style="width:${v * 10}%"></i></div>`).join('')}</div>` : '';
+  const gradeReport = grading ? `<div class="gp-report">
+      <div class="gpr-head"><span>Condition report</span><b>${esc(grading.summary || 'Clean report')}</b></div>
+      <p class="gpr-reason">${esc(grading.reason || '')}</p>
+      ${grading.notes?.length ? `<ul class="gpr-notes">${grading.notes.map(n => `<li><i>${esc(n.label)} ${Number(n.score).toFixed(1)}</i><span>${esc(n.text)}</span></li>`).join('')}</ul>` : `<p class="gpr-clean">No deducted condition notes on this slab.</p>`}
+    </div>` : '';
   const gradePanel = selected ? (grading ? `<div class="grade-panel graded" style="--gc:${gradeTone(grading.score)}">
       <div class="gp-head">
         <div class="gp-score"><b>${grading.score}</b><span>/10</span></div>
-        <div class="gp-title"><small>${esc(grading.company || 'APEX')} CERTIFIED · ${esc(grading.cert)}</small><strong>${esc(grading.label)}</strong><em>Graded slab</em></div>
+        <div class="gp-title"><small>${esc(grading.company || 'APEX')} CERTIFIED · ${esc(grading.cert)}</small><strong>${esc(grading.label)}</strong><em>${esc(grading.caseLabel || 'APEX SLAB')}</em></div>
         <div class="gp-value">${livePriceHTML(card, finish, { grading })}</div>
       </div>
       ${subgrid}
-      <p class="gp-note">Sealed slab. Grade multiplier ×${gradeMultiplier(grading.score).toFixed(2)} applies to every sale and trade. Grading is permanent.</p>
+      ${gradeReport}
+      <p class="gp-note">Sealed in a tamper-evident slab. Grade multiplier ×${gradeMultiplier(grading.score).toFixed(2)} applies to every sale and trade. Grading is permanent.</p>
     </div>` : `<div class="grade-panel">
       <div class="gp-head">
         <div class="gp-title"><small>APEX GRADING LAB</small><strong>Raw card</strong><em>Not graded</em></div>
@@ -474,7 +491,7 @@ export function openCardDetail(card, items, opts = {}) {
         ${forecast.rows.map(r => `<span><b>${r.score}</b>${esc(r.label)}<em>◈ ${fmt(r.value)}</em></span>`).join('')}
       </div>
       <div class="gp-services">
-        ${GRADING_SERVICES.map(svc => `<button class="grade-service" data-grade-item="${esc(selected.uid)}" data-grade-service="${esc(svc.id)}" data-grade-card="${esc(card.id)}">
+        ${GRADING_SERVICES.map(svc => `<button class="grade-service" data-grade-item="${esc(selected.uid)}" data-grade-service="${esc(svc.id)}" data-grade-card="${esc(card.id)}" data-grade-kind="card">
           <span class="gs-company">${esc(svc.company)} · ${esc(svc.name)}</span>
           <b>${svc.currency === 'gems' ? '◆' : '◈'} ${fmt(svc.cost)}</b>
           <em>${esc(svc.desc)}</em>
