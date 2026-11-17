@@ -10,7 +10,11 @@ import {
   F1_EXTRA_TEAMS, F1_EXTRA_CARS, F1_EXTRA_MOMENTS,
   MOTOGP_EXTRA_TEAMS, MOTOGP_EXTRA_BIKES, MOTOGP_EXTRA_MOMENTS,
 } from './legends-machines.js';
-import { kitFor, RARITY, COUNTRIES, ERA_ORDER, SPORTS, TYPE_META, ATTR_LABELS } from './core.js';
+import {
+  kitFor, RARITY, COUNTRIES, ERA_ORDER, SPORTS, TYPE_META, ATTR_LABELS,
+  AUTOGRAPH_EDITIONS, NUMBERED_CAPS,
+} from './core.js';
+import { EXCLUSIVE_SPECS, AUTOGRAPH_SPECS } from './exclusives.js';
 
 let uid = 0;
 
@@ -77,7 +81,7 @@ function normalise(raw, sport, type) {
   };
 }
 
-export const CARDS = [
+export const BASE_CARDS = [
   ...F1_DRIVERS.map(r => normalise(r, 'f1', 'driver')),
   ...F1_EXTRA_DRIVERS.map(r => normalise(r, 'f1', 'driver')),
   ...F1_TEAMS.map(r => normalise(r, 'f1', 'team')),
@@ -97,15 +101,57 @@ export const CARDS = [
   ...CROSSOVER_CARDS.map(r => normalise(r, 'crossover', r.type || 'moment')),
 ];
 
+const BASE_MAP = Object.fromEntries(BASE_CARDS.map(c => [c.id, c]));
+
+/* Supply-capped variants share the base card's procedural artwork, but add
+   their own edition frame, serial run, copy and collector value. */
+function makeVariant(base, spec) {
+  if (!base) return null;
+  const rarity = spec.rarity || base.rarity;
+  const editionMeta = spec.editionId ? AUTOGRAPH_EDITIONS.find(e => e.id === spec.editionId) : null;
+  const autograph = !!spec.autograph;
+  const card = {
+    ...base,
+    id: spec.id,
+    key: `${base.sport}:${spec.id}`,
+    rarity,
+    rarityMeta: RARITY[rarity],
+    overall: spec.overall ?? base.overall,
+    exclusive: !autograph,
+    autograph,
+    exclusiveTo: spec.exclusiveTo || [],
+    supply: spec.supply ?? null,
+    edition: spec.edition || null,
+    editionId: spec.editionId || null,
+    editionMeta,
+    finish: spec.finish || null,
+    tagline: spec.tagline || base.tagline,
+    bio: spec.bio || base.bio,
+    signature: base.signature || base.name,
+    searchable: `${base.name} ${base.team || ''} ${base.country} ${base.era} ${spec.edition || ''} ${autograph ? 'autograph signed signature' : 'exclusive limited numbered'}`.toLowerCase(),
+  };
+  if (autograph) {
+    card.autographNote = spec.note || '';
+    card.serialMax = spec.supply;
+  }
+  return card;
+}
+
+export const EXCLUSIVE_CARDS = EXCLUSIVE_SPECS.map(s => makeVariant(BASE_MAP[s.base], s)).filter(Boolean);
+export const AUTOGRAPH_CARDS = AUTOGRAPH_SPECS.map(s => makeVariant(BASE_MAP[s.base], s)).filter(Boolean);
+
+export const CARDS = [...BASE_CARDS, ...EXCLUSIVE_CARDS, ...AUTOGRAPH_CARDS];
 export const CARD_MAP = Object.fromEntries(CARDS.map(c => [c.id, c]));
 export const CARD_COUNT = CARDS.length;
+export const EXCLUSIVE_MAP = Object.fromEntries(EXCLUSIVE_CARDS.map(c => [c.id, c]));
+export const AUTOGRAPH_MAP = Object.fromEntries(AUTOGRAPH_CARDS.map(c => [c.id, c]));
 
 chartRarity();
 function chartRarity() {
   const counts = {};
   for (const c of CARDS) counts[c.rarity] = (counts[c.rarity] || 0) + 1;
   // eslint-disable-next-line no-console
-  console.info(`[APEX RUSH] ${CARDS.length} cards`, counts);
+  console.info(`[APEX RUSH] ${CARDS.length} cards`, counts, `${EXCLUSIVE_CARDS.length} exclusives`, `${AUTOGRAPH_CARDS.length} autographs`);
 }
 
 export const ERA_META = {
@@ -142,18 +188,20 @@ const ALBUM_DEFS = [
 
 export const ALBUMS = ALBUM_DEFS.map(a => {
   let cards;
-  if (a.types) cards = CARDS.filter(c => c.sport === a.sport && a.types.includes(c.type));
-  else if (a.era) cards = CARDS.filter(c => c.sport === a.sport && c.era === a.era);
-  else cards = CARDS.filter(c => c.sport === a.sport);
+  const albumPool = CARDS.filter(c => !c.exclusive && !c.autograph);
+  if (a.types) cards = albumPool.filter(c => c.sport === a.sport && a.types.includes(c.type));
+  else if (a.era) cards = albumPool.filter(c => c.sport === a.sport && c.era === a.era);
+  else cards = albumPool.filter(c => c.sport === a.sport);
   const numericEra = a.era ? parseInt(a.era) : 2020;
   const coins = Math.round(cards.length * 210 / 50) * 50;
   const gems = Math.max(30, Math.round(cards.length * 4.5));
+  const tokens = cards.length >= 30 ? 35 : cards.length >= 20 ? 20 : 10;
   return {
     ...a,
     numericEra,
     cardIds: cards.map(c => c.id),
     count: cards.length,
-    reward: {coins, gems},
+    reward: {coins, gems, tokens},
     accent: a.era ? ERA_META[a.era].accent : a.sport === 'motogp' ? '#22d3ee' : a.sport === 'crossover' ? '#f6c453' : '#ff5f6d',
     accent2: a.era ? ERA_META[a.era].accent2 : a.sport === 'motogp' ? '#062b33' : a.sport === 'crossover' ? '#3a2a07' : '#3a0a0c',
     years: a.era ? ERA_META[a.era].years : 'All Eras',
@@ -189,7 +237,13 @@ export const FEATURED_CARDS = FEATURED_IDS.map(id => CARD_MAP[id]).filter(Boolea
 
 export function cardValue(card, finish) {
   const base = RARITY[card.rarity]?.sell || 40;
-  const mult = {base:1, holo:2.2, gold:3.1, signature:5.5, championship:4.2, anniversary:3.4, numbered:6.5, shadow:2.8}[finish || 'base'] || 1;
+  const mult = {
+    base:1, holo:2.2, gold:3.1, signature:5.5, championship:4.2, anniversary:3.4,
+    numbered:6.5, shadow:2.8, legends:9, golden:10, signedpack:14, champ:8, hof:16,
+    vault:15, goldsig:30, platinum:60, champsig:100, dual:160, oneofone:500,
+  }[finish || card.finish || 'base'] || 1;
+  // The finish multiplier is the single source of premium value — the
+  // edition table above already prices each capped run correctly.
   return Math.round(base * mult);
 }
 

@@ -8,7 +8,7 @@ import {
   duplicateGroups, claimChallenge, setFavorite, sellItem, sellAllDuplicates,
   sellAllCommons, exportSave, importSave, resetSave, toggleMuted, buyListing,
   refreshMarket, acceptTrade, refreshTrades, claimAlbum, claimDaily, claimAllAvailable,
-  ungradedItems, gradedCount,
+  ungradedItems, gradedCount, supplyInfo, vaultEditions, vaultExclusives,
 } from './store.js';
 import {
   CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, FEATURED_CARDS, RARITY,
@@ -18,6 +18,7 @@ import { PACKS, PACK_MAP, PACK_CATEGORIES, getPackOfTheDay, getEventPacks, getLi
 import { DAILY_REWARDS, levelNeeded, levelTitle } from './data/progress.js';
 import { FINISHES, TYPE_META } from './data/core.js';
 import { setMuted } from './audio.js';
+import { expansionView, relicMarketPanel, auctionPanel } from './screens-expansion.js';
 import {
   itemMarketValue, gradeLabel, gradeTone,
   GRADING_SERVICES, marketIndex,
@@ -209,8 +210,9 @@ export function packsScreen() {
   const tab = view.packs.tab;
   const list = PACKS.filter(p => p.category !== 'daily' && (tab === 'all' || p.category === tab));
   const featureByTab = {
-    all: 'premium', featured: 'premium', f1: 'f1-premium',
-    motogp: 'motogp-premium', event: 'event-monaco', special: 'championship',
+    all: 'premium', core: 'mega', featured: 'premium', f1: 'f1-premium',
+    motogp: 'motogp-premium', exclusive: 'ultimate-legends', event: 'event-monaco',
+    special: 'championship', vault: 'vault-signed',
   };
   const events = getEventPacks();
   let feature = PACK_MAP[featureByTab[tab]] || list[0] || PACK_MAP.premium;
@@ -319,6 +321,12 @@ function packTag(pack) {
     heritage: 'CLASSIC ERA', 'event-monaco': 'EVENT', 'event-mugello': 'EVENT',
     'event-nightrace': 'EVENT', 'event-finale': 'EVENT', 'event-heritage': 'EVENT',
     'event-opener': 'EVENT', daily: 'FREE DAILY',
+    'f1-legends': 'CAPPED EXCLUSIVE', 'motogp-legends': 'CAPPED EXCLUSIVE',
+    'golden-era': 'CAPPED EXCLUSIVE', anniversary: 'CAPPED EXCLUSIVE',
+    'hall-of-fame': 'CAPPED EXCLUSIVE', 'ultimate-legends': 'GRAIL VAULT',
+    'numbered-collectors': 'NUMBERED', 'vault-signed': 'AUTOGRAPH',
+    mini: 'CORE 3', 'standard-tier': 'CORE 5', bronze: 'RARE+', silver: 'SILVER',
+    'gold-tier': 'EPIC+', 'elite-tier': 'LEGEND+', ultimate: 'LEGEND+', mega: '15 CARDS',
   };
   if (tags[pack.id]) return tags[pack.id];
   if (pack.category === 'event') return 'LIMITED TIME';
@@ -750,6 +758,101 @@ export function challengesScreen() {
 }
 
 /* ------------------------------------------------------------
+   COLLECTOR VAULT
+   ------------------------------------------------------------ */
+export function vaultScreen() {
+  const s = getState();
+  const editions = vaultEditions();
+  const exclusives = vaultExclusives();
+  const ownedAutographs = s.items.filter(i => CARD_MAP[i.cardId]?.autograph).length;
+  const ownedExclusives = s.items.filter(i => CARD_MAP[i.cardId]?.exclusive).length;
+  const redeemed = s.vault?.redeemed || [];
+
+  return `<div class="screen" data-screen="vault">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">Collector Vault · member access</div>
+        <h1 class="page-title">The <em>Vault</em></h1>
+        <p class="page-sub">Exchange Collector Tokens for serialised autograph collectibles, track the permanent supply of every capped edition, and review the certificates attached to your pulls.</p>
+      </div>
+      <div class="page-head-actions">
+        <span class="chip gold token-chip">✦ ${fmt(s.collectorTokens)} Collector Tokens</span>
+        <button class="btn btn-sm" data-nav="packs">Open packs <span class="ico">→</span></button>
+      </div>
+    </div>
+
+    <div class="vault-intro">
+      <div class="vi-emblem">✒</div>
+      <div>
+        <b>Welcome to the Vault</b>
+        <p>Collector Tokens are earned through albums, daily rewards and challenges — never bought with real money. Redeem them for fixed-run autograph editions below. Every card is a fictional digital collectible: the signature is illustrated artwork and is not a real autograph or official authentication.</p>
+      </div>
+      <div class="vi-stats">
+        <span><b>${ownedAutographs}</b> autographs</span>
+        <span><b>${ownedExclusives}</b> exclusives</span>
+        <span><b>${s.vault?.opened || 0}</b> vault opens</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div><h2>Authenticated autograph editions <span>/ 6</span></h2><div class="sub">Six capped editions. Serial numbers and certificate displays are attached to every issued card. One-of-One cards are never available for tokens.</div></div><span class="chip">${editions.reduce((n, e) => n + e.remaining, 0)} copies unissued</span></div>
+      <div class="vault-editions">
+        ${editions.map(edition => {
+          const pct = edition.cap ? Math.round(edition.issued / edition.cap * 100) : 0;
+          const examples = edition.cards.slice(0, 3);
+          return `<div class="vault-edition" style="--ve:${edition.color};--ve-glow:${edition.glow}">
+            <div class="ve-top">
+              <span class="ve-short">${esc(edition.short)}</span>
+              <span class="ve-mult">×${edition.multiplier} value</span>
+            </div>
+            <h3>${esc(edition.name)}</h3>
+            <p class="ve-note">${esc(edition.cards[0]?.autographNote || 'Authenticated-style digital autograph collectible')}</p>
+            <div class="ve-cards">${examples.map(card => `<div class="ve-card" data-open-card="${esc(card.id)}" title="${esc(card.name)}">${miniCardHTML(card, card.finish)}</div>`).join('')}</div>
+            <div class="ve-supply">
+              <div class="ves-head"><span>Supply</span><b>${edition.issued} / ${edition.cap}</b></div>
+              <div class="ves-track"><i style="width:${pct}%"></i></div>
+              <div class="ves-sub"><span>${edition.remaining} remaining</span><span>${edition.owned} in your vault</span></div>
+            </div>
+            <div class="ve-foot">
+              ${edition.purchasable ? `<button class="btn btn-sm btn-gold" data-redeem-vault="${esc(edition.id)}" ${edition.remaining <= 0 || s.collectorTokens < edition.tokens ? 'disabled' : ''}>${edition.remaining <= 0 ? 'Sold out' : `Redeem · ✦ ${fmt(edition.tokens)}`}</button>` : `<span class="ve-lock">NOT FOR TOKENS · 1 OF 1</span>`}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div><h2>Exclusive supply register <span>/ ${exclusives.length}</span></h2><div class="sub">Pack-only editions with permanent global caps. Ownership and remaining supply are shown for every card.</div></div><span class="chip">${exclusives.reduce((n, e) => n + e.remaining, 0)} copies unissued</span></div>
+      <div class="vault-register">
+        ${exclusives.map(({ card, cap, issued, remaining, owned }) => `<div class="vr-row" data-open-card="${esc(card.id)}">
+          <div class="vr-card">${miniCardHTML(card, card.finish)}</div>
+          <div class="vr-name"><b>${esc(card.name)}</b><span>${esc(card.edition || 'Exclusive')} · ${esc(card.sport === 'motogp' ? 'MotoGP' : 'Formula 1')}</span></div>
+          <div class="vr-edition">${esc(card.tagline || '')}</div>
+          <div class="vr-supply"><b>${issued} / ${cap}</b><span>${remaining} left · ${owned} owned</span></div>
+          <div class="vr-bar"><i style="width:${cap ? Math.round(issued / cap * 100) : 0}%"></i></div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><div><h2>Your certificates <span>/ ${redeemed.length}</span></h2><div class="sub">A permanent record of vault redemptions. Serials remain retired if a card leaves your vault.</div></div></div>
+      <div class="vault-certs">
+        ${redeemed.length ? redeemed.slice(0, 12).map(entry => {
+          const card = CARD_MAP[entry.cardId];
+          if (!card) return '';
+          return `<div class="vault-cert" data-open-card="${esc(card.id)}">
+            <span class="vc-kicker">DIGITAL CERTIFICATE · ${esc(card.editionMeta?.short || 'AUTOGRAPH')}</span>
+            <b>${esc(card.name)}</b>
+            <span class="vc-serial">${esc(serialText(entry.serial, card))} · ${esc(card.edition)}</span>
+            <span class="vc-date">${new Date(entry.at).toLocaleDateString()}</span>
+          </div>`;
+        }).join('') : emptyState('✒', 'No certificates yet', 'Complete albums and challenges to earn Collector Tokens, then redeem an autograph edition above.', `<button class="btn btn-sm btn-gold" data-nav="albums">Complete albums</button>`)}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ------------------------------------------------------------
    MARKET
    ------------------------------------------------------------ */
 export function marketScreen() {
@@ -760,6 +863,22 @@ export function marketScreen() {
   const idx = marketIndex();
   const queue = ungradedItems(300).slice(0, 6);
   const graded = gradedCount();
+  const tab = expansionView.market.tab;
+  const tabs = `<div class="market-tabs">
+    <button class="${tab === 'cards' ? 'active' : ''}" data-market-tab="cards">Trading cards</button>
+    <button class="${tab === 'relics' ? 'active' : ''}" data-market-tab="relics">Memorabilia & merchandise</button>
+    <button class="${tab === 'auctions' ? 'active' : ''}" data-market-tab="auctions">Rare auctions</button>
+  </div>`;
+  if (tab !== 'cards') {
+    return `<div class="screen" data-screen="market">
+      <div class="page-head"><div><div class="eyebrow">Collector market · simulated exchange</div>
+        <h1 class="page-title">Market<em>place</em></h1>
+        <p class="page-sub">Cards, collectibles and rare artefacts in one exchange. Listings, rival bidders and sale history are simulated locally in your save.</p></div>
+        <div class="page-head-actions"><span class="chip gold">◈ ${fmt(s.coins)} balance</span></div></div>
+      ${tabs}
+      ${tab === 'relics' ? relicMarketPanel() : auctionPanel()}
+    </div>`;
+  }
   return `<div class="screen" data-screen="market">
     <div class="page-head">
       <div>
@@ -771,6 +890,7 @@ export function marketScreen() {
     </div>
 
     ${marketTickerHTML()}
+    ${tabs}
 
     <div class="market-hero">
       <div><h3>Today’s market</h3><p>${listings.filter(l => !l.bought).length} active listings · ${graded} graded slab${graded === 1 ? '' : 's'} in your vault · buys are final</p></div>
@@ -784,8 +904,8 @@ export function marketScreen() {
           return `<div class="listing ${l.bought ? 'sold' : ''}${l.grading ? ' graded-listing' : ''}">
             <div class="l-card" data-open-card="${l.card.id}">${cardHTML(l.card, { finish: l.finish, cardIdAttr: false, grading: l.grading })}</div>
             <div class="l-body">
-              <div class="l-name">${esc(l.card.name)}</div>
-              <div class="l-meta"><span class="rarity-dot rar-${l.card.rarity}"></span>${esc(l.card.rarity)} <span style="opacity:.4">/</span> ${esc(finishName(l.finish))} <span style="opacity:.4">/</span> ${esc(l.seller)}${l.grading ? ` <span class="grade-pill" style="color:${gradeTone(l.grading.score)}">${l.grading.score} ${esc(gradeLabel(l.grading.score))}</span>` : ''}</div>
+              <div class="l-name">${esc(l.card.name)}${l.collectible ? `<span class="collectible-tag">CAPPED COLLECTIBLE</span>` : ''}</div>
+              <div class="l-meta"><span class="rarity-dot rar-${l.card.rarity}"></span>${esc(l.card.rarity)} <span style="opacity:.4">/</span> ${esc(l.card.edition || finishName(l.finish))} <span style="opacity:.4">/</span> ${esc(l.seller)}${l.card.supply ? ` <span class="supply-pill">${l.card.supply}-copy run</span>` : ''}${l.grading ? ` <span class="grade-pill" style="color:${gradeTone(l.grading.score)}">${l.grading.score} ${esc(gradeLabel(l.grading.score))}</span>` : ''}</div>
               <div class="l-price"><span class="live-listing" data-live-listing data-price-card="${esc(l.card.id)}" data-listing-finish="${esc(l.finish)}" data-listing-grade="${l.grading?.score || ''}" data-listing-spread="${l.spread}" data-listing-id="${esc(l.id)}" data-live-value="${l.price}">◈ ${fmt(l.price)}</span> ${l.finish !== 'base' ? `<span class="strike">◈ ${fmt(l.rawPrice)}</span>` : ''}</div>
             </div>
             <div class="l-buy">
@@ -814,6 +934,36 @@ export function marketScreen() {
           <button class="btn btn-sm" data-sell-all-dupes ${dupes.length ? '' : 'disabled'}>Sell all duplicates</button>
           <button class="btn btn-sm" data-sell-commons ${dupes.some(g => g.card.rarity === 'common') ? '' : 'disabled'}>Sell common dupes</button>
         </div>
+      </div>
+    </div>
+
+    <div class="market-history" id="market-history">
+      <div class="panel">
+        <div class="panel-head"><h3><span class="bar"></span> Collectible listing & sale history</h3><span class="chip">${s.market.history.length} records</span></div>
+        ${s.market.history.length ? `<div class="mh-list">${s.market.history.slice(0, 10).map(h => {
+          const card = CARD_MAP[h.cardId];
+          if (!card) return '';
+          return `<div class="mh-row">
+            <span class="mh-type ${esc(h.type)}">${h.type === 'buy' ? 'BOUGHT' : 'SOLD'}</span>
+            <div class="mh-card" data-open-card="${esc(card.id)}">${miniCardHTML(card, h.finish)}</div>
+            <div class="mh-name"><b>${esc(card.name)}</b><span>${esc(card.edition || finishName(h.finish))}${h.serial != null ? ` · ${esc(serialText(h.serial, card))}` : ''}</span></div>
+            <span class="mh-party">${h.type === 'buy' ? 'from ' : 'to '}${esc(h.buyer || 'collector')}</span>
+            <b class="mh-price">◈ ${fmt(h.price)}</b>
+            <span class="mh-date">${new Date(h.at).toLocaleDateString()}</span>
+          </div>`;
+        }).join('')}</div>` : emptyState('◷', 'No sales recorded yet', 'Buys and sales of collectible listings appear here permanently.', `<button class="btn btn-sm" data-nav="packs">Browse packs</button>`)}
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span class="bar"></span> Trade history</h3><span class="chip">${s.tradeHistory.length} trades</span></div>
+        ${s.tradeHistory.length ? `<div class="mh-list">${s.tradeHistory.slice(0, 10).map(t => {
+          const gave = CARD_MAP[t.gaveCardId], got = CARD_MAP[t.gotCardId];
+          return `<div class="mh-row trade">
+            <span class="mh-type trade">TRADE</span>
+            <div class="mh-name"><b>${esc(gave?.name || 'Card')} → ${esc(got?.name || 'Card')}</b><span>${esc(t.trader)} · ${esc(got?.edition || finishName(t.gotFinish) || 'Standard')}</span></div>
+            <b class="mh-price">◈ ${fmt(t.value || 0)}</b>
+            <span class="mh-date">${new Date(t.at).toLocaleDateString()}</span>
+          </div>`;
+        }).join('')}</div>` : emptyState('⇆', 'No trades completed yet', 'Accepted offers from the trade floor will be recorded here.', `<button class="btn btn-sm" data-nav="trade">Visit trade floor</button>`)}
       </div>
     </div>
 
@@ -915,7 +1065,8 @@ export function openRewardModal({ kicker = 'REWARD', title = 'Reward claimed', s
   const bits = [];
   if (rewards.coins) bits.push(`<div class="claim-reward coin" style="--i:0"><span class="cr-ico">◈</span><b>${fmt(rewards.coins)}</b><span>Coins</span></div>`);
   if (rewards.gems) bits.push(`<div class="claim-reward gem" style="--i:1"><span class="cr-ico">◆</span><b>${fmt(rewards.gems)}</b><span>Gems</span></div>`);
-  if (rewards.pack) bits.push(`<div class="claim-reward" style="--i:2"><span class="cr-ico">▣</span><b>+1</b><span>${esc(packName(rewards.pack))}</span></div>`);
+  if (rewards.tokens) bits.push(`<div class="claim-reward token" style="--i:2"><span class="cr-ico">✦</span><b>${fmt(rewards.tokens)}</b><span>Collector Tokens</span></div>`);
+  if (rewards.pack) bits.push(`<div class="claim-reward" style="--i:3"><span class="cr-ico">▣</span><b>+1</b><span>${esc(packName(rewards.pack))}</span></div>`);
   if (!bits.length) bits.push(`<div class="claim-reward coin" style="--i:0"><span class="cr-ico">${esc(icon)}</span><b>+1</b><span>Reward</span></div>`);
   openModal(`<div class="claim-modal">
     <div class="cm-kicker">${esc(kicker)}</div>

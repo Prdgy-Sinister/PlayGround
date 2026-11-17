@@ -125,7 +125,37 @@ export const FINISHES = {
   signature:{name:'Signature Series', short:'SIGNED', weight:.016, onlyTypes:['driver','rider']},
   numbered:{name:'Limited Edition', short:'LIMITED', weight:.01},
   shadow:{name:'Blackout Edition', short:'BLACK', weight:.012},
+  /* Supply-capped collector editions. These never roll from the ordinary
+     finish table — they are only issued by their designated pack, event,
+     reward or Vault exchange. */
+  legends:{name:'Legends Edition', short:'LEGENDS', weight:0, supply:true},
+  golden:{name:'Golden Era Edition', short:'GOLDEN', weight:0, supply:true},
+  signedpack:{name:'Signature Edition', short:'SIGNATURE', weight:0, supply:true},
+  champ:{name:'Championship Winning', short:'TITLE', weight:0, supply:true},
+  hof:{name:'Hall of Fame Edition', short:'HOF', weight:0, supply:true},
+  vault:{name:'Signed Autograph', short:'AUTOGRAPH', weight:0, supply:true},
+  goldsig:{name:'Gold Signature', short:'GOLD SIG', weight:0, supply:true},
+  platinum:{name:'Platinum Signature', short:'PLATINUM', weight:0, supply:true},
+  champsig:{name:'Championship Signature', short:'CHAMP SIG', weight:0, supply:true},
+  dual:{name:'Dual Signature', short:'DUAL SIG', weight:0, supply:true},
+  oneofone:{name:'One-of-One', short:'1 OF 1', weight:0, supply:true},
 };
+
+/* Ordinary Limited Edition cards are serialised too. The cap is fixed per
+   rarity, so no more copies can ever be issued once a cap is reached. */
+export const NUMBERED_CAPS = {common:500, rare:250, epic:100, legendary:50, iconic:25};
+
+/* Authenticated autograph editions. One-of-One is deliberately not
+   purchasable with Collector Tokens. */
+export const AUTOGRAPH_EDITIONS = [
+  {id:'signed', name:'Signed Edition', short:'SIGNED', finish:'vault', supply:500, color:'#dbe6f8', glow:'rgba(219,230,248,.45)', multiplier:15, tokens:120},
+  {id:'gold', name:'Gold Signature', short:'GOLD SIG', finish:'goldsig', supply:250, color:'#ffd166', glow:'rgba(255,209,102,.5)', multiplier:30, tokens:260},
+  {id:'platinum', name:'Platinum Signature', short:'PLATINUM', finish:'platinum', supply:100, color:'#c9f3ff', glow:'rgba(201,243,255,.5)', multiplier:60, tokens:500},
+  {id:'championship', name:'Championship Signature', short:'CHAMP SIG', finish:'champsig', supply:50, color:'#ff9b52', glow:'rgba(255,155,82,.5)', multiplier:100, tokens:850},
+  {id:'dual', name:'Dual Signature', short:'DUAL SIG', finish:'dual', supply:25, color:'#e4c2ff', glow:'rgba(228,194,255,.55)', multiplier:160, tokens:1400},
+  {id:'one', name:'One-of-One', short:'1 OF 1', finish:'oneofone', supply:1, color:'#ff66d8', glow:'rgba(255,102,216,.55)', multiplier:500, tokens:null},
+];
+
 
 export const TYPE_META = {
   driver:{label:'Driver', sportLabel:'Formula 1', icon:'▰'},

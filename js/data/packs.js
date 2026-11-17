@@ -4,6 +4,36 @@
    economy. Categories: featured / f1 / motogp / event / special.
    ============================================================ */
 
+import { exclusiveIdsForPack } from './exclusives.js';
+
+const round2 = v => Math.round((Number(v) || 0) * 100) / 100;
+
+/* The high tiers of older packs are brought in line with the new economy at
+   data-definition time, so the published odds are exactly what the roller
+   uses. There is no hidden adjustment later. */
+function balanceOdds(odds) {
+  const o = {...odds};
+  if (!(o.common > 0)) return o;
+  const cuts = {epic:.55, legendary:.32, iconic:.18};
+  let removed = 0;
+  for (const k of ['epic', 'legendary', 'iconic']) {
+    const before = o[k] || 0;
+    o[k] = round2(before * cuts[k]);
+    removed += before - o[k];
+  }
+  o.common = round2((o.common || 0) + removed);
+  return o;
+}
+function normaliseOdds(odds) {
+  const o = {...odds};
+  const total = Object.values(o).reduce((n, v) => n + (Number(v) || 0), 0);
+  if (Math.abs(total - 100) > 0.001) {
+    const sink = o.common > 0 ? 'common' : o.rare > 0 ? 'rare' : o.epic > 0 ? 'epic' : 'legendary';
+    o[sink] = round2((o[sink] || 0) + (100 - total));
+  }
+  return o;
+}
+
 const P = (cfg) => ({
   cards: 5,
   category: 'featured',
@@ -11,8 +41,8 @@ const P = (cfg) => ({
   theme: 'grid',
   guaranteeNew: 0,
   ...cfg,
-  cost: cfg.cost === 0 ? 0 : Math.round((cfg.cost || 0) * 1.25),
-  odds: {common:0, rare:0, epic:0, legendary:0, iconic:0, ...cfg.odds},
+  cost: cfg.cost === 0 ? 0 : (cfg.exact ? Math.round(cfg.cost || 0) : Math.round((cfg.cost || 0) * 1.25)),
+  odds: normaliseOdds(cfg.balance === false ? {common:0, rare:0, epic:0, legendary:0, iconic:0, ...cfg.odds} : balanceOdds({common:0, rare:0, epic:0, legendary:0, iconic:0, ...cfg.odds})),
 });
 
 /* Availability windows are deterministic so events rotate forever without
@@ -21,14 +51,85 @@ const window = (from, to, cycle = 10) => ({cycle, from, to});
 
 export const PACK_CATEGORIES = [
   {id:'all', label:'All packs'},
+  {id:'core', label:'Core tiers'},
   {id:'featured', label:'Featured'},
   {id:'f1', label:'Formula 1'},
   {id:'motogp', label:'MotoGP'},
+  {id:'exclusive', label:'Exclusive editions'},
   {id:'event', label:'Event drops'},
   {id:'special', label:'Special editions'},
+  {id:'vault', label:'Collector Vault'},
 ];
 
 export const PACKS = [
+  /* ---------------------------------------------------------- CORE TIERS
+     The eight public tiers. Prices and per-card odds are exactly as
+     published. Guarantees are applied after the roll and disclosed. */
+  P({
+    id:'mini', name:'Mini Pack', short:'MINI', tagline:'Three cards. One small step into the paddock.',
+    desc:'3 cards from Formula 1 and MotoGP. No rarity guarantee — pure published odds.',
+    cost:1000, exact:true, balance:false, cards:3, scope:'all', category:'core', guaranteeNew:0, theme:'core',
+    odds:{common:65, rare:25, epic:8, legendary:1.8, iconic:.2},
+    bullets:['3 cards · no guarantee','Published 65 / 25 / 8 / 1.8 / 0.2 odds','Every card from the full pool'],
+    art:{p1:'#9fb4d6',p2:'#0a1220',p3:'rgba(180,210,255,.7)',kicker:'CORE SERIES',title:'MINI',title2:'PACK',emblem:'03×',meta:'3 CARDS',meta2:'NO GUARANTEE',cls:'pack-core'},
+  }),
+  P({
+    id:'standard-tier', name:'Standard Pack', short:'STD', tagline:'The benchmark pack for every collector.',
+    desc:'5 cards with the standard published odds. No rarity guarantee.',
+    cost:2500, exact:true, balance:false, cards:5, scope:'all', category:'core', guaranteeNew:0, theme:'core',
+    odds:{common:78, rare:18, epic:3.5, legendary:.45, iconic:.05},
+    bullets:['5 cards · no guarantee','78 / 18 / 3.5 / 0.45 / 0.05 odds','The everyday collector pack'],
+    art:{p1:'#ff3b3f',p2:'#2a0609',p3:'rgba(255,90,90,.75)',kicker:'CORE SERIES',title:'STANDARD',title2:'PACK',emblem:'05×',meta:'5 CARDS',meta2:'NO GUARANTEE',cls:'pack-core'},
+  }),
+  P({
+    id:'bronze', name:'Bronze Pack', short:'BRZ', tagline:'The first step up. At least one Rare inside.',
+    desc:'5 cards with a guaranteed Rare or better.',
+    cost:3500, exact:true, balance:false, cards:5, scope:'all', category:'core', guarantees:{rare:1}, theme:'bronze',
+    odds:{common:62, rare:27, epic:9, legendary:1.8, iconic:.2},
+    bullets:['5 cards · 1 Rare or better guaranteed','62 / 27 / 9 / 1.8 / 0.2 odds','First step above the baseline'],
+    art:{p1:'#c9783a',p2:'#2a1508',p3:'rgba(255,170,100,.75)',kicker:'BRONZE SERIES',title:'BRONZE',title2:'PACK',emblem:'R+',meta:'5 CARDS',meta2:'RARE+ GUARANTEED',cls:'pack-bronze'},
+  }),
+  P({
+    id:'silver', name:'Silver Pack', short:'SLV', tagline:'Brushed metal. Sharper odds.',
+    desc:'5 cards with a guaranteed Rare and the published Silver odds.',
+    cost:6000, exact:true, balance:false, cards:5, scope:'all', category:'core', guarantees:{rare:1}, theme:'silver',
+    odds:{common:55, rare:32, epic:11, legendary:1.8, iconic:.2},
+    bullets:['5 cards · 1 Rare or better guaranteed','55 / 32 / 11 / 1.8 / 0.2 odds','Silver-tier pull rates'],
+    art:{p1:'#d7e2ee',p2:'#1a2534',p3:'rgba(220,240,255,.7)',kicker:'SILVER SERIES',title:'SILVER',title2:'PACK',emblem:'AG',meta:'5 CARDS',meta2:'RARE+ GUARANTEED',cls:'pack-silver'},
+  }),
+  P({
+    id:'gold-tier', name:'Gold Pack', short:'GLD', tagline:'A seven-card pack with an Epic floor.',
+    desc:'7 cards with a guaranteed Epic or better and Gold odds.',
+    cost:12000, exact:true, balance:false, cards:7, scope:'all', category:'core', guarantees:{epic:1}, theme:'gold',
+    odds:{common:35, rare:40, epic:20, legendary:4.5, iconic:.5},
+    bullets:['7 cards · 1 Epic or better guaranteed','35 / 40 / 20 / 4.5 / 0.5 odds','Seven-card Gold value'],
+    art:{p1:'#f9d976',p2:'#4a2c06',p3:'rgba(255,225,140,.9)',kicker:'GOLD SERIES',title:'GOLD',title2:'PACK',emblem:'24K',meta:'7 CARDS',meta2:'EPIC+ GUARANTEED',cls:'pack-gold'},
+  }),
+  P({
+    id:'elite-tier', name:'Elite Pack', short:'ELT', tagline:'Eight cards. One Legendary floor.',
+    desc:'8 cards with a guaranteed Legendary or better and premium odds.',
+    cost:22000, exact:true, balance:false, cards:8, scope:'all', category:'core', guarantees:{legendary:1}, theme:'elite',
+    odds:{common:20, rare:40, epic:30, legendary:9, iconic:1},
+    bullets:['8 cards · 1 Legendary guaranteed','20 / 40 / 30 / 9 / 1 odds','Elite-tier finish boost'],
+    art:{p1:'#b98cff',p2:'#180a2e',p3:'rgba(200,150,255,.8)',kicker:'ELITE SERIES',title:'ELITE',title2:'PACK',emblem:'08×',meta:'8 CARDS',meta2:'LEGENDARY GUARANTEED',cls:'pack-elite'},
+  }),
+  P({
+    id:'ultimate', name:'Ultimate Pack', short:'ULT', tagline:'Ten cards. The Ultimate high-tier chase.',
+    desc:'10 cards with a guaranteed Legendary and boosted high-tier odds.',
+    cost:40000, exact:true, balance:false, cards:10, scope:'all', category:'core', guarantees:{legendary:1}, theme:'ultimate',
+    odds:{common:10, rare:35, epic:35, legendary:18, iconic:2},
+    bullets:['10 cards · 1 Legendary guaranteed','10 / 35 / 35 / 18 / 2 odds','Ten-card Ultimate value'],
+    art:{p1:'#ff9b52',p2:'#1a0a03',p3:'rgba(255,170,100,.85)',kicker:'ULTIMATE SERIES',title:'ULTIMATE',title2:'PACK',emblem:'10×',meta:'10 CARDS',meta2:'LEGENDARY GUARANTEED',cls:'pack-ultimate'},
+  }),
+  P({
+    id:'mega', name:'Mega Pack', short:'MEGA', tagline:'Fifteen cards. Two Epics guaranteed.',
+    desc:'15 cards with two guaranteed Epics. Built for set builders and big swings.',
+    cost:60000, exact:true, balance:false, cards:15, scope:'all', category:'core', guarantees:{epic:2}, theme:'mega',
+    odds:{common:45, rare:38, epic:13, legendary:3.5, iconic:.5},
+    bullets:['15 cards · 2 Epics guaranteed','45 / 38 / 13 / 3.5 / 0.5 odds','Best cards-per-coin tier'],
+    art:{p1:'#ff2740',p2:'#1b0306',p3:'rgba(255,90,100,.85)',kicker:'MEGA SERIES',title:'MEGA',title2:'PACK',emblem:'15×',meta:'15 CARDS',meta2:'2 EPICS GUARANTEED',cls:'pack-mega'},
+  }),
+
   /* ---------------------------------------------------------- FEATURED */
   P({
     id:'rookie', name:'Rookie Rush', short:'ROOK', tagline:'Your first laps in the collector’s paddock.',
@@ -256,16 +357,16 @@ export const PACKS = [
   }),
   P({
     id:'championship', name:'Championship Pack', short:'CHAMP', tagline:'Built for titles. Sealed in history.',
-    desc:'6 cards, Epic or better. Championship editions and 2 new cards guaranteed.',
-    cost:120, currency:'gems', cards:6, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:6, legendary:1}, finishBoost:{championship:6, anniversary:2, holo:1.5}, theme:'gold',
+    desc:'6 cards, Epic or better. Championship editions and 2 new cards guaranteed, with a 15% chance of a capped Championship Winning exclusive.',
+    cost:120, currency:'gems', cards:6, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:6, legendary:1}, exclusiveChance:.15, autographs:{chance:.02}, finishBoost:{championship:6, anniversary:2, holo:1.5}, theme:'gold',
     odds:{common:0, rare:0, epic:48, legendary:38, iconic:14},
-    bullets:['6 cards · Legendary guaranteed','Championship finish odds ×6','2 new cards guaranteed'],
+    bullets:['6 cards · Legendary guaranteed','15% capped Championship Winning exclusive','Championship finish odds ×6','2 new cards guaranteed'],
     art:{p1:'#b8862f',p2:'#1a0f03',p3:'rgba(255,210,120,.8)',kicker:'CHAMPIONSHIP SERIES',title:'CHAMP',title2:'PACK',emblem:'#1',meta:'6 CARDS',meta2:'CHAMPION EDITION ODDS',cls:'pack-gold'},
   }),
   P({
     id:'limited', name:'Limited Edition', short:'LTD', tagline:'Numbered. Serialised. Forever rare.',
     desc:'4 cards, Epic or better. One guaranteed numbered edition.',
-    cost:175, currency:'gems', cards:4, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:4, legendary:1}, guaranteedFinish:'numbered', finishBoost:{numbered:2, signature:2, holo:1.5}, theme:'limited',
+    cost:175, currency:'gems', cards:4, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:4, legendary:1}, guaranteedFinish:'numbered', autographs:{chance:.02}, finishBoost:{numbered:2, signature:2, holo:1.5}, theme:'limited',
     odds:{common:0, rare:0, epic:42, legendary:38, iconic:20},
     bullets:['4 cards · Legendary guaranteed','1 serialised Limited edition','2 new cards guaranteed'],
     art:{p1:'#6f7bff',p2:'#0a0a2a',p3:'rgba(150,170,255,.7)',kicker:'LIMITED COLLECTOR SERIES',title:'LIMITED',title2:'EDITION',emblem:'/99',meta:'4 CARDS',meta2:'1 NUMBERED GUARANTEED',cls:'pack-iconic'},
@@ -296,10 +397,10 @@ export const PACKS = [
   }),
   P({
     id:'signatures', name:'Signature Series', short:'SIGN', tagline:'Ink from the greats.',
-    desc:'3 cards from signed drivers and riders, with one Signature finish guaranteed.',
-    cost:110, currency:'gems', cards:3, scope:'all', category:'special', guaranteeNew:2, guarantees:{rare:3}, guaranteedFinish:'signature', pool:{signatures:true}, finishBoost:{signature:4, numbered:1.5}, theme:'signature',
+    desc:'3 cards from signed drivers and riders, with one Signature finish guaranteed and a 15% chance of a capped Signature Edition exclusive.',
+    cost:110, currency:'gems', cards:3, scope:'all', category:'special', guaranteeNew:2, guarantees:{rare:3}, guaranteedFinish:'signature', pool:{signatures:true}, exclusiveChance:.15, autographs:{chance:.015}, finishBoost:{signature:4, numbered:1.5}, theme:'signature',
     odds:{common:0, rare:30, epic:45, legendary:19, iconic:6},
-    bullets:['Signed legends only','1 Signature finish guaranteed','3 cards · Rare or better'],
+    bullets:['Signed legends only','15% capped Signature Edition exclusive','1 Signature finish guaranteed','3 cards · Rare or better'],
     art:{p1:'#d9c7a4',p2:'#1b160d',p3:'rgba(255,240,200,.7)',kicker:'SIGNATURE SERIES',title:'SIGNATURE',title2:'SERIES',emblem:'✒',meta:'3 CARDS',meta2:'SIGNED CARD INSIDE',cls:'pack-gold'},
   }),
   P({
@@ -325,6 +426,77 @@ export const PACKS = [
     odds:{common:0, rare:38, epic:38, legendary:18, iconic:6},
     bullets:['Constructor cards only','4 cards · 2 Epics guaranteed','Team silverware chase'],
     art:{p1:'#f6c453',p2:'#1a1203',p3:'rgba(255,220,130,.75)',kicker:'CONSTRUCTOR ICONS',title:'TEAM',title2:'ICONS',emblem:'⬢',meta:'4 CARDS',meta2:'2 EPICS GUARANTEED',cls:'pack-gold'},
+  }),
+
+  /* ---------------------------------------------------------- EXCLUSIVE SERIES
+     These packs are the only route to the supply-capped exclusive editions.
+     Every exclusive is serialised, and once its fixed run is issued it can
+     never be pulled again. Autograph-containing packs are specialist only. */
+  P({
+    id:'f1-legends', name:'F1 Legends Pack', short:'F1★', tagline:'A fixed run of Formula 1 legends.',
+    desc:'4 cards, all Legendary or better, with a 50% chance of a serialised F1 Legends Edition exclusive.',
+    cost:320, currency:'gems', exact:true, cards:4, scope:'f1', category:'exclusive', guaranteeNew:2, guarantees:{legendary:4}, exclusiveChance:.5, theme:'legend',
+    odds:{common:0, rare:0, epic:18, legendary:60, iconic:22},
+    bullets:['4 cards · all Legendary or better','50% chance of a capped Legends Edition','Only route to F1 Legends exclusives'],
+    art:{p1:'#2a1040',p2:'#05050a',p3:'rgba(255,170,90,.65)',kicker:'F1 LEGENDS SERIES',title:'F1',title2:'LEGENDS',emblem:'★',meta:'4 CARDS',meta2:'LEGENDS EXCLUSIVE',cls:'pack-legendary'},
+  }),
+  P({
+    id:'motogp-legends', name:'MotoGP Legends Pack', short:'GP★', tagline:'A fixed run of premier-class icons.',
+    desc:'4 cards, all Legendary or better, with a 50% chance of a serialised MotoGP Legends Edition exclusive.',
+    cost:320, currency:'gems', exact:true, cards:4, scope:'motogp', category:'exclusive', guaranteeNew:2, guarantees:{legendary:4}, exclusiveChance:.5, theme:'legend',
+    odds:{common:0, rare:0, epic:18, legendary:60, iconic:22},
+    bullets:['4 cards · all Legendary or better','50% chance of a capped Legends Edition','Only route to MotoGP Legends exclusives'],
+    art:{p1:'#162a4a',p2:'#05070d',p3:'rgba(120,230,255,.6)',kicker:'MOTOGP LEGENDS SERIES',title:'MOTO',title2:'LEGENDS',emblem:'★',meta:'4 CARDS',meta2:'LEGENDS EXCLUSIVE',cls:'pack-legendary'},
+  }),
+  P({
+    id:'golden-era', name:'Golden Era Pack', short:'GOLD·E', tagline:'The 1960s and 1970s, struck in gold.',
+    desc:'5 cards from the classic eras with a 45% chance of a Golden Era Edition exclusive.',
+    cost:180, currency:'gems', exact:true, cards:5, scope:'all', category:'exclusive', guaranteeNew:2, guarantees:{rare:5, epic:3}, exclusiveChance:.45, pool:{eras:['1960s','1970s']}, theme:'gold',
+    odds:{common:0, rare:12, epic:38, legendary:39, iconic:11},
+    bullets:['1960s–1970s cards only','45% chance of a Golden Era exclusive','All cards Rare or better'],
+    art:{p1:'#c79a4a',p2:'#241405',p3:'rgba(255,215,140,.85)',kicker:'GOLDEN ERA SERIES',title:'GOLDEN',title2:'ERA',emblem:'1967',meta:'5 CARDS',meta2:'CLASSIC GOLD',cls:'pack-gold'},
+  }),
+  P({
+    id:'anniversary', name:'Anniversary Pack', short:'ANNIV', tagline:'Commemorative editions. Fixed forever.',
+    desc:'4 cards, all Epic or better, with a 60% chance of a capped Anniversary Edition exclusive and a 2% autograph chance.',
+    cost:240, currency:'gems', exact:true, cards:4, scope:'all', category:'exclusive', guaranteeNew:2, guarantees:{epic:4, legendary:1}, exclusiveChance:.6, autographs:{chance:.02}, theme:'elite',
+    odds:{common:0, rare:0, epic:34, legendary:46, iconic:20},
+    bullets:['4 cards · Legendary guaranteed','60% chance of a capped Anniversary exclusive','2% authenticated autograph chance'],
+    art:{p1:'#b98cff',p2:'#180a2e',p3:'rgba(210,150,255,.8)',kicker:'ANNIVERSARY SERIES',title:'ANNI',title2:'VERSARY',emblem:'25',meta:'4 CARDS',meta2:'COMMEMORATIVE',cls:'pack-legendary'},
+  }),
+  P({
+    id:'hall-of-fame', name:'Hall of Fame Pack', short:'HOF', tagline:'Induction cards for the immortals.',
+    desc:'3 cards, all Legendary or better, with a 70% chance of a Hall of Fame exclusive and a 3% autograph chance.',
+    cost:450, currency:'gems', exact:true, cards:3, scope:'all', category:'exclusive', guaranteeNew:2, guarantees:{legendary:3}, exclusiveChance:.7, autographs:{chance:.03}, theme:'legend',
+    odds:{common:0, rare:0, epic:0, legendary:62, iconic:38},
+    bullets:['3 cards · Legendary or better','70% chance of a Hall of Fame exclusive','3% authenticated autograph chance'],
+    art:{p1:'#3a2556',p2:'#07050c',p3:'rgba(255,190,90,.7)',kicker:'HALL OF FAME',title:'HALL',title2:'OF FAME',emblem:'HOF',meta:'3 CARDS',meta2:'IMMORTALS ONLY',cls:'pack-legendary'},
+  }),
+  P({
+    id:'ultimate-legends', name:'Ultimate Legends Vault', short:'ULT★', tagline:'The deepest vault in the sport.',
+    desc:'6 cards, all Legendary or better, with an 80% chance of an exclusive legends edition and a 5% autograph chance.',
+    cost:900, currency:'gems', exact:true, cards:6, scope:'all', category:'exclusive', guaranteeNew:3, guarantees:{legendary:6}, exclusiveChance:.8, autographs:{chance:.05}, theme:'iconic',
+    odds:{common:0, rare:0, epic:0, legendary:52, iconic:48},
+    bullets:['6 cards · all Legendary or better','80% chance of a capped legends exclusive','5% authenticated autograph chance'],
+    art:{p1:'#2a1040',p2:'#05050a',p3:'rgba(255,110,220,.6)',kicker:'ULTIMATE LEGENDS',title:'ULTIMATE',title2:'VAULT',emblem:'∞',meta:'6 CARDS',meta2:'LEGENDS + GRAILS',cls:'pack-iconic'},
+  }),
+  P({
+    id:'numbered-collectors', name:'Numbered Collectors Pack', short:'Nº', tagline:'Every copy carries a number.',
+    desc:'5 cards, Epic or better, with one numbered edition guaranteed and a 50% chance of an exclusive anniversary or Hall of Fame card.',
+    cost:350, currency:'gems', exact:true, cards:5, scope:'all', category:'exclusive', guaranteeNew:2, guarantees:{epic:5, legendary:1}, guaranteedFinish:'numbered', exclusiveChance:.5, autographs:{chance:.02}, theme:'limited',
+    odds:{common:0, rare:0, epic:30, legendary:46, iconic:24},
+    bullets:['5 cards · Legendary guaranteed','1 numbered edition guaranteed','50% chance of a capped exclusive'],
+    art:{p1:'#6f7bff',p2:'#0a0a2a',p3:'rgba(150,170,255,.75)',kicker:'NUMBERED COLLECTORS',title:'NUMBERED',title2:'COLLECTORS',emblem:'/Nº',meta:'5 CARDS',meta2:'1 NUMBERED GUARANTEED',cls:'pack-iconic'},
+  }),
+
+  /* ---------------------------------------------------------- COLLECTOR VAULT */
+  P({
+    id:'vault-signed', name:'Vault Signed Drop', short:'AUTO', tagline:'One authenticated autograph. One serial.',
+    desc:'1 card, guaranteed to be a supply-capped authenticated autograph collectible from the Collector’s Vault.',
+    cost:400, currency:'gems', exact:true, cards:1, scope:'all', category:'vault', guaranteeNew:1, autographs:{guaranteed:true}, theme:'signature',
+    odds:{common:0, rare:0, epic:0, legendary:0, iconic:100},
+    bullets:['1 card · guaranteed authenticated autograph','Fixed supply across six editions','Serial number and digital certificate'],
+    art:{p1:'#d9c7a4',p2:'#1b160d',p3:'rgba(255,240,200,.75)',kicker:'COLLECTOR VAULT',title:'SIGNED',title2:'DROP',emblem:'✒',meta:'1 CARD',meta2:'GUARANTEED AUTOGRAPH',cls:'pack-gold'},
   }),
 
   /* ---------------------------------------------------------- DAILY */
