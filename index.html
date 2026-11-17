@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+<meta name="theme-color" content="#08090c" />
+<title>APEX RUSH — Motorsport Card Packs</title>
+<meta name="description" content="Open premium Formula 1 and MotoGP card packs. Collect legends, build albums, trade and complete your motorsport vault." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0b0e'/%3E%3Cpath d='M12 44 L28 16 L38 16 L26 38 L52 38 L46 48 L18 48 Z' fill='%23ff2d2d'/%3E%3Cpath d='M38 16 L52 16 L46 26 L34 26 Z' fill='%23ffd166'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./css/base.css" />
+<link rel="stylesheet" href="./css/cards.css" />
+<link rel="stylesheet" href="./css/screens.css" />
+<link rel="stylesheet" href="./css/opening.css" />
+</head>
+<body>
+<div class="bg">
+  <div class="bg-carbon"></div>
+  <div class="bg-grid"></div>
+  <div class="bg-glow bg-glow-a"></div>
+  <div class="bg-glow bg-glow-b"></div>
+  <div class="bg-noise"></div>
+</div>
+
+<div class="app-shell">
+  <header class="topbar">
+    <button class="brand" data-nav="home" aria-label="Apex Rush home">
+      <span class="brand-mark">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 36 L22 8 L32 8 L20 28 L42 28 L36 38 L12 38 Z" fill="currentColor"/><path d="M32 8 L42 8 L37 17 L27 17 Z" fill="var(--gold)"/></svg>
+      </span>
+      <span class="brand-type">APEX<span>RUSH</span><small>MOTORSPORT CARDS</small></span>
+    </button>
+
+    <div class="topbar-mid">
+      <div class="season-pill"><span class="dot"></span><span id="season-label">SEASON 01</span><span class="sep"></span><span id="daily-clock">--:--:--</span></div>
+    </div>
+
+    <div class="topbar-right">
+      <div class="wallet">
+        <div class="currency coin" title="Coins">
+          <span class="currency-ico">◈</span>
+          <span class="currency-val" id="coin-val">0</span>
+          <button class="currency-plus" data-nav="daily" aria-label="Earn coins">+</button>
+        </div>
+        <div class="currency gem" title="Gems">
+          <span class="currency-ico">◆</span>
+          <span class="currency-val" id="gem-val">0</span>
+          <button class="currency-plus" data-nav="daily" aria-label="Earn gems">+</button>
+        </div>
+      </div>
+      <div class="level-chip" id="level-chip" title="Collector level">
+        <span class="lvl">LV<i id="level-val">1</i></span>
+        <span class="xpbar"><i id="xp-fill"></i></span>
+      </div>
+      <button class="icon-btn" id="sound-toggle" aria-label="Toggle sound" title="Sound">
+        <svg viewBox="0 0 24 24" class="ico-on"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 8.5a5 5 0 010 7M18.5 6a8.5 8.5 0 010 12" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+        <svg viewBox="0 0 24 24" class="ico-off"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <aside class="sidebar" aria-label="Main navigation">
+    <nav class="nav-main" id="nav-main">
+      <button class="nav-item" data-nav="home"><span class="nav-ico">◱</span><span>Garage</span></button>
+      <button class="nav-item" data-nav="packs"><span class="nav-ico">▣</span><span>Packs</span><em class="nav-dot" id="nav-packs-dot"></em></button>
+      <button class="nav-item" data-nav="collection"><span class="nav-ico">▤</span><span>Collection</span></button>
+      <button class="nav-item" data-nav="albums"><span class="nav-ico">▦</span><span>Albums</span></button>
+      <button class="nav-item" data-nav="daily"><span class="nav-ico">✶</span><span>Daily Hub</span><em class="nav-badge" id="daily-badge">!</em></button>
+      <div class="nav-sep"></div>
+      <button class="nav-item" data-nav="market"><span class="nav-ico">◫</span><span>Marketplace</span></button>
+      <button class="nav-item" data-nav="trade"><span class="nav-ico">⇄</span><span>Trading</span></button>
+      <button class="nav-item" data-nav="challenges"><span class="nav-ico">◎</span><span>Challenges</span><em class="nav-badge" id="challenge-badge">!</em></button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="pity-card">
+        <div class="pity-head"><span>COLLECTION PROGRESS</span><b id="side-progress-pct">0%</b></div>
+        <div class="pity-bar"><i id="side-progress-bar"></i></div>
+        <div class="pity-sub"><span id="side-progress-count">0 / 0 cards</span><button data-nav="albums">Albums →</button></div>
+      </div>
+      <button class="nav-item nav-small" data-action="open-settings"><span class="nav-ico">⚙</span><span>Settings & Save</span></button>
+    </div>
+  </aside>
+
+  <main id="main" class="main" tabindex="-1"></main>
+
+  <nav class="mobile-nav" id="mobile-nav">
+    <button data-nav="home"><span>◱</span>Garage</button>
+    <button data-nav="packs"><span>▣</span>Packs</button>
+    <button data-nav="collection"><span>▤</span>Collection</button>
+    <button data-nav="albums"><span>▦</span>Albums</button>
+    <button data-nav="daily"><span>✶</span>Daily</button>
+    <button data-nav="market"><span>◫</span>Market</button>
+    <button data-nav="trade"><span>⇄</span>Trade</button>
+    <button data-nav="challenges"><span>◎</span>Goals</button>
+  </nav>
+</div>
+
+<div id="screen-root"></div>
+<div id="modal-root"></div>
+<div id="toast-root" class="toast-root" aria-live="polite"></div>
+<canvas id="fx" class="fx"></canvas>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
