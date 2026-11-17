@@ -149,9 +149,11 @@ export function slabHTML(grading) {
   if (!grading) return '';
   const profile = gradingProfile(grading.kind || 'card');
   const label = grading.caseLabel || profile.caseLabel;
-  return `<div class="card-slab" aria-label="${esc(label)} ${grading.score} — ${esc(grading.summary || grading.reason || '')}" role="img">
-    <span class="slab-brand">APEX <i>${esc(profile.case === 'slab' ? 'CERTIFIED' : 'ARCHIVE')}</i></span>
-    <span class="slab-cert">${esc(grading.cert || '')}</span>
+  const isCase = profile.case !== 'slab';
+  return `<div class="card-slab${isCase ? ' display-case' : ''}" aria-label="${esc(label)} ${grading.score} — ${esc(grading.summary || grading.reason || '')}" role="img" style="--gc:${gradeTone(grading.score)}">
+    <span class="slab-brand">APEX <i>${esc(isCase ? 'ARCHIVE' : 'CERTIFIED')}</i></span>
+    <span class="slab-grade"><b>${grading.score}</b><em>${esc(gradeLabel(grading.score))}</em></span>
+    <span class="slab-cert">${esc(grading.cert || '')}${isCase ? ` · ${esc(label)}` : ''}</span>
   </div>`;
 }
 
@@ -174,17 +176,16 @@ export function cardHTML(card, opts = {}) {
   const countBadge = opts.count > 1 ? `<div class="count-badge">×${opts.count}</div>` : '';
   const newBadge = opts.isNew ? `<div class="new-badge">NEW</div>` : '';
   const locked = opts.locked ? ' unknown' : '';
-  const gradeHTML = grading ? `<div class="card-grade" style="--gc:${gradeTone(grading.score)}"><b>${grading.score}</b><span>${esc(gradeLabel(grading.score))}</span></div>` : '';
-  return `<div class="card-cell${opts.count > 1 ? ' dupe' : ''}${opts.cellClass ? ' ' + opts.cellClass : ''}" ${opts.cardIdAttr === false ? '' : `data-open-card="${esc(card.id)}"`} ${opts.itemUid ? `data-item="${esc(opts.itemUid)}"` : ''}>
-    ${newBadge}${countBadge}
-    <div class="card r-${card.rarity} finish-${finish}${locked}${grading ? ' graded' : ''}${opts.cardClass ? ' ' + opts.cardClass : ''}" data-card="${esc(card.id)}" title="${esc(card.name)} · ${esc(finishName(finish))}${grading ? ` · ${grading.company || 'Apex'} ${grading.score} ${gradeLabel(grading.score)}` : ''}">
+  const tone = grading ? gradeTone(grading.score) : '';
+  const gradeText = grading ? ` · ${grading.company || 'Apex'} ${grading.score} ${gradeLabel(grading.score)}` : '';
+  const cardBody = `<div class="card r-${card.rarity} finish-${finish}${locked}${grading ? ' graded' : ''}${opts.cardClass ? ' ' + opts.cardClass : ''}" data-card="${esc(card.id)}" title="${esc(card.name)} · ${esc(finishName(finish))}${gradeText}"${grading ? ` style="--gc:${tone}"` : ''}>
       <div class="card-art">${cardArt(card, finish)}</div>
       <div class="card-scrim"></div>
       <div class="card-grain"></div>
       <div class="card-foil"></div>
       <div class="card-shine"></div>
       <div class="card-frame"></div>
-      ${slabHTML(grading)}${gradeHTML}${editionRibbon}${serialHTML}${championship}${signature}
+      ${editionRibbon}${serialHTML}${championship}${signature}
       <div class="card-top">
         <div class="ovr"><b>${card.overall}</b><i>OVR</i></div>
         <div class="card-tags">
@@ -204,7 +205,20 @@ export function cardHTML(card, opts = {}) {
           <span class="entry">${esc(finishShort(finish))}</span>
         </div>
       </div>
-    </div>
+    </div>`;
+  const cardMarkup = grading
+    ? `<div class="card-slab-frame" style="--gc:${tone}" aria-label="${esc(card.name)} in an APEX slab, grade ${grading.score} ${esc(gradeLabel(grading.score))}. ${esc(grading.summary || grading.reason || '')}">
+        <div class="csf-label">
+          <span class="csf-brand">APEX <i>CERTIFIED</i></span>
+          <span class="csf-grade"><b>${grading.score}</b><em>${esc(gradeLabel(grading.score))}</em></span>
+        </div>
+        <div class="csf-window">${cardBody}</div>
+        <div class="csf-foot"><span>${esc(grading.cert || '')}</span><span>${esc(grading.caseLabel || 'APEX SLAB')}</span></div>
+      </div>`
+    : cardBody;
+  return `<div class="card-cell${opts.count > 1 ? ' dupe' : ''}${grading ? ' graded' : ''}${opts.cellClass ? ' ' + opts.cellClass : ''}" ${opts.cardIdAttr === false ? '' : `data-open-card="${esc(card.id)}"`} ${opts.itemUid ? `data-item="${esc(opts.itemUid)}"` : ''}>
+    ${newBadge}${countBadge}
+    ${cardMarkup}
   </div>`;
 }
 
