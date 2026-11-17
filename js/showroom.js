@@ -200,7 +200,7 @@ export function initShowroom(canvas, { roomId = 'main', onInspect = null } = {})
       const pulse = .45 + Math.sin(Date.now() / 420) * .18;
       ctx.shadowColor = glow; ctx.shadowBlur = 24 * pulse;
     }
-    drawProceduralModel(meta.model || (item.kind === 'card' ? 'card' : 'trophy'), c1, c2, rar.color, meta.signed);
+    drawProceduralModel(meta.model || (item.kind === 'card' ? 'card' : 'trophy'), c1, c2, rar.color, meta.signed, meta.signedBy);
     ctx.restore();
     hitboxes.push({x: base.x, y: base.y - lift, r: Math.max(22, 26 * scale), entry:item});
     if (hovered === item) {
@@ -210,7 +210,7 @@ export function initShowroom(canvas, { roomId = 'main', onInspect = null } = {})
     }
   }
 
-  function drawProceduralModel(model, c1, c2, accent, signed) {
+  function drawProceduralModel(model, c1, c2, accent, signed, signedBy = '') {
     const g = ctx.createLinearGradient(-30, -40, 30, 40);
     g.addColorStop(0, c1); g.addColorStop(.55, c2); g.addColorStop(1, c1);
     ctx.lineWidth = 1.3;
@@ -296,8 +296,19 @@ export function initShowroom(canvas, { roomId = 'main', onInspect = null } = {})
       ctx.fillStyle = accent; ctx.beginPath(); ctx.moveTo(0,-20); ctx.lineTo(12,-6); ctx.lineTo(0,14); ctx.lineTo(-12,-6); ctx.closePath(); ctx.fill();
     }
     if (signed) {
-      ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(-16,24); ctx.quadraticCurveTo(-6,14,0,22); ctx.quadraticCurveTo(8,30,17,20); ctx.stroke();
+      if (signedBy) {
+        const names = String(signedBy).split(/\s*&\s*/);
+        ctx.save();
+        ctx.font = 'italic 11px "Great Vibes", cursive';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(255,246,223,.92)';
+        ctx.shadowColor = accent; ctx.shadowBlur = 6;
+        names.forEach((n, i) => ctx.fillText(n.trim(), 0, 28 + i * 11));
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(-16,24); ctx.quadraticCurveTo(-6,14,0,22); ctx.quadraticCurveTo(8,30,17,20); ctx.stroke();
+      }
     }
   }
 

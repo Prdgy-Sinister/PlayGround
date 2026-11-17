@@ -4,16 +4,7 @@
 import { esc, fmt, openModal, closeModal, toast } from './ui.js';
 import { sfx } from './audio.js';
 import { RELIC_RARITY, CATEGORY_MAP } from './data/relics.js';
-
-const MODEL_ICON = {
-  helmet:'⛑', suit:'▤', glove:'◫', boot:'◩', gear:'⚙', wheel:'⊙', wing:'◢',
-  tyre:'◎', disc:'◉', gear:'⚙', fairing:'◣', exhaust:'≋', engine:'▦', trophy:'★',
-  medal:'◉', sign:'▭', flag:'⚑', photo:'▧', paper:'▤', 'mini-car':'◭',
-  'mini-bike':'◈', figure:'♟', garage:'▣', circuit:'⌁', watch:'◷', bag:'▣',
-  keyring:'⚿', lanyard:'⌁', glasses:'◐', scarf:'≈', shirt:'◧', hoodie:'◧',
-  jacket:'◧', cap:'◠', set:'✦',
-};
-const modelIcon = model => MODEL_ICON[model] || '◇';
+import { relicArtSVG } from './relic-art.js';
 
 export function relicArtHTML(relic, opts = {}) {
   const colors = relic.colors?.length ? relic.colors : ['#8b95a5', '#161a20'];
@@ -22,18 +13,14 @@ export function relicArtHTML(relic, opts = {}) {
   const rar = RELIC_RARITY[relic.rarity] || RELIC_RARITY.standard;
   const small = opts.small ? ' relic-art-sm' : '';
   const cinematic = opts.cinematic ? ' relic-art-cine' : '';
-  const icon = modelIcon(relic.model);
+  const signer = relic.signedBy || relic.driver || '';
+  const signLabel = signer ? (relic.dualSigned ? `SIGNED · ${signer.toUpperCase()}` : `SIGNED · ${signer.toUpperCase()}`) : '';
   return `<div class="relic-art${small}${cinematic}" style="--relic-c1:${esc(c1)};--relic-c2:${esc(c2)};--relic-rar:${rar.color};--relic-glow:${rar.glow}" data-relic-art="${esc(relic.model)}">
     <div class="relic-art-grid"></div>
     <div class="relic-spot"></div>
     <div class="relic-stand relic-stand-${esc(opts.stand || (['photo','paper','flag','sign','glass'].includes(relic.model) ? 'wall' : 'plinth'))}"></div>
-    <div class="relic-shape shape-${esc(relic.model)}">
-      <span class="relic-shine"></span>
-      <span class="relic-glyph">${esc(icon)}</span>
-      <span class="relic-texture"></span>
-    </div>
-    <div class="relic-shadow"></div>
-    ${relic.signed ? `<span class="relic-sign">✒ ${esc(relic.dualSigned ? 'DUAL SIGNED' : 'SIGNED REPLICA')}</span>` : ''}
+    ${relicArtSVG(relic, {nonce: opts.nonce || ''})}
+    ${signLabel ? `<span class="relic-sign">✒ ${esc(signLabel)}</span>` : ''}
     ${relic.supply ? `<span class="relic-serial-tag">LIMITED / ${fmt(relic.supply)}</span>` : ''}
   </div>`;
 }

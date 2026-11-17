@@ -1353,12 +1353,12 @@ export function displayItemMeta(entry) {
     const item = state.items.find(i => i.uid === entry.itemUid);
     const card = item && CARD_MAP[item.cardId];
     if (!card) return null;
-    return {name: card.name, rarity: card.rarity, colors: card.colors, serial: item.serial, finish: item.finish, signed: !!card.autograph, edition: card.edition || finishNameSafe(item.finish), sport: card.sport};
+    return {name: card.name, rarity: card.rarity, colors: card.colors, serial: item.serial, finish: item.finish, signed: !!card.autograph, signedBy: card.signature || '', edition: card.edition || finishNameSafe(item.finish), sport: card.sport};
   }
   const item = state.relics.find(i => i.uid === entry.itemUid);
   const relic = item && RELIC_MAP[item.relicId];
   if (!relic) return null;
-  return {name: relic.name, rarity: relic.rarity, colors: relic.colors, serial: item.serial, finish: relic.rarity, signed: !!relic.signed, edition: relic.rarityMeta?.label || '', sport: relic.sport, model: relic.model};
+  return {name: relic.name, rarity: relic.rarity, colors: relic.colors, serial: item.serial, finish: relic.rarity, signed: !!relic.signed, signedBy: relic.signedBy || '', edition: relic.rarityMeta?.label || '', sport: relic.sport, model: relic.model};
 }
 function finishNameSafe(finish) { return finish ? finish.replace(/^./, c => c.toUpperCase()) : 'Base'; }
 export function placeShowroomItem(itemUid, kind, roomId, displayType) {
