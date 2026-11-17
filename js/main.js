@@ -7,6 +7,7 @@ import {
   claimAllAvailable, buyListing, refreshMarket, acceptTrade, refreshTrades,
   dailyStatus, dailyChallenges, achievements, xpProgress, uniqueCount,
   exportSave, importSave, resetSave, toggleMuted, collectionValue,
+  gradeItem,
 } from './store.js';
 import {
   homeScreen, packsScreen, collectionScreen, albumsScreen, albumDetailScreen,
@@ -19,8 +20,10 @@ import { PACK_MAP, getPackOfTheDay, getLiveOffers } from './data/packs.js';
 import { sfx, setMuted } from './audio.js';
 import {
   fmt, esc, toast, openCardDetail, closeModal, confirmAction, initFx, openPackDetails,
+  refreshLivePrices,
 } from './ui.js';
 import { showOpening, isOpening } from './opening.js';
+import { GRADING_SERVICES } from './pricing.js';
 import { localDateKey, msUntilMidnight } from './data/progress.js';
 
 const $ = id => document.getElementById(id);
@@ -134,6 +137,27 @@ function clock() {
     render({ scroll: false });
     toast('gold', 'New day, new drops', 'Daily reward, free pack and objectives have reset.', '☀');
   }
+}
+
+/* ------------------------------------------------------------
+   LIVE MARKET TICK
+   ------------------------------------------------------------ */
+function tickLivePrices() {
+  refreshLivePrices();
+  const now = Date.now();
+  document.querySelectorAll('[data-live-vault]').forEach(el => {
+    el.textContent = `◈ ${fmt(collectionValue(now))}`;
+  });
+  const coins = getState().coins;
+  document.querySelectorAll('[data-live-listing]').forEach(el => {
+    const price = Number(el.dataset.liveValue) || 0;
+    const id = el.dataset.listingId;
+    const btn = id ? document.querySelector(`[data-buy-listing="${CSS.escape(id)}"]`) : null;
+    if (!btn || btn.textContent.trim() === 'Sold') return;
+    const afford = coins >= price;
+    btn.disabled = !afford;
+    btn.textContent = afford ? 'Buy' : 'Need coins';
+  });
 }
 
 /* ------------------------------------------------------------
@@ -331,6 +355,34 @@ document.addEventListener('click', ev => {
     sfx.click();
     closeModal();
     setTimeout(() => openCard(id), 20);
+    return;
+  }
+
+  const gradeBtn = el('[data-grade-item]');
+  if (gradeBtn) {
+    const uid = gradeBtn.dataset.gradeItem;
+    const cardId = gradeBtn.dataset.gradeCard;
+    const card = CARD_MAP[cardId];
+    const svc = GRADING_SERVICES.find(s => s.id === gradeBtn.dataset.gradeService);
+    if (!card || !svc) return;
+    const fee = `${svc.currency === 'gems' ? '◆' : '◈'} ${fmt(svc.cost)}`;
+    confirmAction({
+      title: `Grade ${card.name}?`,
+      body: `${svc.company} · ${svc.name} costs ${fee}. Grading is permanent. Grade 8+ lifts market value; lower grades can reduce it.`,
+      confirmText: `Grade · ${fee}`,
+      onConfirm: () => {
+        try {
+          const res = gradeItem(uid, svc.id);
+          sfx.fanfare();
+          toast('gold', `Grade ${res.grading.score} · ${res.grading.label}`, `${card.name} is now sealed in an ${res.grading.company} slab (${res.grading.cert}).`, '◎');
+          closeModal();
+          setTimeout(() => openCard(cardId, uid), 40);
+        } catch (err) {
+          sfx.error();
+          toast('red', 'Grading failed', err.message, '!');
+        }
+      },
+    });
     return;
   }
 
@@ -560,3 +612,5 @@ window.addEventListener('apex:levelup', () => sfx.levelup());
 render();
 clock();
 setInterval(clock, 1000);
+tickLivePrices();
+setInterval(tickLivePrices, 15000);

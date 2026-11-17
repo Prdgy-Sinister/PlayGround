@@ -8,9 +8,10 @@ import {
   duplicateGroups, claimChallenge, setFavorite, sellItem, sellAllDuplicates,
   sellAllCommons, exportSave, importSave, resetSave, toggleMuted, buyListing,
   refreshMarket, acceptTrade, refreshTrades, claimAlbum, claimDaily, claimAllAvailable,
+  ungradedItems, gradedCount,
 } from './store.js';
 import {
-  CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, FEATURED_CARDS, RARITY, cardValue,
+  CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, FEATURED_CARDS, RARITY,
   albumSetSections, CARD_COUNT,
 } from './data/index.js';
 import { PACKS, PACK_MAP, PACK_CATEGORIES, getPackOfTheDay, getEventPacks, getLiveOffers, packAvailability } from './data/packs.js';
@@ -18,11 +19,15 @@ import { DAILY_REWARDS, levelNeeded, levelTitle } from './data/progress.js';
 import { FINISHES, TYPE_META } from './data/core.js';
 import { setMuted } from './audio.js';
 import {
+  itemMarketValue, gradeLabel, gradeTone,
+  GRADING_SERVICES, marketIndex,
+} from './pricing.js';
+import {
   fmt, esc, cardHTML, slotHTML, miniCardHTML, packHTML, packPriceHTML, oddsRows,
   guaranteeList, finishName, finishShort, serialText, sportClass, sportShort,
   rewardHTML, coinHTML, gemHTML, toast, openModal, closeModal, confirmAction,
   openCardDetail, statBox, emptyState, levelRingHTML, FINISH_ORDER, bestFinishFor,
-  packName, packPoolLabel, countdownText,
+  packName, packPoolLabel, countdownText, marketTickerHTML, livePriceHTML,
 } from './ui.js';
 
 export const view = {
@@ -74,7 +79,7 @@ export function homeScreen() {
         </div>
         <div class="hero-mini">
           <div><b>${uniq}<small style="font-size:12px;color:var(--dim)"> / ${CARD_COUNT}</small></b><span>Cards collected</span></div>
-          <div><b>${fmt(collectionValue())}</b><span>Vault value ◈</span></div>
+          <div><b data-live-vault>◈ ${fmt(collectionValue())}</b><span>Vault value ◈</span></div>
           <div><b>LV ${level}</b><span>${esc(levelTitle(level))}</span></div>
           <div><b>${s.stats.packsOpened}</b><span>Packs opened</span></div>
         </div>
@@ -95,6 +100,8 @@ export function homeScreen() {
       </div>
       <button class="btn ${st.canClaim ? 'btn-gold' : ''}" data-nav="daily">${st.canClaim ? 'Claim reward' : 'View daily hub'}</button>
     </div>
+
+    ${marketTickerHTML()}
 
     <div class="home-grid">
       <div class="home-col">
@@ -414,8 +421,8 @@ export function collectionScreen() {
     name: (a, b) => a.name.localeCompare(b.name),
     value: (a, b) => {
       const ga = byId.get(a.id), gb = byId.get(b.id);
-      const va = ga ? cardValue(a, ga.best) * ga.count : 0;
-      const vb = gb ? cardValue(b, gb.best) * gb.count : 0;
+      const va = ga ? ga.items.reduce((n, i) => n + itemMarketValue(i), 0) : 0;
+      const vb = gb ? gb.items.reduce((n, i) => n + itemMarketValue(i), 0) : 0;
       return vb - va;
     },
     copies: (a, b) => (byId.get(b.id)?.count || 0) - (byId.get(a.id)?.count || 0) || a.name.localeCompare(b.name),
@@ -445,7 +452,7 @@ export function collectionScreen() {
     <div class="coll-stats">
       ${statBox('Unique cards', `${uniqueCount()}<small>/${CARD_COUNT}</small>`, 'Vault completion', 'gold')}
       ${statBox('Total copies', s.items.length, `${dupes.length} duplicate groups`, 'cyan')}
-      ${statBox('Vault value', `◈ ${fmt(collectionValue())}`, 'Collector valuation', 'green')}
+      ${statBox('Vault value', `<span data-live-vault>◈ ${fmt(collectionValue())}</span>`, 'Live collector valuation', 'green')}
       ${statBox('Packs opened', s.stats.packsOpened, `${s.stats.iconicPulls} iconic pulled`, 'red')}
       ${statBox('Favourite', fav ? esc(fav.name.split(' ').pop()) : '—', fav ? esc(fav.team || 'No team') : 'Set one in card details')}
     </div>
@@ -482,7 +489,7 @@ export function collectionScreen() {
           if (!g && f.mode === 'vault') return '';
           if (!g) return `<div data-open-card="${esc(card.id)}">${slotHTML(card)}</div>`;
           const best = g.items.find(i => i.finish === g.best) || g.items[0];
-          return cardHTML(card, { finish: g.best, serial: best?.serial, count: g.count, itemUid: best?.uid });
+          return cardHTML(card, { finish: g.best, serial: best?.serial, count: g.count, itemUid: best?.uid, grading: best?.grading });
         }).join('')}
       </div>`;
     }).join('') : emptyState('▤', 'No cards match those filters', 'Try widening the search or switching to All cards.', `<button class="btn btn-sm" data-collection-clear>Clear filters</button>`)}
@@ -750,31 +757,36 @@ export function marketScreen() {
   const listings = marketListings();
   const dupes = duplicateGroups();
   const total = listings.reduce((n, l) => n + (l.bought ? 0 : l.price), 0);
+  const idx = marketIndex();
+  const queue = ungradedItems(300).slice(0, 6);
+  const graded = gradedCount();
   return `<div class="screen" data-screen="market">
     <div class="page-head">
       <div>
         <div class="eyebrow">Collector market · lot ${s.market.seed + 1}</div>
         <h1 class="page-title">Market<em>place</em></h1>
-        <p class="page-sub">Eight hand-picked singles from collectors around the paddock. Prices move with rarity and finish. Refresh the lot or sell your duplicates into the market.</p>
+        <p class="page-sub">Eight hand-picked singles from collectors around the paddock. Prices drift live with demand, rarity and finish. Refresh the lot, sell duplicates or send a card to the grading lab.</p>
       </div>
       <div class="page-head-actions"><span class="chip gold">◈ ${fmt(total)} listed</span><button class="btn btn-sm" data-refresh-market>↻ Refresh · ◈ 250</button></div>
     </div>
 
+    ${marketTickerHTML()}
+
     <div class="market-hero">
-      <div><h3>Today’s market</h3><p>${listings.filter(l => !l.bought).length} active listings · deterministic daily lot · buys are final</p></div>
-      <div class="market-refresh"><b>${s.market.bought.length} / ${listings.length}</b>sold today</div>
+      <div><h3>Today’s market</h3><p>${listings.filter(l => !l.bought).length} active listings · ${graded} graded slab${graded === 1 ? '' : 's'} in your vault · buys are final</p></div>
+      <div class="market-refresh"><b>${idx.value.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</b>APEX 100 · <span class="${idx.direction}">${idx.change >= 0 ? '+' : ''}${idx.change.toFixed(1)}%</span></div>
     </div>
 
     <div class="market-cols">
       <div class="listing-grid">
         ${listings.map(l => {
           const canBuy = !l.bought && s.coins >= l.price;
-          return `<div class="listing ${l.bought ? 'sold' : ''}">
-            <div class="l-card" data-open-card="${l.card.id}">${cardHTML(l.card, { finish: l.finish, cardIdAttr: false })}</div>
+          return `<div class="listing ${l.bought ? 'sold' : ''}${l.grading ? ' graded-listing' : ''}">
+            <div class="l-card" data-open-card="${l.card.id}">${cardHTML(l.card, { finish: l.finish, cardIdAttr: false, grading: l.grading })}</div>
             <div class="l-body">
               <div class="l-name">${esc(l.card.name)}</div>
-              <div class="l-meta"><span class="rarity-dot rar-${l.card.rarity}"></span>${esc(l.card.rarity)} <span style="opacity:.4">/</span> ${esc(finishName(l.finish))} <span style="opacity:.4">/</span> ${esc(l.seller)}</div>
-              <div class="l-price">◈ ${fmt(l.price)} ${l.finish !== 'base' ? `<span class="strike">◈ ${fmt(cardValue(l.card, 'base'))}</span>` : ''}</div>
+              <div class="l-meta"><span class="rarity-dot rar-${l.card.rarity}"></span>${esc(l.card.rarity)} <span style="opacity:.4">/</span> ${esc(finishName(l.finish))} <span style="opacity:.4">/</span> ${esc(l.seller)}${l.grading ? ` <span class="grade-pill" style="color:${gradeTone(l.grading.score)}">${l.grading.score} ${esc(gradeLabel(l.grading.score))}</span>` : ''}</div>
+              <div class="l-price"><span class="live-listing" data-live-listing data-price-card="${esc(l.card.id)}" data-listing-finish="${esc(l.finish)}" data-listing-grade="${l.grading?.score || ''}" data-listing-spread="${l.spread}" data-listing-id="${esc(l.id)}" data-live-value="${l.price}">◈ ${fmt(l.price)}</span> ${l.finish !== 'base' ? `<span class="strike">◈ ${fmt(l.rawPrice)}</span>` : ''}</div>
             </div>
             <div class="l-buy">
               <button class="btn btn-sm ${canBuy ? 'btn-primary' : ''}" data-buy-listing="${l.id}" ${l.bought || !canBuy ? 'disabled' : ''}>${l.bought ? 'Sold' : canBuy ? 'Buy' : 'Need coins'}</button>
@@ -788,12 +800,12 @@ export function marketScreen() {
         <div class="panel-head"><h3><span class="bar"></span> Sell duplicates</h3><span class="chip">${dupes.length} groups</span></div>
         <div class="sell-list">
           ${dupes.length ? dupes.slice(0, 14).map(g => {
-            const sorted = [...g.items].sort((a, b) => FINISH_ORDER.indexOf(a.finish) - FINISH_ORDER.indexOf(b.finish));
+            const sorted = [...g.items].sort((a, b) => itemMarketValue(a) - itemMarketValue(b));
             const spare = sorted[0];
             return `<div class="sell-row">
-              <div class="s-card">${cardHTML(g.card, { finish: spare.finish, cardIdAttr: false })}</div>
-              <div><div class="s-name">${esc(g.card.name)}</div><div class="s-meta">${esc(g.card.rarity)} · ${esc(finishName(spare.finish))} · ${g.count} copies</div></div>
-              <div class="s-price">◈ ${fmt(cardValue(g.card, spare.finish))}<small>spare copy</small></div>
+              <div class="s-card">${cardHTML(g.card, { finish: spare.finish, cardIdAttr: false, grading: spare.grading })}</div>
+              <div><div class="s-name">${esc(g.card.name)}</div><div class="s-meta">${esc(g.card.rarity)} · ${esc(finishName(spare.finish))}${spare.grading ? ' · graded ' + spare.grading.score : ''} · ${g.count} copies</div></div>
+              <div class="s-price">${livePriceHTML(g.card, spare.finish, { grading: spare.grading })}<small>spare copy</small></div>
               <button class="btn btn-sm" data-sell-item="${spare.uid}" data-card-id="${g.card.id}">Sell</button>
             </div>`;
           }).join('') : emptyState('⇄', 'No duplicates yet', 'Pull another copy of a card and you can sell the spare here.', `<button class="btn btn-sm" data-nav="packs">Open packs</button>`)}
@@ -804,6 +816,42 @@ export function marketScreen() {
         </div>
       </div>
     </div>
+
+    <section class="panel grading-lab">
+      <div class="panel-head">
+        <h3><span class="bar"></span> Grading lab</h3>
+        <div class="gl-head-right">
+          <span class="chip gold">${graded} slab${graded === 1 ? '' : 's'} certified</span>
+          <span class="chip">${queue.length} high-value raw cards ready</span>
+        </div>
+      </div>
+      <div class="gl-intro">
+        <div class="gl-copy">
+          <b>Seal a card in an APEX slab</b>
+          <p>Grading is permanent. Each service rolls centering, corners, edges and surface into a 1–10 grade. Grade 8+ lifts the card’s market value; low grades can hurt it, so only grade cards you believe in.</p>
+        </div>
+        <div class="gl-services">
+          ${GRADING_SERVICES.map(svc => `<div class="gl-service">
+            <span>${esc(svc.company)} · ${esc(svc.name)}</span>
+            <b>${svc.currency === 'gems' ? '◆' : '◈'} ${fmt(svc.cost)}</b>
+            <em>${esc(svc.desc)}</em>
+          </div>`).join('')}
+        </div>
+      </div>
+      ${queue.length ? `<div class="grade-queue">
+        ${queue.map(({ item, card }) => `<div class="grade-queue-row">
+          <div class="gq-card" data-open-card="${esc(card.id)}">${cardHTML(card, { finish: item.finish, cardIdAttr: false })}</div>
+          <div class="gq-body">
+            <b>${esc(card.name)}</b>
+            <span>${esc(card.rarity)} · ${esc(finishName(item.finish))} · raw</span>
+            <div class="gq-val">${livePriceHTML(card, item.finish)}</div>
+          </div>
+          <div class="gq-actions">
+            ${GRADING_SERVICES.map(svc => `<button class="grade-mini" data-grade-item="${esc(item.uid)}" data-grade-service="${esc(svc.id)}" data-grade-card="${esc(card.id)}">${esc(svc.name)} <b>${svc.currency === 'gems' ? '◆' : '◈'}${fmt(svc.cost)}</b></button>`).join('')}
+          </div>
+        </div>`).join('')}
+      </div>` : emptyState('◎', 'No raw cards worth grading yet', 'Pull a rarer card or a premium finish and it will appear in the grading queue.', `<button class="btn btn-sm btn-primary" data-nav="packs">Open packs</button>`)}
+    </section>
   </div>`;
 }
 
@@ -843,8 +891,8 @@ function tradeOffer(o) {
     </div>
     <div class="to-cards">
       <div class="to-side">
-        ${cardHTML(o.want, { finish: o.wantFinish, serial: o.wantItem.serial, cardIdAttr: false })}
-        <div class="ts-txt"><span>You give</span><b>${esc(o.want.name)}</b><div class="val">${esc(finishName(o.wantFinish))} · ◈ ${fmt(o.wantValue)}</div></div>
+        ${cardHTML(o.want, { finish: o.wantFinish, serial: o.wantItem.serial, cardIdAttr: false, grading: o.wantItem.grading })}
+        <div class="ts-txt"><span>You give</span><b>${esc(o.want.name)}</b><div class="val">${esc(finishName(o.wantFinish))}${o.wantItem.grading ? ' · graded ' + o.wantItem.grading.score : ''} · ◈ ${fmt(o.wantValue)}</div></div>
       </div>
       <div class="to-arrow">⇄</div>
       <div class="to-side">
@@ -897,7 +945,7 @@ export function openSettingsModal() {
   openModal(`<div class="settings-body">
     <div class="between"><div><div class="cm-kicker" style="color:var(--gold)">APEX RUSH</div><h2 style="font-size:30px;text-transform:uppercase">Settings & save</h2><p class="tiny muted">Local-first collector profile. Everything is stored in this browser.</p></div><span class="chip gold">LV ${s.level} · ${esc(levelTitle(s.level))}</span></div>
     <div class="setting-row"><div><b>Sound effects</b><span>Procedural engine, card and UI audio</span></div><button class="toggle ${s.settings.muted ? '' : 'on'}" data-toggle-sound aria-label="Toggle sound"></button></div>
-    <div class="setting-row"><div><b>Collection</b><span>${uniqueCount()} unique · ${s.items.length} total copies · ◈ ${fmt(collectionValue())} vault value</span></div><span class="chip">${s.stats.packsOpened} packs opened</span></div>
+    <div class="setting-row"><div><b>Collection</b><span>${uniqueCount()} unique · ${s.items.length} total copies · ${gradedCount()} graded · ◈ ${fmt(collectionValue())} vault value</span></div><span class="chip">${s.stats.packsOpened} packs opened</span></div>
     <div class="setting-row"><div><b>Career stats</b><span>${s.stats.cardsPulled} cards pulled · ${s.stats.iconicPulls} iconic · ${s.stats.trades} trades · ${s.stats.cardsSold} sold</span></div><span class="chip">${s.stats.xpEarned} XP earned</span></div>
     <div class="save-block">
       <div class="between"><b class="save-title">Export save</b><button class="btn btn-sm" data-copy-save>Copy code</button></div>
@@ -919,18 +967,18 @@ export function openSettingsModal() {
 export function openDuplicatesModal() {
   const dupes = duplicateGroups();
   const totalValue = dupes.reduce((n, g) => {
-    const sorted = [...g.items].sort((a, b) => FINISH_ORDER.indexOf(a.finish) - FINISH_ORDER.indexOf(b.finish));
-    return n + cardValue(g.card, sorted[0]?.finish || 'base') * g.spare;
+    const sorted = [...g.items].sort((a, b) => itemMarketValue(a) - itemMarketValue(b));
+    return n + itemMarketValue(sorted[0]) * g.spare;
   }, 0);
   openModal(`<div class="panel-head" style="padding:18px"><h3><span class="bar"></span> Duplicate vault</h3><span class="chip gold">◈ ${fmt(totalValue)} spare value</span></div>
     <div class="sell-list" style="max-height:60vh">
       ${dupes.length ? dupes.map(g => {
-        const sorted = [...g.items].sort((a, b) => FINISH_ORDER.indexOf(a.finish) - FINISH_ORDER.indexOf(b.finish));
+        const sorted = [...g.items].sort((a, b) => itemMarketValue(a) - itemMarketValue(b));
         const spare = sorted[0];
         return `<div class="sell-row">
-          <div class="s-card">${cardHTML(g.card, { finish: spare.finish, cardIdAttr: false })}</div>
-          <div><div class="s-name">${esc(g.card.name)}</div><div class="s-meta">${esc(g.card.rarity)} · ${esc(finishName(spare.finish))} · ${g.count} copies</div></div>
-          <div class="s-price">◈ ${fmt(cardValue(g.card, spare.finish))}<small>lowest copy</small></div>
+          <div class="s-card">${cardHTML(g.card, { finish: spare.finish, cardIdAttr: false, grading: spare.grading })}</div>
+          <div><div class="s-name">${esc(g.card.name)}</div><div class="s-meta">${esc(g.card.rarity)} · ${esc(finishName(spare.finish))}${spare.grading ? ' · graded ' + spare.grading.score : ''} · ${g.count} copies</div></div>
+          <div class="s-price">${livePriceHTML(g.card, spare.finish, { grading: spare.grading })}<small>lowest copy</small></div>
           <button class="btn btn-sm" data-sell-item="${spare.uid}" data-card-id="${g.card.id}">Sell</button>
         </div>`;
       }).join('') : emptyState('▤', 'Nothing to sell', 'You do not have any duplicate cards yet.')}
