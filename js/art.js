@@ -165,7 +165,8 @@ function bgScene(card, id, finish) {
   const variant = hashStr(card.id) % 4;
   const isDark = lum(p) < .25;
   let out = `<rect width="360" height="504" fill="url(#${id}-bg)"/>
-    <rect width="360" height="504" fill="url(#${id}-glow)"/>`;
+    <rect width="360" height="504" fill="url(#${id}-glow)"/>
+    <ellipse cx="180" cy="70" rx="200" ry="110" fill="${rgba(p,.16)}" filter="url(#${id}-soft)" opacity=".55"/>`;
   // big diagonal color block
   out += `<g opacity="${.9}">
     <polygon points="0,${90+variant*17} 360,${30+variant*12} 360,${190+variant*14} 0,${250+variant*9}" fill="${rgba(p,.18)}"/>
