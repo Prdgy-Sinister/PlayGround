@@ -15,6 +15,7 @@ import {
   AUTOGRAPH_EDITIONS, NUMBERED_CAPS,
 } from './core.js';
 import { EXCLUSIVE_SPECS, AUTOGRAPH_SPECS } from './exclusives.js';
+import { SEASON_CARD_SPECS, SEASON_ALBUMS } from './seasons.js';
 
 let uid = 0;
 
@@ -98,6 +99,7 @@ export const BASE_CARDS = [
   ...MOTOGP_EXTRA_BIKES.map(r => normalise(r, 'motogp', 'bike')),
   ...MOTOGP_MOMENTS.map(r => normalise(r, 'motogp', 'moment')),
   ...MOTOGP_EXTRA_MOMENTS.map(r => normalise(r, 'motogp', 'moment')),
+  ...SEASON_CARD_SPECS.map(r => normalise(r, r.sport, r.type)),
   ...CROSSOVER_CARDS.map(r => normalise(r, 'crossover', r.type || 'moment')),
 ];
 
@@ -186,7 +188,7 @@ const ALBUM_DEFS = [
   {id:'x-icons', name:'Two Worlds', sport:'crossover', desc:'Legends who crossed the divide between two and four wheels.'},
 ];
 
-export const ALBUMS = ALBUM_DEFS.map(a => {
+const CORE_ALBUMS = ALBUM_DEFS.map(a => {
   let cards;
   const albumPool = CARDS.filter(c => !c.exclusive && !c.autograph);
   if (a.types) cards = albumPool.filter(c => c.sport === a.sport && a.types.includes(c.type));
@@ -208,6 +210,8 @@ export const ALBUMS = ALBUM_DEFS.map(a => {
   };
 });
 
+/* One completable album per historical season, plus the core era albums. */
+export const ALBUMS = [...CORE_ALBUMS, ...SEASON_ALBUMS];
 export const ALBUM_MAP = Object.fromEntries(ALBUMS.map(a => [a.id, a]));
 
 export function cardsForAlbum(album) {

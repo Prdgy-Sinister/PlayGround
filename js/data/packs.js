@@ -5,6 +5,7 @@
    ============================================================ */
 
 import { exclusiveIdsForPack } from './exclusives.js';
+import { HISTORICAL_PACKS } from './seasons.js';
 
 const round2 = v => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -56,6 +57,7 @@ export const PACK_CATEGORIES = [
   {id:'f1', label:'Formula 1'},
   {id:'motogp', label:'MotoGP'},
   {id:'exclusive', label:'Exclusive editions'},
+  {id:'season', label:'Historical seasons'},
   {id:'event', label:'Event drops'},
   {id:'special', label:'Special editions'},
   {id:'vault', label:'Collector Vault'},
@@ -508,6 +510,11 @@ export const PACKS = [
     bullets:['3 cards · completely free','1 new card guaranteed','Resets at midnight'],
     art:{p1:'#1f2937',p2:'#090c12',p3:'rgba(100,240,200,.5)',kicker:'DAILY DROP',title:'DAILY',title2:'PACK',emblem:'24H',meta:'3 CARDS',meta2:'FREE EVERY DAY',cls:'pack-motogp'},
   }),
+
+  /* ------------------------------------------------------ HISTORICAL ARCHIVE
+     One dedicated pack for every F1 season (1950→2026) and every premier-class
+     grand prix motorcycle season (1949→2026), plus decade and champion sets. */
+  ...HISTORICAL_PACKS,
 ];
 
 export const PACK_MAP = Object.fromEntries(PACKS.map(p => [p.id, p]));

@@ -4,6 +4,7 @@
 import {
   getState, subscribe, openPack, itemsOfCard, setFavorite, sellItem,
   sellAllDuplicates, sellAllCommons, claimAlbum, claimDaily, claimChallenge,
+  claimHistoricalChallenge,
   claimAllAvailable, buyListing, refreshMarket, acceptTrade, refreshTrades,
   dailyStatus, dailyChallenges, achievements, xpProgress, uniqueCount,
   exportSave, importSave, resetSave, toggleMuted, collectionValue,
@@ -34,6 +35,7 @@ import {
 } from './screens-expansion.js';
 import { openRelicDetail, openRelicReveal, openRelicPackDetails } from './relic-ui.js';
 import { initShowroom } from './showroom.js';
+import { archiveScreen, seasonDetailScreen, historyView } from './screens-history.js';
 import { GRADING_SERVICES } from './pricing.js';
 import { localDateKey, msUntilMidnight } from './data/progress.js';
 
@@ -52,13 +54,14 @@ const PAGES = {
   market: marketScreen, trade: tradeScreen, vault: vaultScreen,
   memorabilia: memorabiliaScreen, merchandise: merchandiseScreen,
   showroom: showroomScreen, 'relic-album': relicAlbumScreen,
+  archive: archiveScreen, season: seasonDetailScreen,
 };
 const TITLES = {
   home: 'Garage', packs: 'Pack Garage', collection: 'Cards',
   albums: 'Albums', daily: 'Daily Hub', challenges: 'Challenges',
   market: 'Marketplace', trade: 'Trade Floor', vault: 'Collector Vault',
   memorabilia: 'Memorabilia', merchandise: 'Merchandise', showroom: 'My Showroom',
-  'relic-album': 'Collection Album',
+  'relic-album': 'Collection Album', archive: 'Historical Archive', season: 'Season Detail',
 };
 
 function inspectShowroomItem(entry) {
@@ -79,6 +82,7 @@ function parseRoute() {
   const [page, param] = raw.split('/');
   if (page === 'album' && param) return { page: 'album', param };
   if (page === 'relic-album' && param) return { page: 'relic-album', param };
+  if (page === 'season' && param) return { page: 'season', param };
   return { page: PAGES[page] ? page : 'home', param: '' };
 }
 
@@ -89,6 +93,7 @@ function render(opts = {}) {
   try {
     if (route.page === 'album') html = albumDetailScreen(route.param);
     else if (route.page === 'relic-album') html = relicAlbumScreen(route.param);
+    else if (route.page === 'season') html = seasonDetailScreen(route.param);
     else html = PAGES[route.page]();
   } catch (err) {
     console.error(err);
@@ -103,7 +108,7 @@ function render(opts = {}) {
       onInspect: inspectShowroomItem,
     });
   }
-  const active = route.page === 'album' ? 'albums' : route.page === 'relic-album' ? 'memorabilia' : route.page;
+  const active = route.page === 'album' ? 'albums' : route.page === 'relic-album' ? 'memorabilia' : route.page === 'season' ? 'archive' : route.page;
   document.querySelectorAll('#nav-main [data-nav], #mobile-nav [data-nav]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.nav === active);
   });
@@ -423,6 +428,42 @@ document.addEventListener('click', ev => {
     const id = packDetails.dataset.packDetails;
     const pack = id === 'potd' ? getPackOfTheDay(new Date()) : PACK_MAP[id];
     if (pack) { sfx.tab(); openPackDetails(pack); }
+    return;
+  }
+
+  /* ---- historical archive ---- */
+  const hTab = el('[data-htab]');
+  if (hTab) { sfx.tab(); historyView.tab = hTab.dataset.htab; render({scroll:false}); return; }
+
+  const hSport = el('[data-hsport]');
+  if (hSport) {
+    sfx.tab();
+    historyView.sport = hSport.dataset.hsport;
+    if (el('[data-clear-search]')) historyView.query = '';
+    render({scroll:false});
+    return;
+  }
+
+  const hChallengeCat = el('[data-hchallenge-cat]');
+  if (hChallengeCat) { sfx.tab(); historyView.challengeCategory = hChallengeCat.dataset.hchallengeCat; render({scroll:false}); return; }
+
+  const hMarketRange = el('[data-hmarket-range]');
+  if (hMarketRange) { sfx.tab(); historyView.marketRange = hMarketRange.dataset.hmarketRange; render({scroll:false}); return; }
+
+  const seasonBtn = el('[data-season]');
+  if (seasonBtn) { sfx.tab(); navigate('season/' + seasonBtn.dataset.season); return; }
+
+  const claimHChallenge = el('[data-claim-hchallenge]');
+  if (claimHChallenge) {
+    try {
+      const res = claimHistoricalChallenge(claimHChallenge.dataset.claimHchallenge);
+      claimResult(res, 'HISTORICAL CHALLENGE', res.def.title,
+        `Challenge complete — ${res.def.progress} / ${res.def.goal}. ${res.def.desc}`);
+      if (res.card) toast('gold', 'Collector card unlocked', `${res.card.name} has been added to your vault.`, '★');
+    } catch (err) {
+      sfx.error();
+      toast('red', 'Cannot claim yet', err.message, '!');
+    }
     return;
   }
 
@@ -854,6 +895,16 @@ document.addEventListener('click', ev => {
 /* search + selects */
 let searchTimer = 0;
 document.addEventListener('input', ev => {
+  if (ev.target.matches?.('[data-season-search]')) {
+    historyView.query = ev.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      render({ scroll:false });
+      const input = $('season-search');
+      if (input) { input.focus({ preventScroll:true }); input.setSelectionRange(input.value.length, input.value.length); }
+    }, 130);
+    return;
+  }
   if (ev.target.id === 'relic-search') {
     expansionView.relics.q = ev.target.value;
     clearTimeout(searchTimer);
@@ -878,6 +929,8 @@ document.addEventListener('input', ev => {
   }, 110);
 });
 document.addEventListener('change', ev => {
+  const hDecade = ev.target.closest?.('[data-hdecade]');
+  if (hDecade) { historyView.decade = hDecade.value; sfx.tab(); render({ scroll:false }); return; }
   const relicField = ev.target.closest?.('[data-relic-filter]');
   if (relicField) {
     expansionView.relics[relicField.dataset.relicFilter] = relicField.value;

@@ -11,6 +11,7 @@ import { PACKS, PACK_MAP, getPackOfTheDay, finishWeights, packAvailability } fro
 import {
   marketValue, itemMarketValue, rollGrade, gradingFromScore,
   GRADING_SERVICES, gradeService, gradeMultiplier,
+  priceInfo, marketIndicators, topGainers, topLosers, priceSeries, marketIndex, marketEvents,
 } from './pricing.js';
 import {
   DAILY_REWARDS, DAILY_CHALLENGE_POOL, ACHIEVEMENTS, levelNeeded,
@@ -23,12 +24,31 @@ import {
   MEMORABILIA_PACKS, MEMORABILIA_PACK_MAP,
 } from './data/relics.js';
 import { ROOMS, ROOM_MAP, DISPLAYS, DISPLAY_MAP, THEMES, THEME_MAP, PRESTIGE, RIVAL_COLLECTORS } from './data/showroom.js';
+import { SEASON_ALBUMS, SEASON_MAP, ALL_SEASON_MAP, SEASON_CARD_IDS, ALL_SEASONS } from './data/seasons.js';
+import {
+  HISTORICAL_CHALLENGES, HISTORICAL_CHALLENGE_MAP,
+  CHAMPION_CARD_IDS, COLLECTOR_TITLES,
+} from './data/challenges.js';
 
+const DAY = 86400000;
 const KEY = 'apexrush.save.v3';
 const todayKey = () => localDateKey(new Date());
 const yesterdayKey = () => localDateKey(new Date(Date.now() - 86400000));
 const RANK = {common:0, rare:1, epic:2, legendary:3, iconic:4};
 const FINISH_ORDER = ['base','holo','gold','championship','anniversary','shadow','signature','numbered'];
+const weekKey = (date = new Date()) => {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const y0 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const wk = Math.ceil(((d - y0) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(wk).padStart(2, '0')}`;
+};
+const monthKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+const SEASON_BY_CARD = SEASON_ALBUMS.reduce((map, alb) => {
+  for (const id of alb.cardIds) (map[id] ||= []).push(alb);
+  return map;
+}, {});
 const STARTER_CARDS = ['leclerc-rookie','tsunoda','oliveira','nakagami','piastri-hungary-2024','sauber-team','tsunoda','sauber-team'];
 const TRADERS = [
   {alias:'ApexCollector', tag:'F1 specialist', avatar:'A'},
@@ -101,6 +121,12 @@ function freshState() {
     tradeSeed: 1,
     tradeHistory: [],
     vault: {redeemed: [], opened: 0},
+    history: {
+      completed: [], claimed: [], titles: [], frames: [], completedSeasons: [],
+      day: {key:'', historicalPacksOpened:0, seasonsCompleted:0, cards:0},
+      week: {key:'', historicalPacksOpened:0, seasonsCompleted:0},
+      month: {key:'', historicalPacksOpened:0, seasonsCompleted:0},
+    },
     settings: {muted: false},
     starter: true,
   };
@@ -137,6 +163,17 @@ function hydrate(raw) {
   s.tradeHistory = Array.isArray(raw.tradeHistory) ? raw.tradeHistory : [];
   s.vault = {...base.vault, ...(raw.vault || {})};
   s.vault.redeemed = Array.isArray(s.vault.redeemed) ? s.vault.redeemed : [];
+  s.history = {...base.history, ...(raw.history || {})};
+  for (const k of ['completed','claimed','titles','frames','completedSeasons']) {
+    s.history[k] = Array.isArray(s.history[k]) ? s.history[k] : [];
+  }
+  for (const p of ['day','week','month']) s.history[p] = {...base.history[p], ...(raw.history?.[p] || {})};
+  // Reconstruct season completions from the actual collection so imported and
+  // legacy saves receive their historical prestige automatically.
+  const ownedNow = new Set(s.items.map(i => i.cardId));
+  s.history.completedSeasons = SEASON_ALBUMS
+    .filter(a => a.cardIds.every(id => ownedNow.has(id)))
+    .map(a => a.seasonId);
   s.relicClaims = Array.isArray(raw.relicClaims) ? raw.relicClaims : [];
   s.relicMarket = {...base.relicMarket, ...(raw.relicMarket || {})};
   s.relicMarket.history = Array.isArray(s.relicMarket.history) ? s.relicMarket.history : [];
@@ -195,6 +232,12 @@ function ensureToday(s = state) {
     s.potd = {date: today, purchases: 0};
   }
   if (s.potd.date !== today) s.potd = {date: today, purchases: 0};
+  if (s.history) {
+    const dk = todayKey(), wk = weekKey(), mk = monthKey();
+    if (s.history.day.key !== dk) s.history.day = {key:dk, historicalPacksOpened:0, seasonsCompleted:0, cards:0};
+    if (s.history.week.key !== wk) s.history.week = {key:wk, historicalPacksOpened:0, seasonsCompleted:0};
+    if (s.history.month.key !== mk) s.history.month = {key:mk, historicalPacksOpened:0, seasonsCompleted:0};
+  }
   return s;
 }
 
@@ -307,6 +350,21 @@ export function addXp(amount) {
 }
 
 /* ---------------- inventory ---------------- */
+function checkSeasonCompletion(cardId) {
+  const albums = SEASON_BY_CARD[cardId];
+  if (!albums) return;
+  const owned = new Set(state.items.map(i => i.cardId));
+  for (const album of albums) {
+    if (state.history.completedSeasons.includes(album.seasonId)) continue;
+    if (album.cardIds.every(id => owned.has(id))) {
+      state.history.completedSeasons.push(album.seasonId);
+      state.history.day.seasonsCompleted++;
+      state.history.week.seasonsCompleted++;
+      state.history.month.seasonsCompleted++;
+    }
+  }
+}
+
 export function addItem(cardId, finish = 'base', opts = {}) {
   const card = CARD_MAP[cardId];
   if (!card) throw gameError('NO_CARD', 'Unknown card');
@@ -316,6 +374,7 @@ export function addItem(cardId, finish = 'base', opts = {}) {
   const serial = capFor(card, itemFinish) ? issueSerial(card, itemFinish) : null;
   const item = {uid: uid(), cardId, finish: itemFinish, serial, at: Date.now(), source: opts.source || 'pull', grading: opts.grading || null};
   state.items.push(item);
+  checkSeasonCompletion(cardId);
   if (card.autograph) state.stats.autographsPulled = (state.stats.autographsPulled || 0) + 1;
   if (card.exclusive) state.stats.exclusivesPulled = (state.stats.exclusivesPulled || 0) + 1;
   const uniq = uniqueCount();
@@ -640,6 +699,11 @@ export function openPack(packId, opts = {}) {
 
   const availability = packAvailability(pack);
   if (!availability.available) throw gameError('PACK_LOCKED', `${pack.name} is not live right now`);
+  const willUseToken = packId !== 'potd' && state.tokens.includes(packId);
+  if (pack.requiresChallenge && !willUseToken && !state.history.completed.includes(pack.requiresChallenge)) {
+    const req = HISTORICAL_CHALLENGE_MAP[pack.requiresChallenge];
+    throw gameError('CHALLENGE_LOCKED', `Complete the “${req?.title || 'required historical'}” challenge to unlock this pack`);
+  }
   if (pack.oncePerDay && state.dailyPackDate === today) throw gameError('DAILY_USED', 'Daily Pack already claimed today');
   if (packId === 'potd' && state.coins < pack.cost && !state.tokens.includes('potd')) {
     throw gameError('NOT_ENOUGH_COINS', 'Not enough coins');
@@ -677,6 +741,11 @@ export function openPack(packId, opts = {}) {
   if (packId === 'daily') { state.stats.dailyPacks++; state.daily.dailyPacks++; }
   if (packId === 'gold' || packId === 'f1-gold' || packId === 'motogp-gold') { state.stats.goldPacks++; state.daily.goldPacks++; }
   if (pack.category === 'event') state.stats.eventPacks = (state.stats.eventPacks || 0) + 1;
+  if (pack.category === 'season') {
+    state.history.day.historicalPacksOpened++;
+    state.history.week.historicalPacksOpened++;
+    state.history.month.historicalPacksOpened++;
+  }
   if (pack.category === 'vault' || pack.category === 'exclusive') state.vault.opened = (state.vault.opened || 0) + 1;
   if (deal) state.stats.offerPacks = (state.stats.offerPacks || 0) + 1;
   if (packId === 'potd') state.potd.purchases++;
@@ -871,6 +940,142 @@ export function claimAllAvailable() {
     } catch {}
   }
   return {coins, gems, tokens, count, packs, levelUps: allLevels};
+}
+
+/* ---------------- historical seasons + collection challenges ---------------- */
+function historyStat(stat, s = state) {
+  switch (stat) {
+    case 'seasonCards': return new Set(s.items.filter(i => SEASON_CARD_IDS.includes(i.cardId)).map(i => i.cardId)).size;
+    case 'championCards': return new Set(s.items.filter(i => CHAMPION_CARD_IDS.includes(i.cardId)).map(i => i.cardId)).size;
+    case 'seasonsCompleted': return (s.history.completedSeasons || []).length;
+    default: return statValue(stat, s);
+  }
+}
+
+function challengeProgressValue(def, s = state) {
+  const req = def.requires || {};
+  if (req.type === 'cards') {
+    const owned = new Set(s.items.map(i => i.cardId));
+    return (req.ids || []).filter(id => owned.has(id)).length;
+  }
+  if (req.type === 'stat') return historyStat(req.stat, s);
+  if (req.type === 'period') {
+    const period = def.frequency === 'daily' ? s.history.day : def.frequency === 'weekly' ? s.history.week : s.history.month;
+    return period?.[req.stat] || 0;
+  }
+  return 0;
+}
+
+export function historicalChallenges() {
+  ensureToday();
+  const claimed = new Set(state.history.claimed);
+  return HISTORICAL_CHALLENGES.map(def => {
+    const progress = Math.min(def.goal, challengeProgressValue(def));
+    const completed = progress >= def.goal;
+    return {
+      ...def, progress, completed,
+      percentage: def.goal ? Math.round(progress / def.goal * 100) : 0,
+      claimed: claimed.has(def.id),
+      rewardReady: completed && !claimed.has(def.id),
+    };
+  });
+}
+
+export function claimHistoricalChallenge(id) {
+  ensureToday();
+  const def = HISTORICAL_CHALLENGE_MAP[id];
+  if (!def) throw gameError('NO_CHALLENGE', 'Historical challenge not found');
+  const view = historicalChallenges().find(c => c.id === id);
+  if (!view.completed) throw gameError('INCOMPLETE', 'This challenge is not complete yet');
+  if (view.claimed) throw gameError('ALREADY_CLAIMED', 'Reward already claimed');
+  state.history.claimed.push(id);
+  state.history.completed.push(id);
+  const r = def.reward || {};
+  state.coins += r.coins || 0;
+  state.gems += r.gems || 0;
+  state.stats.coinsEarned += r.coins || 0;
+  addCollectorTokens(r.tokens || 0);
+  if (r.pack) state.tokens.push(r.pack);
+  let grantedCard = null;
+  if (r.card && CARD_MAP[r.card]) {
+    grantedCard = CARD_MAP[r.card];
+    addItem(r.card, grantedCard.finish || 'base', {source:'challenge'});
+  }
+  if (r.decoration && !state.showroom.custom.decorations.includes(r.decoration)) {
+    state.showroom.custom.decorations.push(r.decoration);
+  }
+  if (r.title && !state.history.titles.includes(r.title)) state.history.titles.push(r.title);
+  if (r.frame && !state.history.frames.includes(r.frame)) state.history.frames.push(r.frame);
+  const levelUps = addXp(r.xp || 200);
+  save(); emit();
+  return {def, reward:r, levelUps, card:grantedCard};
+}
+
+export function seasonProgress(seasonId) {
+  const season = ALL_SEASON_MAP[seasonId] || SEASON_MAP[seasonId];
+  if (!season) return null;
+  const owned = new Set(state.items.map(i => i.cardId));
+  const have = season.cardIds.filter(id => owned.has(id)).length;
+  return {
+    season, have, total: season.cardIds.length,
+    pct: Math.round(have / season.cardIds.length * 100),
+    complete: have >= season.cardIds.length,
+    albumClaimed: state.claimedAlbums.includes(`season-${seasonId}`),
+    challengeId: `season-${seasonId}`,
+  };
+}
+
+export function seasonPrestige(s = state) {
+  const completed = (s.history.completedSeasons || []).length;
+  const champions = (s.items || []).filter(i => CHAMPION_CARD_IDS.includes(i.cardId));
+  const championCards = new Set(champions.map(i => i.cardId)).size;
+  const tiers = [
+    {at:0, name:'Archive Rookie'}, {at:3, name:'Season Collector'},
+    {at:8, name:'Archivist'}, {at:15, name:'Historian'},
+    {at:30, name:'Curator of Speed'}, {at:60, name:'Motorsport Archivist'},
+    {at:100, name:'Keeper of History'}, {at:155, name:'Living Archive'},
+  ];
+  let tier = tiers[0];
+  for (const t of tiers) if (completed >= t.at) tier = t;
+  const next = tiers.find(t => t.at > completed) || null;
+  return {
+    completed, championCards, title:tier.name,
+    pct: next ? Math.round((completed - tier.at) / Math.max(1, next.at - tier.at) * 100) : 100,
+    bonusPoints: completed * 100,
+  };
+}
+
+/* ---------------- dynamic market pulse ---------------- */
+export function marketPulse() {
+  const eventMap = new Map();
+  const eventCards = ['f1-1988-champion','f1-2021-champion','motogp-2004-champion','motogp-2013-champion','f1-1950-champion','motogp-2001-champion','f1-2001-champion','senna','rossi'];
+  for (const id of eventCards) {
+    const card = CARD_MAP[id];
+    if (!card) continue;
+    for (const ev of marketEvents(card)) {
+      const key = ev.label;
+      if (!eventMap.has(key)) eventMap.set(key, {...ev, cards:[]});
+      eventMap.get(key).cards.push(card.name);
+    }
+  }
+  return {
+    index: marketIndex(),
+    gainers: topGainers(4),
+    losers: topLosers(4),
+    events: [...eventMap.values()],
+  };
+}
+export function marketCardDetail(cardId, finish = 'base', now = Date.now()) {
+  const card = CARD_MAP[cardId];
+  if (!card) return null;
+  return {
+    card,
+    info: priceInfo(card, finish, now),
+    indicators: marketIndicators(card, finish, now),
+    series24: priceSeries(card, finish, now, 24, DAY),
+    series7: priceSeries(card, finish, now, 28, 7 * DAY),
+    series30: priceSeries(card, finish, now, 30, 30 * DAY),
+  };
 }
 
 /* ---------------- market ---------------- */
