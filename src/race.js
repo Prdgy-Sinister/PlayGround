@@ -221,6 +221,8 @@ export class RaceGame {
     }
     this.rank = this.currentRank(true);
     this.endTimer = 2.4;
+    this.goTimer = 0;
+    this.ui.raceCountdown('', '');
     this.audio.sfx(this.rank <= 3 ? 'win' : 'lose');
     this.commentary(this.rank <= 3 ? 'win' : 'lose');
     this.ui.raceFinishFlash(this.rank);
@@ -234,32 +236,38 @@ export class RaceGame {
 
   currentRank(force = false) {
     if (this.finished && !force) return this.rank;
-    const playerScore = this.player.passed / this.N;
-    let rank = 1;
-    for (const ai of this.ais) {
-      const score = ai.finished ? this.laps + 1 : (ai.lap - 1 + ai.u);
-      if (score > playerScore + 0.0001) rank++;
-    }
-    return rank;
+    return this.rankEntries().find(r => r.player)?.pos ?? 1;
   }
 
-  standings() {
+  rankEntries() {
     const list = [{
       name: this.state.profile.name, player: true,
-      score: this.finished ? this.laps + 2 : this.player.passed / this.N,
+      finished: this.finished,
       time: this.finished ? this.finishTime : null,
-      pos: this.rank,
+      progress: this.player.passed / this.N,
     }];
     for (const ai of this.ais) {
       list.push({
         name: ai.name, player: false,
-        score: ai.finished ? this.laps + 1 : (ai.lap - 1 + ai.u),
+        finished: ai.finished,
         time: ai.finished ? ai.finishTime : null,
+        progress: ai.lap - 1 + ai.u,
       });
     }
-    list.sort((a, b) => b.score - a.score);
+    list.sort((a, b) => {
+      if (a.finished && b.finished) return a.time - b.time;
+      if (a.finished !== b.finished) return a.finished ? -1 : 1;
+      return b.progress - a.progress;
+    });
     list.forEach((r, i) => { r.pos = i + 1; });
     return list;
+  }
+
+  standings() {
+    return this.rankEntries().map(r => ({
+      name: r.name, player: r.player,
+      score: r.progress, time: r.time, pos: r.pos,
+    }));
   }
 
   buildSummary() {

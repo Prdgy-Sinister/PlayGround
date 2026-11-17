@@ -319,7 +319,7 @@ export class UI {
   }
 
   showModal(html, opts = {}) {
-    this.closeModal();
+    clearTimeout(this._modalCloseTimer);
     this.els.modal.innerHTML = `<div class="modal-backdrop ${opts.cls || ''}" ${opts.sticky ? 'data-sticky="1"' : ''}><div class="modal-card ${opts.card || ''}" role="dialog">${html}</div></div>`;
     requestAnimationFrame(() => this.els.modal.querySelector('.modal-backdrop')?.classList.add('in'));
     this.modal = opts;
@@ -330,7 +330,8 @@ export class UI {
     const bd = this.els.modal.querySelector('.modal-backdrop');
     if (bd) {
       bd.classList.remove('in');
-      setTimeout(() => { this.els.modal.innerHTML = ''; }, 220);
+      clearTimeout(this._modalCloseTimer);
+      this._modalCloseTimer = setTimeout(() => { this.els.modal.innerHTML = ''; }, 220);
     } else {
       this.els.modal.innerHTML = '';
     }
