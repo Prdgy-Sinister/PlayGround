@@ -633,8 +633,10 @@ export function createStadium(scene, opts = {}) {
   // Outer wall
   const wallGeo = new THREE.CylinderGeometry(1, 1, 1, 64, 1, true);
   const wall = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({ color: '#2e2d33', emissive: '#23222c', emissiveIntensity: 0.5, roughness: 1, side: THREE.DoubleSide }));
-  wall.scale.set(118, 26, 79);
-  wall.position.y = 13;
+  // Keep the perimeter barrier low: a full-height ring blocks the low-flight
+  // camera's view across the pitch and hides the stands and goal hoops.
+  wall.scale.set(118, 5, 79);
+  wall.position.y = 2.5;
   group.add(wall);
 
   // Floodlight towers

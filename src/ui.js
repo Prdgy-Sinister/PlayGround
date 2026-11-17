@@ -1285,7 +1285,12 @@ export class UI {
     if (d.incoming) {
       obj = `SHOT INCOMING — dive to the ${d.incoming.y > 16 ? 'top' : d.incoming.y < 11 ? 'low' : 'middle'} hoop!`;
     } else if (d.role === 'chaser') {
-      obj = d.carrying ? 'Aim at the hoops and SHOOT' : 'Chase the Quaffle — steal it or scoop it up';
+      if (d.carrying) {
+        const hoop = d.aimTargetY == null ? '' : ` · ${d.aimTargetY > 16 ? 'TOP' : d.aimTargetY < 11 ? 'LOW' : 'MIDDLE'} HOOP LINED UP`;
+        obj = `Steer toward the glowing hoop and SHOOT${hoop}`;
+      } else {
+        obj = 'Chase the Quaffle — steal it or scoop it up';
+      }
     } else if (d.role === 'beater') {
       obj = 'Protect your carrier — SMASH a Bludger at a rival';
     } else if (d.role === 'keeper') {

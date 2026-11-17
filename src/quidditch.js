@@ -172,7 +172,7 @@ export class QuidditchMatch {
       const model = createBroomModel({
         robe: color, skin: ['#e0b48b', '#b98460', '#8a5b3f', '#f0c9a6'][i % 4],
         hair: ['#2d1d14', '#6d4a2d', '#a8793f', '#1c1713'][i % 4],
-        livery: this.nation.accent, wood: ['#4a2f1d', '#3f3a45', '#6b4a2c'][i % 3], scale: 0.98,
+        livery: this.nation.accent, wood: [['#4a2f1d', '#795534'], ['#3f3a45', '#78808c'], ['#6b4a2c', '#a98253']][i % 3], scale: 0.98,
       });
       this.scene.add(model);
       const a = (i / 7) * Math.PI * 2;
@@ -323,12 +323,18 @@ export class QuidditchMatch {
     p.pitch += moveY * turn * 0.52 * dt;
     p.pitch = clamp(p.pitch, -0.55, 0.55);
     if (Math.abs(moveY) < 0.05) p.pitch = lerp(p.pitch, 0, 1 - Math.exp(-dt * 2));
-    // Aim assist toward the attacking hoops for Chasers carrying the Quaffle
-    if (this.role === 'chaser' && this.quaffleHolder === 'player' && Math.abs(moveX) < 0.12) {
-      const targetDir = new THREE.Vector3(88 - p.pos.x, 13 - p.pos.y, 0);
-      const desiredYaw = Math.atan2(-targetDir.x, -targetDir.z);
-      const d = angleDiff(desiredYaw, p.yaw);
-      if (Math.abs(d) < 1.2) p.yaw += d * dt * 0.5;
+    // Softly guide a Quaffle carrier toward the hoop closest to their current aim.
+    // Strong steering always wins, so the assist helps without fighting the player.
+    this.aimTarget = null;
+    if (this.role === 'chaser' && this.quaffleHolder === 'player') {
+      const aim = this.getShotTarget(p.yaw, p.pitch);
+      this.aimTarget = aim?.target || null;
+      if (aim && aim.angle < 1.05) {
+        const steering = clamp(1 - Math.hypot(moveX, moveY) * 0.72, 0.22, 1);
+        const assist = (1 - Math.exp(-dt * 2.4)) * steering;
+        p.yaw += angleDiff(aim.yaw, p.yaw) * assist;
+        p.pitch = clamp(p.pitch + angleDiff(aim.pitch, p.pitch) * assist * 0.72, -0.55, 0.55);
+      }
     }
     p.bank = lerp(p.bank, -moveX * 0.5, 1 - Math.exp(-dt * 5));
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(p.pitch, p.yaw, 0, 'YXZ'));
@@ -442,18 +448,37 @@ export class QuidditchMatch {
     }
   }
 
+  getShotTarget(yaw = this.player.yaw, pitch = this.player.pitch) {
+    const p = this.player;
+    const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+    let best = null;
+    for (const target of this.hoopTargets) {
+      if (target.side !== 1) continue;
+      const offset = target.world.clone().sub(p.pos);
+      const distance = offset.length();
+      if (distance < 0.001) continue;
+      const direction = offset.multiplyScalar(1 / distance);
+      const dot = clamp(direction.dot(forward), -1, 1);
+      const angle = Math.acos(dot);
+      // Direction is the main factor; a small distance bias favors reachable hoops.
+      const score = angle + distance * 0.0007;
+      if (!best || score < best.score) {
+        best = {
+          target, distance, angle, score,
+          yaw: Math.atan2(-direction.x, -direction.z),
+          pitch: Math.asin(clamp(direction.y, -1, 1)),
+        };
+      }
+    }
+    return best;
+  }
+
   playerShoot() {
     const p = this.player;
-    const targets = this.hoopTargets.filter(h => h.side === 1);
-    const forward = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(p.pitch, p.yaw, 0, 'YXZ'));
-    let best = targets[0], bestDot = -2;
-    for (const h of targets) {
-      const dir = h.world.clone().sub(p.pos).normalize();
-      const dot = dir.dot(forward);
-      if (dot > bestDot) { bestDot = dot; best = h; }
-    }
+    const aim = this.getShotTarget();
+    const best = aim?.target;
     if (!best) return;
-    const dist = p.pos.distanceTo(best.world);
+    const dist = aim.distance;
     if (dist > 105) {
       this.say('Too far from the hoops — fly closer!', 'danger');
       this.ui.quidditchFlashAction('TOO FAR');
@@ -465,12 +490,12 @@ export class QuidditchMatch {
     this.shot = {
       team: 'player', from: this.quaffle.position.clone(), to: best.world.clone(),
       t: 0, duration: clamp(dist / 75, 0.35, 1.0), target: best, distance: dist,
-      accuracy: clamp(0.92 - dist / 160 + (this.state.skills.power || 0) * 0.008, 0.35, 0.94),
+      accuracy: clamp(0.97 - dist / 220 - aim.angle * 0.16 + (this.state.skills.power || 0) * 0.008, 0.48, 0.96),
       playerShot: true,
     };
     this.audio.sfx('whoosh');
     this.actionCooldown = 1.2;
-    this.say('Shot away!', 'gold');
+    this.say(aim.angle < 0.22 ? 'Perfect aim — shot away!' : 'Shot away!', 'gold');
   }
 
   /* ---------------------------------------------------------------- */
@@ -1021,8 +1046,18 @@ export class QuidditchMatch {
 
   updateEffects(dt) {
     for (const h of this.hoopTargets) {
-      if (!this.incoming || this.incoming.target !== h) {
-        h.glow.material.opacity = lerp(h.glow.material.opacity, 0.22, 1 - Math.exp(-dt * 4));
+      if (this.incoming?.target === h) {
+        h.glow.material.color.set('#ff6d68');
+        h.glow.material.opacity = lerp(h.glow.material.opacity, 0.85, 1 - Math.exp(-dt * 5));
+        h.glow.scale.setScalar(12 + Math.sin(this.elapsed * 8) * 1.2);
+      } else if (this.aimTarget === h) {
+        h.glow.material.color.set('#ffe29a');
+        h.glow.material.opacity = lerp(h.glow.material.opacity, 0.68, 1 - Math.exp(-dt * 5));
+        h.glow.scale.setScalar(10 + Math.sin(this.elapsed * 4) * 0.65);
+      } else {
+        h.glow.material.color.set('#ffd776');
+        h.glow.material.opacity = lerp(h.glow.material.opacity, 0.2, 1 - Math.exp(-dt * 4));
+        h.glow.scale.setScalar(10);
       }
     }
     if (this.crowdNoise > 0) this.crowdNoise -= dt;
@@ -1084,6 +1119,7 @@ export class QuidditchMatch {
       snitchReleased: this.snitchReleased,
       snitchVisible: this.snitch.visible,
       incoming: this.incoming?.target || null,
+      aimTargetY: this.aimTarget?.y ?? null,
       playerPos: this.player.pos, playerYaw: this.player.yaw,
       quafflePos: this.quaffle.position, snitchPos: this.snitch.position,
       opponents: this.opponents, teammates: this.teammates,

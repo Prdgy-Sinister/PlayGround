@@ -23,6 +23,10 @@ class Input {
   constructor(game) {
     this.game = game;
     this.joy = { x: 0, y: 0 };
+    this.raw = { x: 0, y: 0 };
+    this.joyHome = { x: 0, y: 0 };
+    this.joyOrigin = { x: 0, y: 0 };
+    this.joyMax = 42;
     this.boost = false;
     this.brake = false;
     this.action = false;
@@ -57,30 +61,39 @@ class Input {
     if (zone) {
       const update = e => {
         if (e.pointerId !== this.touchId) return;
-        const rect = zone.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const max = rect.width * 0.34;
-        let dx = (e.clientX - cx) / max;
-        let dy = (e.clientY - cy) / max;
+        let dx = (e.clientX - this.joyOrigin.x) / this.joyMax;
+        let dy = (e.clientY - this.joyOrigin.y) / this.joyMax;
         const len = Math.hypot(dx, dy);
         if (len > 1) { dx /= len; dy /= len; }
-        this.joy.x = dx;
-        this.joy.y = dy;
-        if (knob) knob.style.transform = `translate(${dx * max * 0.62}px, ${dy * max * 0.62}px)`;
+        this.raw.x = dx;
+        this.raw.y = dy;
+        if (knob) knob.style.transform = `translate(${this.joyHome.x + dx * this.joyMax * 0.6}px, ${this.joyHome.y + dy * this.joyMax * 0.6}px)`;
       };
       zone.addEventListener('pointerdown', e => {
         e.preventDefault();
         this.touchId = e.pointerId;
         this.touchActive = true;
         this.game.audio.init();
+        const rect = zone.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        this.joyMax = Math.max(36, rect.width * 0.32);
+        const homeMax = rect.width * 0.16;
+        this.joyHome = {
+          x: Math.max(-homeMax, Math.min(homeMax, e.clientX - cx)),
+          y: Math.max(-homeMax, Math.min(homeMax, e.clientY - cy)),
+        };
+        this.joyOrigin = { x: e.clientX, y: e.clientY };
+        zone.classList.add('active');
         update(e);
       }, { signal });
       window.addEventListener('pointermove', e => { if (this.touchActive) update(e); }, { signal });
       const end = e => {
         if (e.pointerId !== this.touchId) return;
         this.touchId = null; this.touchActive = false;
-        this.joy.x = 0; this.joy.y = 0;
+        this.raw.x = 0; this.raw.y = 0;
+        this.joyHome.x = 0; this.joyHome.y = 0;
+        zone.classList.remove('active');
         if (knob) knob.style.transform = 'translate(0,0)';
       };
       window.addEventListener('pointerup', end, { signal });
@@ -104,7 +117,7 @@ class Input {
     bindButton('btn-pass', () => { this.pass = true; }, null);
   }
 
-  update() {
+  update(dt = 1 / 60) {
     const k = this.keys;
     if (!this.touchActive) {
       let x = 0, y = 0;
@@ -112,9 +125,23 @@ class Input {
       if (k.ArrowRight || k.KeyD) x += 1;
       if (k.ArrowUp || k.KeyW) y -= 1;
       if (k.ArrowDown || k.KeyS) y += 1;
-      this.joy.x = x;
-      this.joy.y = y;
+      this.raw.x = x;
+      this.raw.y = y;
     }
+    // Dead-zone + precision curve, then ease the result so taps and flicks
+    // translate into smooth, controllable flight instead of instant snaps.
+    const shape = v => {
+      const a = Math.abs(v);
+      if (a < 0.07) return 0;
+      return Math.sign(v) * Math.pow((a - 0.07) / 0.93, 1.16);
+    };
+    const targetX = shape(this.raw.x);
+    const targetY = shape(this.raw.y);
+    const response = 1 - Math.exp(-dt * 24);
+    this.joy.x += (targetX - this.joy.x) * response;
+    this.joy.y += (targetY - this.joy.y) * response;
+    if (Math.abs(this.joy.x) < 0.004) this.joy.x = 0;
+    if (Math.abs(this.joy.y) < 0.004) this.joy.y = 0;
     this.boost = this.btnBoost || !!k.ShiftLeft || !!k.ShiftRight;
     this.brake = this.btnBrake || !!k.KeyX;
   }
@@ -131,12 +158,15 @@ class Input {
 
   clear() {
     this.joy.x = 0; this.joy.y = 0;
+    this.raw.x = 0; this.raw.y = 0;
     this.touchActive = false; this.touchId = null;
+    this.joyHome.x = 0; this.joyHome.y = 0;
     this.btnBoost = false; this.btnBrake = false;
     this.boost = false; this.brake = false;
     this.action = false; this.pass = false;
     const knob = document.getElementById('joystick-knob');
     if (knob) knob.style.transform = 'translate(0,0)';
+    document.getElementById('joystick-zone')?.classList.remove('active');
   }
 
   unbind() {
@@ -176,12 +206,15 @@ class Game {
     this._completing = false;
 
     const canvas = document.getElementById('gl');
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', alpha: false });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', alpha: false, stencil: false });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.18;
+    this.renderer.toneMappingExposure = 1.22;
     this.renderer.shadowMap.enabled = this.state.settings.quality !== 'low';
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this._perfAcc = 0;
+    this._perfFrames = 0;
+    this._lastFrame = performance.now();
     this.applyQuality();
 
     this.scene = null;
@@ -226,16 +259,36 @@ class Game {
   applyQuality() {
     const q = this.state.settings.quality;
     const dpr = window.devicePixelRatio || 1;
-    const ratio = q === 'high' ? Math.min(dpr, 2) : q === 'medium' ? Math.min(dpr, 1.5) : 1;
-    this.renderer.setPixelRatio(ratio);
+    const cap = q === 'high' ? 2 : q === 'medium' ? 1.5 : 1;
+    this._maxPixelRatio = Math.min(dpr, cap);
+    this._pixelRatio = this._maxPixelRatio;
+    this.renderer.setPixelRatio(this._pixelRatio);
     this.renderer.shadowMap.enabled = q !== 'low';
+    this.renderer.shadowMap.type = q === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  }
+
+  trackPerformance(rawDt) {
+    this._perfAcc += rawDt;
+    this._perfFrames++;
+    if (this._perfAcc < 1.4) return;
+    const fps = this._perfFrames / this._perfAcc;
+    this._perfAcc = 0;
+    this._perfFrames = 0;
+    const min = this.state.settings.quality === 'low' ? 0.8 : 0.72;
+    if (fps < 47 && this._pixelRatio > min) {
+      this._pixelRatio = Math.max(min, this._pixelRatio * 0.92);
+      this.renderer.setPixelRatio(this._pixelRatio);
+    } else if (fps > 57 && this._pixelRatio < this._maxPixelRatio) {
+      this._pixelRatio = Math.min(this._maxPixelRatio, this._pixelRatio * 1.04);
+      this.renderer.setPixelRatio(this._pixelRatio);
+    }
   }
 
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
     this.aspect = w / Math.max(1, h);
     this.renderer.setSize(w, h, false);
-    this.renderer.setPixelRatio(this.state.settings.quality === 'high' ? Math.min(window.devicePixelRatio || 1, 2) : window.devicePixelRatio || 1);
+    this.renderer.setPixelRatio(this._pixelRatio || this._maxPixelRatio || 1);
     const cam = this.active?.camera || this.preview?.camera || this.menu.camera;
     if (cam) { cam.aspect = this.aspect; cam.updateProjectionMatrix(); }
   }
@@ -251,9 +304,13 @@ class Game {
 
   loop() {
     requestAnimationFrame(this.loop);
+    const now = performance.now();
+    const rawDt = Math.max(0.0001, (now - this._lastFrame) / 1000);
+    this._lastFrame = now;
     const dt = Math.min(0.05, this.clock.getDelta());
     this.t += dt;
-    this.input.update();
+    this.trackPerformance(rawDt);
+    this.input.update(dt);
     if (!this.paused) {
       if (this.active) this.active.update(dt);
       else if (this.preview) this.updatePreview(dt);
