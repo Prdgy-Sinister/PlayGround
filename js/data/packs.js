@@ -11,6 +11,7 @@ const P = (cfg) => ({
   theme: 'grid',
   guaranteeNew: 0,
   ...cfg,
+  cost: cfg.cost === 0 ? 0 : Math.round((cfg.cost || 0) * 1.25),
   odds: {common:0, rare:0, epic:0, legendary:0, iconic:0, ...cfg.odds},
 });
 

@@ -306,7 +306,19 @@ function packPool(pack) {
   return pool.length ? pool : CARDS;
 }
 function rollRarity(pack, rnd) {
-  return weighted(Object.entries(pack.odds).map(([k,v]) => [k, v]), rnd);
+  const base = {...pack.odds};
+  // Reworked odds: top tiers are significantly harder to hit. Removed
+  // weight is pushed into the lowest available tier so pack totals stay 100.
+  const cuts = {epic: .78, legendary: .42, iconic: .3};
+  let removed = 0;
+  for (const k of ['epic','legendary','iconic']) {
+    const before = base[k] || 0;
+    base[k] = before * cuts[k];
+    removed += before - base[k];
+  }
+  const sink = base.common > 0 ? 'common' : (base.rare > 0 ? 'rare' : (base.epic > 0 ? 'epic' : 'legendary'));
+  base[sink] = (base[sink] || 0) + removed;
+  return weighted(Object.entries(base).map(([k,v]) => [k, v]), rnd);
 }
 function cardOfRarity(pool, rarity, exclude, unownedOnly, owned, rnd) {
   let candidates = pool.filter(c => c.rarity === rarity && !exclude.has(c.id) && (!unownedOnly || !owned.has(c.id)));
