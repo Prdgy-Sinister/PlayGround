@@ -102,10 +102,10 @@ function albumStrip() {
 function ownedStrip() {
   const entries = ownedRelics();
   if (!entries.length) return `<div class="owned-empty">No collectibles yet. Open a memorabilia pack or buy merchandise to start your museum.</div>`;
-  return `<div class="owned-strip">${entries.slice(0, 24).map(({relic, item}) => `<button class="owned-tile" data-open-relic-instance="${esc(item.uid)}" style="--relic-accent:${RELIC_RARITY[relic.rarity].color}">
-    ${relicArtHTML(relic, {small:true})}
+  return `<div class="owned-strip">${entries.slice(0, 24).map(({relic, item}) => `<button class="owned-tile ${item.grading ? 'graded' : ''}" data-open-relic-instance="${esc(item.uid)}" style="--relic-accent:${RELIC_RARITY[relic.rarity].color}">
+    ${relicArtHTML(relic, {small:true, grading:item.grading})}
     <span>${esc(relic.name)}</span>
-    <small>${item.serial != null ? '#' + item.serial : 'Open edition'}</small>
+    <small>${item.serial != null ? '#' + item.serial : 'Open edition'}${item.grading ? ` · ${item.grading.score} ${esc(item.grading.label || '')}` : ''}</small>
   </button>`).join('')}</div>`;
 }
 

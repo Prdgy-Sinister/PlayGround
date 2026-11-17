@@ -3,59 +3,143 @@
    Loaded last so grading chrome sits above card / relic artwork.
    ============================================================ */
 
-/* Clear tamper-evident slab over graded cards */
-.card-slab{
-  position:absolute; inset:0; z-index:5; pointer-events:none; border-radius:inherit;
-  border:1.5px solid rgba(225,238,255,.42);
+/* ------------------------------------------------------------
+   CLEAR ACRYLIC CARD SLAB — a real case around a graded card
+   ------------------------------------------------------------ */
+.card-slab-frame{
+  position:relative; isolation:isolate; container-type:inline-size;
+  padding:5px; border-radius:14px;
   background:
-    radial-gradient(circle at 7px 7px, rgba(255,255,255,.6) 0 1.5px, transparent 2px),
-    radial-gradient(circle at calc(100% - 7px) 7px, rgba(255,255,255,.6) 0 1.5px, transparent 2px),
-    radial-gradient(circle at 7px calc(100% - 7px), rgba(255,255,255,.4) 0 1.5px, transparent 2px),
-    radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), rgba(255,255,255,.4) 0 1.5px, transparent 2px),
-    linear-gradient(118deg, rgba(255,255,255,.16) 0%, transparent 13%, transparent 78%, rgba(255,255,255,.1) 92%, transparent 100%);
+    radial-gradient(130% 90% at 18% -8%, rgba(255,255,255,.30), transparent 42%),
+    radial-gradient(120% 100% at 82% 108%, rgba(190,225,255,.18), transparent 46%),
+    linear-gradient(155deg, rgba(200,226,255,.16), rgba(255,255,255,.045) 34%, rgba(10,16,24,.14) 68%, rgba(200,226,255,.14));
+  border:1px solid rgba(212,234,255,.5);
   box-shadow:
-    inset 0 0 0 3px rgba(8,12,18,.42),
-    inset 0 0 0 4px rgba(225,238,255,.14),
-    inset 0 14px 22px -18px rgba(255,255,255,.9),
-    0 0 18px -8px rgba(180,220,255,.45);
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 -1px 0 rgba(255,255,255,.16),
+    inset 0 0 20px rgba(170,215,255,.10),
+    0 16px 32px -18px rgba(0,0,0,.95),
+    0 0 24px -10px rgba(140,205,255,.45);
+  transition:transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s;
+  backdrop-filter:blur(2px) saturate(1.06);
+  -webkit-backdrop-filter:blur(2px) saturate(1.06);
 }
-.card-slab::after{
-  content:''; position:absolute; inset:4px; border-radius:calc(inherit - 3px);
-  border-left:1px solid rgba(255,255,255,.16);
-  border-top:1px solid rgba(255,255,255,.1);
+.card-slab-frame::before{
+  content:''; position:absolute; inset:0; z-index:3; border-radius:inherit; pointer-events:none;
+  background:linear-gradient(118deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,.07) 11%, transparent 24%, transparent 76%, rgba(255,255,255,.11) 88%, transparent 100%);
+  mix-blend-mode:screen; opacity:.75;
 }
+.card-slab-frame::after{
+  content:''; position:absolute; inset:3px; z-index:3; border-radius:11px; pointer-events:none;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:inset 0 0 14px rgba(255,255,255,.05);
+}
+.card-cell.graded:hover .card-slab-frame{
+  transform:translateY(-3px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.6),
+    inset 0 -1px 0 rgba(255,255,255,.18),
+    inset 0 0 24px rgba(170,215,255,.14),
+    0 24px 44px -20px rgba(0,0,0,1),
+    0 0 34px -8px color-mix(in srgb, var(--gc,#f6c453) 28%, rgba(140,205,255,.4));
+}
+.csf-label{
+  position:relative; z-index:4; display:flex; align-items:center; justify-content:space-between; gap:6px;
+  padding:1px 5px 4px;
+}
+.csf-brand{
+  font:800 clamp(5px,3.5cqw,8px)/1 var(--font-tech); letter-spacing:.18em; color:#eaf4ff; white-space:nowrap;
+  text-shadow:0 0 8px rgba(175,220,255,.5);
+}
+.csf-brand i{font-style:normal;color:var(--gc,#f6c453);letter-spacing:.12em}
+.csf-grade{display:flex; align-items:baseline; gap:3px; flex:0 0 auto}
+.csf-grade b{
+  font:800 clamp(9px,6.6cqw,15px)/1 var(--font-display); letter-spacing:.02em; color:var(--gc,#f6c453);
+  text-shadow:0 0 10px color-mix(in srgb,var(--gc,#f6c453) 55%, transparent);
+}
+.csf-grade em{
+  font:700 clamp(4.5px,3cqw,6.5px)/1 var(--font-tech); font-style:normal; letter-spacing:.12em;
+  text-transform:uppercase; color:#c8d6e8;
+}
+.csf-window{
+  border-radius:9px; overflow:hidden;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.18),
+    inset 0 0 0 2px rgba(4,8,13,.5),
+    0 2px 10px rgba(0,0,0,.55);
+}
+.csf-window .card{border-radius:9px}
+.csf-window .card.graded{box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 10px 18px -12px rgba(0,0,0,.9), 0 0 18px -10px color-mix(in srgb,var(--gc,#f6c453) 34%, transparent)}
+.csf-foot{
+  position:relative; z-index:4; display:flex; align-items:center; justify-content:space-between; gap:6px;
+  padding:4px 5px 1px;
+  font:700 clamp(4.5px,3cqw,6.5px)/1.2 var(--font-tech); letter-spacing:.1em; text-transform:uppercase;
+  color:rgba(210,228,248,.68); white-space:nowrap; overflow:hidden;
+}
+.csf-foot span{overflow:hidden;text-overflow:ellipsis}
+.csf-foot span:last-child{color:rgba(228,238,250,.5);text-align:right;flex:0 0 auto}
+
+/* Shared labels used by the card slab and the relic display case */
 .slab-brand{
-  position:absolute; top:10.5%; left:50%; transform:translateX(-50%);
-  padding:1px 5px; white-space:nowrap; border-radius:3px;
-  font:700 7px var(--font-tech); letter-spacing:.16em; color:#dce9f8;
-  background:rgba(5,8,13,.72); border:1px solid rgba(225,238,255,.22);
+  position:absolute; top:9px; left:9px; z-index:2;
+  padding:2px 6px; white-space:nowrap; border-radius:4px;
+  font:800 7px var(--font-tech); letter-spacing:.16em; color:#e4f0ff;
+  background:rgba(5,8,13,.74); border:1px solid rgba(225,238,255,.24);
   text-shadow:0 0 6px rgba(190,225,255,.5);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16);
 }
-.slab-brand i{font-style:normal;color:var(--gold)}
+.slab-brand i{font-style:normal;color:var(--gc,#f6c453)}
+.slab-grade{position:absolute; top:9px; right:9px; z-index:2; display:flex; align-items:baseline; gap:3px}
+.slab-grade b{
+  font:800 13px/1 var(--font-display); letter-spacing:.02em; color:var(--gc,#f6c453);
+  text-shadow:0 0 12px color-mix(in srgb,var(--gc,#f6c453) 55%, transparent), 0 1px 2px rgba(0,0,0,.8);
+}
+.slab-grade em{font:700 5.5px/1 var(--font-tech); font-style:normal; letter-spacing:.1em; text-transform:uppercase; color:#dbe7f6; text-shadow:0 1px 2px rgba(0,0,0,.8)}
 .slab-cert{
-  position:absolute; right:4%; bottom:2.2%;
-  font:700 6.5px var(--font-tech); letter-spacing:.1em; color:rgba(235,244,255,.7);
+  position:absolute; left:9px; bottom:6px; z-index:2;
+  font:700 6px var(--font-tech); letter-spacing:.09em; color:rgba(235,244,255,.72);
   text-shadow:0 1px 2px #000;
 }
-.card.graded .card-grade{z-index:8;box-shadow:0 0 14px color-mix(in srgb,var(--gc,#f6c453) 38%, transparent),0 2px 8px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.22)}
 
-/* In an APEX display case, the same chrome wraps the whole relic frame. */
+/* ------------------------------------------------------------
+   APEX DISPLAY CASE — clear acrylic surround for graded relics
+   ------------------------------------------------------------ */
 .relic-art .card-slab{
-  border:2px solid rgba(205,226,255,.5);
-  border-radius:10px;
-  box-shadow:inset 0 0 0 4px rgba(6,10,15,.55),inset 0 0 0 5px rgba(205,226,255,.16),inset 0 -24px 30px -26px rgba(190,230,255,.9),0 0 22px -8px rgba(140,205,255,.5);
+  border:2px solid rgba(208,232,255,.55);
+  border-radius:12px;
   background:
-    radial-gradient(circle at 9px 9px, rgba(255,255,255,.6) 0 2px, transparent 2.5px),
-    radial-gradient(circle at calc(100% - 9px) 9px, rgba(255,255,255,.6) 0 2px, transparent 2.5px),
-    radial-gradient(circle at 9px calc(100% - 9px), rgba(255,255,255,.4) 0 2px, transparent 2.5px),
-    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), rgba(255,255,255,.4) 0 2px, transparent 2.5px),
-    linear-gradient(115deg, rgba(255,255,255,.2) 0%, transparent 14%, transparent 82%, rgba(255,255,255,.13) 95%, transparent 100%);
+    radial-gradient(120% 90% at 14% 0%, rgba(255,255,255,.26), transparent 40%),
+    radial-gradient(100% 80% at 86% 100%, rgba(180,220,255,.16), transparent 46%),
+    linear-gradient(154deg, rgba(200,228,255,.12), rgba(255,255,255,.03) 36%, rgba(6,10,15,.10) 68%, rgba(200,228,255,.12));
+  box-shadow:
+    inset 0 0 0 4px rgba(6,10,15,.5),
+    inset 0 0 0 5px rgba(205,230,255,.18),
+    inset 0 -26px 34px -28px rgba(200,235,255,.9),
+    0 0 26px -8px rgba(140,205,255,.55);
 }
-.relic-art .slab-brand{top:6px;font-size:6.5px;background:rgba(5,8,13,.78)}
-.relic-art .slab-cert{bottom:5px;right:7px}
-.relic-art-sm .card-slab{border-width:1.5px;box-shadow:inset 0 0 0 3px rgba(6,10,15,.5),inset 0 0 0 4px rgba(205,226,255,.14)}
-.relic-art-sm .slab-brand{font-size:5.5px;padding:1px 3px;top:10%}
-.relic-art-sm .slab-cert{font-size:5px;right:4px;bottom:3px}
+.relic-art .card-slab::before{
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:linear-gradient(115deg, rgba(255,255,255,.2) 0%, transparent 16%, transparent 82%, rgba(255,255,255,.12) 94%, transparent 100%);
+  mix-blend-mode:screen; opacity:.7;
+}
+.relic-art .slab-brand{top:7px;left:7px;font-size:6.5px;padding:1px 5px;background:rgba(5,8,13,.8)}
+.relic-art .slab-grade{top:7px;right:7px}
+.relic-art .slab-grade b{font-size:11px}
+.relic-art .slab-grade em{font-size:5px}
+.relic-art .slab-cert{bottom:5px;left:7px}
+.relic-art-sm .card-slab{border-width:1.5px;box-shadow:inset 0 0 0 3px rgba(6,10,15,.5),inset 0 0 0 4px rgba(205,230,255,.14)}
+.relic-art-sm .slab-brand{font-size:5.5px;padding:1px 3px;top:5px;left:5px}
+.relic-art-sm .slab-grade{top:5px;right:5px}
+.relic-art-sm .slab-grade b{font-size:8px}
+.relic-art-sm .slab-grade em{font-size:4px}
+.relic-art-sm .slab-cert{font-size:5px;bottom:3px;left:5px}
+/* A sealed case carries the grade/cert plates instead of the raw display tags. */
+.relic-art .card-slab ~ .relic-sign,
+.relic-art .card-slab ~ .relic-serial-tag{display:none}
+/* Clear the cinematic bars and kicker in the full detail presentation. */
+.cinematic-relic .rd-visual .slab-brand,
+.cinematic-relic .rd-visual .slab-grade{top:34px}
+.cinematic-relic .rd-visual .slab-cert{bottom:20px}
 
 /* Written condition report inside grading panels */
 .gp-value i{display:block;font-style:normal;font:600 8px var(--font-tech);letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-top:2px}
@@ -112,6 +196,33 @@
 .al-rarity b{font-weight:800}
 .al-report{margin-top:6px;padding:5px 7px;border-left:2px solid var(--loc-accent);border-radius:3px;background:rgba(0,0,0,.25);font:600 9px var(--font-tech);color:#b9c4d4;line-height:1.35}
 .reveal-grade{color:var(--gold)!important}
+
+/* ------------------------------------------------------------
+   GRAPHICS POLISH — smoother depth, motion and edges
+   ------------------------------------------------------------ */
+.card,.relic-card,.relic-art,.relic-svg,.card-slab-frame{-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.card-art svg,.relic-svg{shape-rendering:geometricPrecision}
+.card-cell:not(.graded):hover .card{
+  box-shadow:0 2px 0 rgba(255,255,255,.1) inset,0 28px 48px -20px rgba(0,0,0,1),0 0 0 1px rgba(0,0,0,.7),0 0 34px -12px var(--rarity-glow);
+}
+.card-slab-frame .card{box-shadow:0 2px 0 rgba(255,255,255,.1) inset,0 8px 18px -14px rgba(0,0,0,.95),0 0 0 1px rgba(0,0,0,.65)}
+.relic-art{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -34px 48px -34px rgba(0,0,0,.9)}
+.relic-card{transition:transform .38s cubic-bezier(.2,.8,.2,1),box-shadow .38s,border-color .38s}
+.relic-card:hover{transform:translateY(-4px)}
+.grade-service,.grade-mini,.aw-chip,.auction-lot,.rgl-item{
+  transition:transform .22s ease,box-shadow .22s ease,background .22s ease,border-color .22s ease,color .22s ease;
+}
+.grade-service:hover,.grade-mini:hover{transform:translateY(-1px)}
+/* Dense grids get a slightly tighter slab rim so cards stay aligned. */
+.card-grid.sm .card-slab-frame,.card-grid.tight .card-slab-frame{padding:4px;border-radius:12px}
+/* Tiny thumbnails keep the clear rim but drop the printed label text. */
+.listing .l-card .card-slab-frame,.sell-row .s-card .card-slab-frame,.gq-card .card-slab-frame{padding:3px;border-radius:7px}
+.listing .l-card .csf-label,.listing .l-card .csf-foot,
+.sell-row .s-card .csf-label,.sell-row .s-card .csf-foot,
+.gq-card .csf-label,.gq-card .csf-foot{display:none}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
+}
 
 @media(max-width:900px){
   .auction-world{grid-template-columns:1fr}
