@@ -30,11 +30,11 @@
 .hero-art .hero-glow{position:absolute;width:330px;height:330px;border-radius:50%;background:radial-gradient(circle,rgba(255,47,56,.28),transparent 65%);filter:blur(30px)}
 .hero-art .fan{position:relative;width:190px;height:266px;transform-style:preserve-3d}
 .hero-art .fan > .card-cell{position:absolute;inset:0;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
-.hero-art .fan > .card-cell:nth-child(1){transform:translate(-78px,12px) rotate(-13deg) scale(.92);z-index:1}
+.hero-art .fan > .card-cell:nth-child(1){transform:translate(-70px,12px) rotate(-13deg) scale(.92);z-index:1}
 .hero-art .fan > .card-cell:nth-child(2){transform:translateY(-10px) rotate(0deg);z-index:3}
-.hero-art .fan > .card-cell:nth-child(3){transform:translate(78px,12px) rotate(13deg) scale(.92);z-index:2}
-.hero-art .fan:hover > .card-cell:nth-child(1){transform:translate(-104px,4px) rotate(-18deg) scale(.92)}
-.hero-art .fan:hover > .card-cell:nth-child(3){transform:translate(104px,4px) rotate(18deg) scale(.92)}
+.hero-art .fan > .card-cell:nth-child(3){transform:translate(70px,12px) rotate(13deg) scale(.92);z-index:2}
+.hero-art .fan:hover > .card-cell:nth-child(1){transform:translate(-94px,4px) rotate(-18deg) scale(.92)}
+.hero-art .fan:hover > .card-cell:nth-child(3){transform:translate(94px,4px) rotate(18deg) scale(.92)}
 .hero-art .fan:hover > .card-cell:nth-child(2){transform:translateY(-18px) scale(1.02)}
 .hero-spark{position:absolute;font-family:var(--font-tech);font-size:9px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase;display:flex;align-items:center;gap:6px}
 .hero-spark.tl{top:34px;left:38px}.hero-spark.br{bottom:28px;right:34px}
@@ -260,7 +260,7 @@
 .claim-all-panel .ca-lbl{font-family:var(--font-tech);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
 .claim-all-panel .btn{margin-top:auto;width:100%}
 .challenge-list{display:flex;flex-direction:column;gap:8px}
-.challenge-row{display:grid;grid-template-columns:38px 1fr minmax(130px,190px) auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.02);transition:.2s}
+.challenge-row{display:grid;grid-template-columns:38px minmax(0,1fr) minmax(120px,180px) auto 82px;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.02);transition:.2s}
 .challenge-row:hover{background:rgba(255,255,255,.04)}
 .challenge-row.done{border-color:rgba(62,224,138,.18);background:rgba(62,224,138,.025)}
 .challenge-row.claimed{opacity:.45}
@@ -363,6 +363,10 @@
 .toggle.on{background:rgba(62,224,138,.2);border-color:rgba(62,224,138,.4)}
 .toggle.on::after{left:21px;background:var(--green)}
 .setting-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.save-block{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:6px}
+.save-title{font-family:var(--font-tech);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
+.save-text{width:100%;min-height:58px;max-height:110px;resize:vertical;background:#090c12;border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px;line-height:1.45;word-break:break-all;outline:none}
+.save-text:focus{border-color:rgba(246,196,83,.4);box-shadow:0 0 0 2px rgba(246,196,83,.08)}
 
 @media (max-width:1200px){
   .latest-pulls{grid-template-columns:repeat(4,1fr)}
@@ -390,6 +394,8 @@
   .latest-pulls{grid-template-columns:repeat(3,1fr)}
   .latest-pulls .card-cell:nth-child(n+4){display:none}
   .trade-grid{grid-template-columns:1fr}
+  .trade-intro{flex-wrap:wrap}
+  .trade-intro .btn{margin-left:0;width:100%}
   .odds-panel{grid-template-columns:1fr}
 }
 @media (max-width:680px){
@@ -412,11 +418,12 @@
   .album-grid{grid-template-columns:1fr}
   .album-detail-head{padding:15px;gap:12px}
   .album-detail-head .adh-pct b{font-size:34px}
-  .challenge-row{grid-template-columns:34px 1fr auto;gap:9px;padding:10px}
-  .ch-ico{width:34px;height:34px}
-  .ch-prog{grid-column:2/4}
-  .ch-reward{grid-column:2;grid-row:2;justify-content:flex-start}
-  .ch-claim{grid-column:3;grid-row:2}
+  .challenge-row{grid-template-columns:34px minmax(0,1fr) 82px;gap:9px;padding:10px}
+  .ch-ico{width:34px;height:34px;grid-row:1/4}
+  .ch-body{grid-column:2/4}
+  .ch-prog{grid-column:2/4;grid-row:2}
+  .ch-reward{grid-column:2;grid-row:3;justify-content:flex-start}
+  .ch-claim{grid-column:3;grid-row:3}
   .reward-calendar{grid-template-columns:repeat(2,1fr);padding:12px}
   .day-card{min-height:104px}
   .listing-grid{grid-template-columns:1fr}

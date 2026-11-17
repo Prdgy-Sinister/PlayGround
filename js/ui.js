@@ -202,11 +202,13 @@ export function openModal(html, opts = {}) {
   return wrap;
 }
 export function closeModal() {
-  if (modalEl) {
-    modalEl.remove();
-    if (modalCloseHandler) { const fn = modalCloseHandler; modalCloseHandler = null; fn(); }
-    modalEl = null;
-  }
+  if (!modalEl) return;
+  const el = modalEl;
+  const fn = modalCloseHandler;
+  modalEl = null;
+  modalCloseHandler = null;
+  el.remove();
+  if (fn) fn();
 }
 export function closeTopModal() { closeModal(); }
 export function hasModal() { return !!modalEl; }
@@ -241,12 +243,16 @@ export function openCardDetail(card, items, opts = {}) {
   const attrs = card.attrLabels || ['Speed', 'Skill', 'Consistency', 'Racecraft'];
   const stats = [card.stats.speed, card.stats.skill, card.stats.consistency, card.stats.racecraft];
   const finishNote = finish !== 'base' ? `<div class="finish-note"><span class="fn-ico">✦</span><div><b>${esc(finishName(finish))}${serial != null ? ' · ' + esc(serialText(serial, card)) : ''}</b>Premium finish. Collector value ${fmt(value)} coins and a permanent place in your vault.</div></div>` : '';
+  const sellTarget = items.length > 1
+    ? [...items].sort((a, b) => FINISH_ORDER.indexOf(a.finish) - FINISH_ORDER.indexOf(b.finish))[0]
+    : selected;
+  const sellValue = sellTarget ? cardValue(card, sellTarget.finish) : value;
   const ownedLine = items.length
     ? `<div class="dc-owned"><span>In your vault</span><b>${items.length} ${items.length === 1 ? 'copy' : 'copies'}${best && best.finish !== 'base' ? ' · ' + esc(finishName(best.finish)) : ''}</b></div>`
     : `<div class="dc-owned"><span>Not collected yet</span><b>Find it in packs</b></div>`;
   const actions = items.length
     ? `${fav ? `<button class="btn btn-sm" data-fav="${esc(card.id)}">★ Favourite</button>` : `<button class="btn btn-sm" data-fav="${esc(card.id)}">☆ Set favourite</button>`}
-       <button class="btn btn-sm btn-gold" data-sell-one="${esc(selected.uid)}" data-card-id="${esc(card.id)}">Sell copy · ◈ ${fmt(value)}</button>
+       <button class="btn btn-sm btn-gold" data-sell-one="${esc(sellTarget.uid)}" data-card-id="${esc(card.id)}">Sell ${items.length > 1 ? 'spare' : 'copy'} · ◈ ${fmt(sellValue)}</button>
        ${items.length > 1 ? `<button class="btn btn-sm" data-sell-dupes-card="${esc(card.id)}">Sell duplicates</button>` : ''}
        <div class="price-tag">Collector value<b>◈ ${fmt(cardValue(card, best?.finish || finish))}</b></div>`
     : `<button class="btn btn-sm btn-primary" data-nav="packs">Open packs</button>
@@ -300,6 +306,14 @@ export function initFx() {
   fxCtx = fxCanvas.getContext('2d');
   resizeFx();
   window.addEventListener('resize', resizeFx);
+  document.addEventListener('pointermove', ev => {
+    const card = ev.target.closest?.('.card');
+    if (!card) return;
+    const r = card.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    card.style.setProperty('--mx', `${((ev.clientX - r.left) / r.width * 100).toFixed(1)}%`);
+    card.style.setProperty('--my', `${((ev.clientY - r.top) / r.height * 100).toFixed(1)}%`);
+  }, {passive: true});
 }
 function resizeFx() {
   if (!fxCanvas) return;

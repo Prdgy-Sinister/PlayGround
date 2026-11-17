@@ -489,7 +489,7 @@ document.addEventListener('input', ev => {
 });
 document.addEventListener('change', ev => {
   const field = ev.target.closest?.('[data-filter]');
-  if (!field) return;
+  if (!field || field.dataset.filter === 'search') return;
   view.collection[field.dataset.filter] = field.value;
   render({ scroll: false });
 });

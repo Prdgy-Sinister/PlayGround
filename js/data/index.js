@@ -153,7 +153,7 @@ export function albumSetSections(album) {
   const cards = cardsForAlbum(album);
   const sections = [
     {key:'driver', label:album.sport === 'motogp' ? 'Riders' : 'Drivers', cards:[]},
-    {key:'team', label:'Constructors', cards:[]},
+    {key:'team', label:album.sport === 'motogp' ? 'Teams' : 'Constructors', cards:[]},
     {key:'machine', label:'Machines', cards:[]},
     {key:'moment', label:'Moments', cards:[]},
   ];

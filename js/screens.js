@@ -719,7 +719,7 @@ export function marketScreen() {
         </div>
         <div class="sell-actions">
           <button class="btn btn-sm" data-sell-all-dupes ${dupes.length ? '' : 'disabled'}>Sell all duplicates</button>
-          <button class="btn btn-sm" data-sell-commons>Sell common dupes</button>
+          <button class="btn btn-sm" data-sell-commons ${dupes.some(g => g.card.rarity === 'common') ? '' : 'disabled'}>Sell common dupes</button>
         </div>
       </div>
     </div>
@@ -856,6 +856,6 @@ export function openDuplicatesModal() {
     </div>
     <div class="sell-actions" style="border-top:1px solid var(--line)">
       <button class="btn btn-sm btn-gold" data-sell-all-dupes ${dupes.length ? '' : 'disabled'}>Sell every spare copy</button>
-      <button class="btn btn-sm" data-sell-commons>Sell common dupes</button>
+      <button class="btn btn-sm" data-sell-commons ${dupes.some(g => g.card.rarity === 'common') ? '' : 'disabled'}>Sell common dupes</button>
     </div>`, { wide: true });
 }

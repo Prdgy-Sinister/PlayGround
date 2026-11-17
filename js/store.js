@@ -33,7 +33,7 @@ const uid = () => 'i' + Date.now().toString(36) + Math.random().toString(36).sli
 function freshState() {
   const now = todayKey();
   return {
-    version: 2,
+    version: 3,
     createdAt: Date.now(),
     coins: 3500,
     gems: 150,
@@ -446,7 +446,7 @@ export function openPack(packId) {
     if (RANK[p.card.rarity] >= 2) state.daily.epicPulls++;
     if (RANK[p.card.rarity] >= 3) { state.stats.legendaryPulls++; state.daily.legendaryPulls++; }
     if (RANK[p.card.rarity] >= 4) state.stats.iconicPulls++;
-    state.recentPulls.unshift({cardId: p.card.id, finish: p.finish, serial: p.serial, isNew: p.isNew, at: Date.now()});
+    state.recentPulls.unshift({cardId: p.card.id, finish: p.finish, serial: p.serial, isNew: p.isNew, at: Date.now(), uid: item.uid});
   }
   state.recentPulls = state.recentPulls.slice(0, 24);
   state.stats.packsOpened++;
@@ -489,8 +489,10 @@ export function dailyStatus() {
   ensureToday();
   const today = todayKey();
   const claimedToday = state.daily.lastClaim === today;
-  const streak = state.daily.streak;
-  const cycleDay = claimedToday ? ((streak - 1) % 7) + 1 : (streak % 7) + 1;
+  const streakAlive = claimedToday || state.daily.lastClaim === yesterdayKey();
+  const streak = streakAlive ? Math.max(0, Number(state.daily.streak) || 0) : 0;
+  const nextStreak = claimedToday ? Math.max(1, streak) : Math.max(1, streak + 1);
+  const cycleDay = ((nextStreak - 1) % 7) + 1;
   const canClaim = !claimedToday;
   return {
     canClaim,
@@ -595,7 +597,8 @@ export function claimAllAvailable() {
 /* ---------------- market ---------------- */
 export function marketListings() {
   ensureToday();
-  const seed = 1103 + state.market.seed * 7919;
+  const dateSeed = parseInt(String(state.market.date || '').replace(/-/g, ''), 10) || 0;
+  const seed = 1103 + state.market.seed * 7919 + (dateSeed % 9973);
   const rnd = rngFrom(seed);
   const listings = [];
   const pool = [...CARDS];
