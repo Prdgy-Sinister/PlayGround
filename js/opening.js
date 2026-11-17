@@ -2,7 +2,8 @@
    APEX RUSH — cinematic pack opening
    ============================================================ */
 import { openPack, potdPurchasesLeft, choosePackCard } from './store.js';
-import { RARITY, cardValue } from './data/index.js';
+import { RARITY } from './data/index.js';
+import { marketValue } from './pricing.js';
 import { getPackOfTheDay, packAvailability } from './data/packs.js';
 import {
   cardHTML, packHTML, esc, fmt, finishName, finishShort, serialText, toast,
@@ -130,7 +131,7 @@ function drawReveal(r) {
     <div class="reveal-meta">
       <b>${esc(r.card.name)}</b>
       <span>${esc(r.card.sport === 'motogp' ? 'MotoGP' : r.card.sport === 'crossover' ? 'Crossover' : 'Formula 1')} · ${esc(r.card.typeLabel)} · ${esc(finishName(r.finish))}${r.finish === 'numbered' && r.serial != null ? ' · ' + esc(serialText(r.serial, r.card)) : ''}</span>
-      ${r.isNew ? `<span class="new-pill">NEW TO VAULT</span>` : `<span class="dupe-pill">DUPLICATE · ◈ ${fmt(r.value ?? cardValue(r.card, r.finish))}</span>`}
+      ${r.isNew ? `<span class="new-pill">NEW TO VAULT</span>` : `<span class="dupe-pill">DUPLICATE · ◈ ${fmt(r.value ?? marketValue(r.card, r.finish))}</span>`}
     </div>
     <div class="reveal-actions">
       <button class="btn btn-primary" data-op-next>${last ? 'See all results' : 'Next card'} <span>→</span></button>
@@ -158,7 +159,7 @@ function summary() {
   const chosenRow = chosen ? [{ card: chosen.card, finish: chosen.finish, serial: chosen.serial, isNew: chosen.isNew, value: chosen.value, item: chosen.item }] : [];
   const all = [...results, ...chosenRow];
   const newCount = all.filter(r => r.isNew).length;
-  const total = all.reduce((n, r) => n + (r.value ?? cardValue(r.card, r.finish)), 0);
+  const total = all.reduce((n, r) => n + (r.value ?? marketValue(r.card, r.finish)), 0);
   const stage = op.el.querySelector('[data-op-stage]');
   stage.innerHTML = `<div class="op-summary">
     <div class="summary-head">
@@ -222,7 +223,7 @@ function choiceStage() {
         <div class="choice-meta">
           <b>${esc(o.card.name)}</b>
           <span>${esc(o.card.sport === 'motogp' ? 'MotoGP' : o.card.sport === 'crossover' ? 'Crossover' : 'Formula 1')} · ${esc(o.card.typeLabel)} · ${esc(finishName(o.finish))}</span>
-          ${o.isNew ? '<span class="new-pill">NEW TO VAULT</span>' : '<span class="dupe-pill">DUPLICATE · ◈ ' + fmt(cardValue(o.card, o.finish)) + '</span>'}
+          ${o.isNew ? '<span class="new-pill">NEW TO VAULT</span>' : '<span class="dupe-pill">DUPLICATE · ◈ ' + fmt(marketValue(o.card, o.finish)) + '</span>'}
         </div>
       </button>`).join('')}
     </div>

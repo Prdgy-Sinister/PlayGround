@@ -141,6 +141,48 @@ function defsFor(id, card) {
       <stop offset=".45" stop-color="#c58a22"/>
       <stop offset="1" stop-color="#ffe9a8"/>
     </linearGradient>
+    <linearGradient id="${id}-rim" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#9fe4ff" stop-opacity=".7"/>
+      <stop offset=".16" stop-color="#9fe4ff" stop-opacity="0"/>
+      <stop offset=".7" stop-color="${rgba(a,0)}"/>
+      <stop offset="1" stop-color="${rgba(a,.72)}"/>
+    </linearGradient>
+    <linearGradient id="${id}-leather" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="${light(p,.12)}"/>
+      <stop offset=".28" stop-color="${p}"/>
+      <stop offset=".55" stop-color="${dark(p,.34)}"/>
+      <stop offset=".82" stop-color="${dark(p,.14)}"/>
+      <stop offset="1" stop-color="#050608"/>
+    </linearGradient>
+    <linearGradient id="${id}-visorref" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9f0ff" stop-opacity=".55"/>
+      <stop offset=".34" stop-color="#246287" stop-opacity=".38"/>
+      <stop offset=".62" stop-color="#08141d" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".58"/>
+    </linearGradient>
+    <linearGradient id="${id}-sheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset=".42" stop-color="#fff" stop-opacity=".6"/>
+      <stop offset=".56" stop-color="#fff" stop-opacity=".1"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="${id}-floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${rgba(a,.28)}"/>
+      <stop offset="1" stop-color="${rgba(a,0)}"/>
+    </linearGradient>
+    <linearGradient id="${id}-metal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f8ff"/>
+      <stop offset=".2" stop-color="#7c8a9f"/>
+      <stop offset=".46" stop-color="#1a222d"/>
+      <stop offset=".7" stop-color="#c8d4e6"/>
+      <stop offset="1" stop-color="#4c596c"/>
+    </linearGradient>
+    <pattern id="${id}-carbon" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="10" height="10" fill="#0a0c11"/>
+      <rect width="5" height="5" fill="#161a22"/>
+      <rect x="5" y="5" width="5" height="5" fill="#161a22"/>
+    </pattern>
+    <clipPath id="${id}-visorclip"><path d="M104 202c6-28 32-48 76-48s64 20 70 48c4 20-6 42-24 54-22 14-82 14-104 0-18-12-26-34-18-54z"/></clipPath>
     <radialGradient id="${id}-vig" cx="50%" cy="42%" r="72%">
       <stop offset=".45" stop-color="rgba(0,0,0,0)"/>
       <stop offset="1" stop-color="rgba(0,0,0,.68)"/>
@@ -166,7 +208,13 @@ function bgScene(card, id, finish) {
   const isDark = lum(p) < .25;
   let out = `<rect width="360" height="504" fill="url(#${id}-bg)"/>
     <rect width="360" height="504" fill="url(#${id}-glow)"/>
-    <ellipse cx="180" cy="70" rx="200" ry="110" fill="${rgba(p,.16)}" filter="url(#${id}-soft)" opacity=".55"/>`;
+    <ellipse cx="180" cy="70" rx="200" ry="110" fill="${rgba(p,.16)}" filter="url(#${id}-soft)" opacity=".55"/>
+    <g opacity=".26" filter="url(#${id}-soft)">
+      <polygon points="26,0 118,0 246,504 158,504" fill="${rgba('#ffffff',.055)}"/>
+      <polygon points="236,0 294,0 392,504 336,504" fill="${rgba(a,.06)}"/>
+    </g>
+    <ellipse cx="180" cy="350" rx="238" ry="88" fill="${rgba(p,.16)}" filter="url(#${id}-soft)" opacity=".55"/>
+    <ellipse cx="180" cy="352" rx="168" ry="30" fill="${rgba(a,.1)}" filter="url(#${id}-soft)" opacity=".5"/>`;
   // big diagonal color block
   out += `<g opacity="${.9}">
     <polygon points="0,${90+variant*17} 360,${30+variant*12} 360,${190+variant*14} 0,${250+variant*9}" fill="${rgba(p,.18)}"/>
@@ -235,10 +283,15 @@ function portrait(card, id, rnd) {
   let out = `<g transform="translate(${dx},0)">
     <ellipse cx="180" cy="382" rx="168" ry="70" fill="${rgba(p,.3)}" filter="url(#${id}-soft)"/>
     <!-- bust / racing suit -->
-    <path d="M12 504C22 424 62 380 120 360l60-14 60 14c58 20 98 64 108 144z" fill="url(#${id}-suit)"/>
+    <path d="M12 504C22 424 62 380 120 360l60-14 60 14c58 20 98 64 108 144z" fill="url(#${id}-leather)"/>
     <path d="M12 504C22 424 62 380 120 360l-18 144z" fill="${rgba(p,.55)}"/>
     <path d="M348 504c-10-80-50-124-108-144l18 144z" fill="${rgba(a,.35)}"/>
-    <path d="M120 360l18 32 42 16 42-16 18-32-60 14z" fill="${rgba('#050608',.55)}"/>
+    <path d="M36 504c8-64 34-104 82-132l8 24c-38 24-62 62-72 108z" fill="url(#${id}-sheen)" opacity=".2"/>
+    <path d="M312 504c-6-58-30-96-74-124l-6 24c34 22 56 58 64 100z" fill="${rgba('#ffffff',.08)}"/>
+    <path d="M64 398c22-18 44-28 66-32l10 22c-22 8-42 20-58 36z" fill="url(#${id}-carbon)" opacity=".62"/>
+    <path d="M296 398c-22-18-44-28-66-32l-10 22c22 8 42 20 58 36z" fill="url(#${id}-carbon)" opacity=".5"/>
+    <path d="M64 398c22-18 44-28 66-32l3 7c-23 6-44 17-63 34z" fill="${rgba('#ffffff',.12)}"/>
+    <path d="M120 360l18 32 42 16 42-16 18-32-60 14z" fill="${rgba('#050608',.5)}"/>
     <path d="M138 362c12 20 28 30 42 30s30-10 42-30" fill="none" stroke="${rgba('#fff',.2)}" stroke-width="3"/>
     <rect x="147" y="394" width="66" height="15" rx="4" fill="${rgba(p,.4)}" stroke="${rgba('#fff',.14)}"/>
     <rect x="176" y="412" width="8" height="92" fill="${rgba('#050608',.45)}"/>
@@ -249,31 +302,65 @@ function portrait(card, id, rnd) {
     <rect x="60" y="452" width="34" height="20" rx="3" fill="${rgba('#050608',.5)}" stroke="${rgba(p,.5)}"/>
     <rect x="268" y="430" width="62" height="9" rx="2" fill="${rgba('#fff',.12)}"/>
     <rect x="268" y="446" width="44" height="6" rx="2" fill="${rgba(a,.35)}"/>
+    <path d="M154 404v88" stroke="${rgba('#ffffff',.12)}" stroke-width="2"/>
+    <path d="M206 404v88" stroke="${rgba('#050608',.35)}" stroke-width="2"/>
+    <path d="M104 438c18-8 36-13 54-15M100 452c18-7 35-11 52-13" stroke="${rgba('#ffffff',.1)}" stroke-width="1.5" fill="none"/>
+    <circle cx="274" cy="392" r="5" fill="${rgba(a,.4)}" stroke="${rgba('#ffffff',.2)}"/>
     ${isRider ? `<path d="M40 492c28-42 72-62 140-68l-8 36c-58 4-98 18-118 32z" fill="${rgba('#0b0c0f',.55)}" opacity=".85"/>` : ''}
     <!-- neck -->
     <path d="M154 316h52v42c-16 10-36 10-52 0z" fill="${dark(p,.62)}"/>
+    <path d="M148 346c16 9 44 9 64 0l5 13c-21 10-52 10-74 0z" fill="url(#${id}-carbon)" opacity=".82"/>
+    <path d="M151 352c18 6 42 6 59 0" fill="none" stroke="${rgba('#ffffff',.13)}" stroke-width="1.4"/>
     <!-- helmet shell -->
     <path d="M180 92C240 92 284 138 286 202c2 48-14 86-46 104l-9 14c-7 12-23 19-40 19h-22c-17 0-33-7-40-19l-9-14c-32-18-48-56-46-104C76 138 120 92 180 92Z" fill="url(#${id}-body)"/>
     <g clip-path="url(#${id}-helmet)">
       ${helmetPattern(style, id, a)}
-      <path d="M74 300c34 22 72 32 112 30 38-2 72-14 100-38v48H74z" fill="${rgba('#050608',.38)}"/>
+      <path d="M74 300c34 22 72 32 112 30 38-2 72-14 100-38v48H74z" fill="${rgba('#050608',.4)}"/>
+      <path d="M74 322c50 14 110 12 162-12v26H74z" fill="url(#${id}-carbon)" opacity=".55"/>
       <path d="M92 108c18-14 44-22 72-23" fill="none" stroke="${rgba('#fff',.42)}" stroke-width="10" stroke-linecap="round" opacity=".6"/>
+      <path d="M96 118c28-30 72-40 112-30l-24 22c-30-6-58 0-78 20z" fill="url(#${id}-sheen)" opacity=".5"/>
+      <ellipse cx="142" cy="150" rx="38" ry="18" fill="${rgba('#ffffff',.18)}" filter="url(#${id}-blur2)"/>
+      <path d="M228 100c28 18 48 46 56 84" fill="none" stroke="${rgba(a,.5)}" stroke-width="7" opacity=".55"/>
+      <text x="248" y="168" text-anchor="middle" font-family="'Barlow Condensed',sans-serif" font-size="24" font-weight="800" fill="${rgba('#ffffff',.18)}" transform="rotate(-8 248 168)">${esc(suitTxt || 'R')}</text>
     </g>
-    <!-- aerofoil / spoiler -->
-    <path d="M76 166c-24-4-38 4-40 18 12 4 30 4 52-2z" fill="${dark(p,.35)}"/>
-    <path d="M76 166c-24-4-38 4-40 18" fill="none" stroke="${rgba('#fff',.25)}" stroke-width="1.5"/>
+    <!-- crown vent ridge -->
+    <path d="M152 100c10-6 24-9 38-7l10 10-40 5z" fill="${dark(p,.3)}"/>
+    <path d="M156 102c10-5 22-7 33-5" fill="none" stroke="${rgba('#ffffff',.22)}" stroke-width="1.4"/>
     <!-- visor aperture -->
     <path d="M104 202c6-28 32-48 76-48s64 20 70 48c4 20-6 42-24 54-22 14-82 14-104 0-18-12-26-34-18-54z" fill="url(#${id}-visor)"/>
+    <path d="M104 202c6-28 32-48 76-48s64 20 70 48c4 20-6 42-24 54-22 14-82 14-104 0-18-12-26-34-18-54z" fill="none" stroke="${rgba('#050608',.52)}" stroke-width="2.4"/>
+    <g clip-path="url(#${id}-visorclip)">
+      <rect x="92" y="184" width="190" height="120" fill="url(#${id}-visorref)"/>
+      <path d="M94 222c48 18 112 16 174-10v20c-58 24-124 24-174 8z" fill="${rgba('#79d6ff',.2)}"/>
+      <ellipse cx="162" cy="210" rx="58" ry="11" fill="${rgba('#ffffff',.13)}" filter="url(#${id}-blur2)"/>
+      <path d="M240 194l42 12-18 34-40-12z" fill="${rgba('#dff6ff',.08)}"/>
+    </g>
     <path d="M116 200c8-18 30-30 60-32" fill="none" stroke="${rgba('#9fd4ff',.32)}" stroke-width="7" stroke-linecap="round"/>
-    <path d="M128 231c18 9 44 13 68 10 20-2 38-9 52-21" fill="none" stroke="${rgba(a,.45)}" stroke-width="2" stroke-linecap="round"/>
+    <path d="M104 202c6-28 32-48 76-48s64 20 70 48" fill="none" stroke="${rgba('#050608',.55)}" stroke-width="4"/>
+    <path d="M112 194c10-22 34-38 68-38" fill="none" stroke="${rgba('#ffffff',.22)}" stroke-width="1.6" stroke-linecap="round"/>
+    <g fill="#0a0c11" stroke="${rgba('#c9d4e2',.5)}" stroke-width="1.2">
+      <circle cx="98" cy="218" r="5.5"/><circle cx="262" cy="218" r="5.5"/>
+    </g>
+    <circle cx="98" cy="218" r="2" fill="${rgba('#9fb0c4',.75)}"/>
+    <circle cx="262" cy="218" r="2" fill="${rgba('#9fb0c4',.75)}"/>
+    <g opacity=".45" stroke="${rgba('#cfe6f5',.8)}" stroke-width="1.1" stroke-linecap="round">
+      <path d="M112 208l-9 4M110 216l-10 4"/>
+    </g>
+    <path d="M114 234c20 12 44 17 68 14 20-2 38-9 52-20" fill="none" stroke="${rgba('#050608',.22)}" stroke-width="2" stroke-linecap="round"/>
     <path d="M118 198c10-22 34-36 62-38" fill="none" stroke="${rgba('#fff',.58)}" stroke-width="2.4" stroke-linecap="round"/>
     <circle cx="238" cy="188" r="4.5" fill="${rgba('#dff4ff',.65)}" filter="url(#${id}-blur2)"/>
     <!-- chin bar, vent, rim -->
-    <path d="M128 256c22 15 44 21 68 20 20-1 40-7 56-20l-6 38c-10 16-24 23-44 23h-22c-20 0-36-7-46-23z" fill="${dark(p,.5)}"/>
-    <rect x="148" y="280" width="64" height="13" rx="5" fill="${rgba('#050608',.72)}" stroke="${rgba('#fff',.12)}"/>
-    <path d="M154 286h52" stroke="${rgba(a,.55)}" stroke-width="2"/>
+    <path d="M128 256c22 15 44 21 68 20 20-1 40-7 56-20l-6 38c-10 16-24 23-44 23h-22c-20 0-36-7-46-23z" fill="url(#${id}-carbon)"/>
+    <path d="M128 256c22 15 44 21 68 20 20-1 40-7 56-20l-3 15c-16 10-34 15-54 15-24 0-44-6-60-16z" fill="${rgba('#ffffff',.08)}"/>
+    <rect x="159" y="284" width="42" height="11" rx="3" fill="${rgba('#040507',.86)}" stroke="${rgba('#ffffff',.08)}"/>
+    <g stroke="${rgba('#a0afc3',.24)}" stroke-width="1">
+      <path d="M163 287h34M163 290h34M163 293h34"/>
+    </g>
+    <path d="M138 298c16 7 36 9 56 6l28-5-8 8c-18 5-42 4-60-2z" fill="${rgba(a,.2)}"/>
+    <path d="M130 266c16 11 38 15 60 12 16-2 30-8 42-17" fill="none" stroke="${rgba('#ffffff',.07)}" stroke-width="1.6"/>
     <path d="M180 92C240 92 284 138 286 202c2 48-14 86-46 104l-9 14c-7 12-23 19-40 19h-22c-17 0-33-7-40-19l-9-14c-32-18-48-56-46-104C76 138 120 92 180 92Z" fill="none" stroke="${rgba('#fff',.26)}" stroke-width="2"/>
-    <path d="M94 196C98 140 132 104 180 100" fill="none" stroke="${rgba('#fff',.5)}" stroke-width="2.4" stroke-linecap="round" opacity=".75"/>
+    <path d="M94 196C98 140 132 104 180 100" fill="none" stroke="${rgba('#ffffff',.55)}" stroke-width="2.4" stroke-linecap="round" opacity=".75"/>
+    <path d="M270 172c8 26 6 54-6 78" fill="none" stroke="url(#${id}-rim)" stroke-width="5" stroke-linecap="round" opacity=".65"/>
     <!-- spark bits -->
     ${[...Array(6)].map(()=>{const x=18+rnd()*324,y=110+rnd()*180;return `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="${(1+rnd()*2).toFixed(1)}" fill="${a}" opacity="${(.15+rnd()*.4).toFixed(2)}"/>`}).join('')}
   </g>`;
@@ -289,11 +376,15 @@ export function carShape(id, colors, era, number, opts = {}) {
   const shadow = `<ellipse cx="192" cy="338" rx="150" ry="12" fill="#000" opacity=".62" filter="url(#${id}-soft)"/>`;
   const wheel = (cx, cy, r) => `<g>
       <ellipse cx="${cx}" cy="${cy}" rx="${r}" ry="${r * 1.02}" fill="#08090c"/>
-      <ellipse cx="${cx}" cy="${cy}" rx="${r}" ry="${r * 1.02}" fill="none" stroke="${rgba('#fff',.16)}" stroke-width="1"/>
-      <circle cx="${cx}" cy="${cy}" r="${r * .56}" fill="#14171d" stroke="${rgba(a,.7)}" stroke-width="2"/>
-      <circle cx="${cx}" cy="${cy}" r="${r * .2}" fill="${rgba('#050608',.9)}"/>
-      ${[...Array(5)].map((_,i)=>{const ang=i*72*Math.PI/180;return `<line x1="${cx}" y1="${cy}" x2="${(cx+Math.cos(ang)*r*.5).toFixed(1)}" y2="${(cy+Math.sin(ang)*r*.5).toFixed(1)}" stroke="${rgba('#fff',.3)}" stroke-width="2"/>`}).join('')}
-      <path d="M${cx-r*.85} ${cy-r*.5}A${r*.98} ${r*.98} 0 0 1 ${cx-r*.1} ${cy-r*.95}" fill="none" stroke="${rgba('#fff',.35)}" stroke-width="${r*.09}" stroke-linecap="round"/>
+      <ellipse cx="${cx}" cy="${cy}" rx="${r}" ry="${r * 1.02}" fill="none" stroke="${rgba('#fff',.18)}" stroke-width="1"/>
+      <ellipse cx="${cx}" cy="${cy}" rx="${r * .9}" ry="${r * .92}" fill="none" stroke="${rgba('#ffffff',.07)}" stroke-width="2"/>
+      <circle cx="${cx}" cy="${cy}" r="${r * .56}" fill="#14171d" stroke="${rgba(a,.72)}" stroke-width="2"/>
+      <circle cx="${cx}" cy="${cy}" r="${r * .44}" fill="none" stroke="${rgba('#c9d4e2',.22)}" stroke-width="1.4"/>
+      <circle cx="${cx}" cy="${cy}" r="${r * .2}" fill="${rgba('#050608',.92)}"/>
+      ${[...Array(5)].map((_,i)=>{const ang=i*72*Math.PI/180;return `<line x1="${cx}" y1="${cy}" x2="${(cx+Math.cos(ang)*r*.5).toFixed(1)}" y2="${(cy+Math.sin(ang)*r*.5).toFixed(1)}" stroke="${rgba('#fff',.32)}" stroke-width="2"/>`}).join('')}
+      <path d="M${cx-r*.85} ${cy-r*.5}A${r*.98} ${r*.98} 0 0 1 ${cx-r*.1} ${cy-r*.95}" fill="none" stroke="${rgba('#fff',.38)}" stroke-width="${r*.09}" stroke-linecap="round"/>
+      <path d="M${cx+r*.7} ${cy+r*.55}A${r*.9} ${r*.9} 0 0 1 ${cx+r*.2} ${cy+r*.88}" fill="none" stroke="${rgba(a,.2)}" stroke-width="${r*.06}" stroke-linecap="round"/>
+      <circle cx="${cx}" cy="${cy}" r="${r * .07}" fill="${rgba('#c9d4e2',.6)}"/>
     </g>`;
 
   if (vintage) {
@@ -305,6 +396,13 @@ export function carShape(id, colors, era, number, opts = {}) {
         <rect x="42" y="233" width="5" height="40" fill="${dark('#fff',.55)}"/>
         <rect x="72" y="233" width="5" height="40" fill="${dark('#fff',.55)}"/>
         <path d="M354 314c-28-8-56-14-88-19l-72-9c-40-5-74-4-102 3-18 4-28 13-30 25l2 14 290 2z" fill="url(#${id}-body)"/>
+        <path d="M350 304c-30-7-62-12-98-15l-56-5" fill="none" stroke="${rgba('#ffffff',.26)}" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M96 316c22-9 48-15 78-18" fill="none" stroke="${rgba('#ffffff',.14)}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M188 280c-2-14 4-24 15-26 13-2 22 6 23 20" fill="none" stroke="${rgba('#ffffff',.18)}" stroke-width="1.4"/>
+        <rect x="151" y="265" width="24" height="6" rx="3" fill="url(#${id}-metal)" opacity=".55"/>
+        <rect x="306" y="294" width="34" height="5" rx="2" fill="url(#${id}-carbon)" opacity=".8"/>
+        <path d="M340 320c12 0 18 4 22 10" stroke="${rgba('#ffffff',.2)}" stroke-width="1.4" fill="none"/>
+        <path d="M18 322c-8-4-12-8-12-8" stroke="${rgba('#9fe4ff',.18)}" stroke-width="8" stroke-linecap="round" filter="url(#${id}-blur2)"/>
         <path d="M118 292c-24 1-42 7-56 18l-6 18 84 2 8-35z" fill="${rgba(a,.55)}"/>
         <path d="M190 279c-3-18 4-31 18-33 17-3 28 8 29 25l1 14-46 5z" fill="${dark(p,.25)}"/>
         <ellipse cx="195" cy="288" rx="31" ry="9" fill="#050608" opacity=".85"/>
@@ -337,8 +435,15 @@ export function carShape(id, colors, era, number, opts = {}) {
       <rect x="18" y="${mid ? 220 : 210}" width="4" height="34" fill="${dark('#fff',.35)}"/>
       <!-- floor -->
       <path d="M66 326 L90 304 L268 304 L316 326 Z" fill="#0a0c11"/>
+      <path d="M66 326 L90 304 L268 304 L316 326 Z" fill="url(#${id}-carbon)" opacity=".7"/>
+      <path d="M74 322 L94 307 L264 307 L304 322 Z" fill="none" stroke="${rgba('#ffffff',.09)}" stroke-width="1.2"/>
       <!-- body -->
       <path d="M350 310c-28-12-58-18-88-21l-50-3c-36-1-66 5-94 16-22 9-36 20-42 32l3 8h282z" fill="url(#${id}-body)"/>
+      <path d="M298 288c-28-4-62-5-96-4-26 1-48 4-68 9" fill="none" stroke="${rgba('#ffffff',.38)}" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M334 299c-20-7-44-12-70-15" fill="none" stroke="${rgba('#ffffff',.22)}" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M118 312c20-8 46-14 78-16" fill="none" stroke="${rgba('#ffffff',.12)}" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="104" cy="308" rx="24" ry="17" fill="${rgba('#ff6a2a',.16)}" filter="url(#${id}-blur2)"/>
+      <ellipse cx="282" cy="308" rx="19" ry="14" fill="${rgba('#ff6a2a',.12)}" filter="url(#${id}-blur2)"/>
       <path d="M212 288l58 3c35 3 64 9 82 18l-14 9-126-5z" fill="${rgba(a,.38)}"/>
       <path d="M120 300c38-9 82-11 124-6l-14 32H88z" fill="${rgba('#050608',.32)}"/>
       <!-- cockpit & airbox -->
@@ -346,22 +451,33 @@ export function carShape(id, colors, era, number, opts = {}) {
       <path d="M159 280c0-14 8-28 19-31 9-3 16 5 18 17l2 15z" fill="#090b10"/>
       <circle cx="182" cy="270" r="9" fill="${light(a,.35)}"/>
       <path d="M174 267c3-6 10-8 15-5" stroke="${rgba('#fff',.5)}" stroke-width="2" fill="none"/>
+      <path d="M182 261c-4 0-7 3-8 7" fill="none" stroke="${rgba('#dff4ff',.5)}" stroke-width="1.2"/>
+      <path d="M212 286c22-7 44-10 62-9" fill="none" stroke="${rgba('#ffffff',.15)}" stroke-width="2.4"/>
       ${halo}
-      <!-- sidepod cut + number -->
+      <g fill="${dark(p,.12)}" stroke="${rgba('#c9d4e2',.28)}" stroke-width=".8">
+        <path d="M152 259l-9-3 2-5 10 2z"/><path d="M216 257l9-3-2-5-10 2z"/>
+      </g>
+      <path d="M150 287c-8-18-2-38 14-45l3 10c-9 8-12 22-8 34z" fill="${rgba('#ffffff',.1)}"/>
       <path d="M206 300c28 3 54 9 74 16l-2 8H196z" fill="${rgba(a,.2)}"/>
+      <path d="M198 296c22 1 44 5 62 11" fill="none" stroke="${rgba('#ffffff',.14)}" stroke-width="1.6"/>
+      <path d="M128 300l-16 6M282 300l20 8" stroke="${rgba('#c9d4e2',.2)}" stroke-width="2.2"/>
       <circle cx="242" cy="314" r="15" fill="${rgba('#050608',.78)}" stroke="${rgba(a,.8)}" stroke-width="1.4"/>
       <text x="242" y="320" text-anchor="middle" font-family="'Barlow Condensed',sans-serif" font-weight="800" font-size="18" fill="${light(a,.25)}">${esc(num)}</text>
       <!-- front wing -->
       <path d="M314 326h36l6 10h-40z" fill="${a}"/>
       <path d="M318 318h26l3 7h-29z" fill="${rgba('#fff',.25)}"/>
+      <path d="M322 310h19l2 5h-21z" fill="${rgba('#ffffff',.13)}"/>
       <rect x="346" y="304" width="4" height="26" fill="${dark(p,.3)}"/>
+      <rect x="342" y="300" width="8" height="3" rx="1.4" fill="${rgba(a,.8)}"/>
       <!-- diffuser -->
       <path d="M54 326l12-14h48l4 14z" fill="#0a0c11"/>
+      <path d="M58 326l11-13h44l3 13z" fill="url(#${id}-carbon)" opacity=".8"/>
       <path d="M62 318h44M58 323h48" stroke="${rgba('#fff',.16)}" stroke-width="1.2"/>
       <path d="M64 296c18-12 46-19 82-22l-12 10c-28 3-48 8-62 15z" fill="${rgba('#fff',.12)}"/>
       <path d="M298 300c18 3 34 7 44 12" stroke="${rgba('#fff',.24)}" stroke-width="1.4"/>
       <path d="M92 300c38-9 82-11 124-6l-10 6c-38-4-78-2-110 5z" fill="${rgba('#fff',.2)}"/>
       <path d="M262 290c30 3 60 10 86 20" fill="none" stroke="${rgba('#fff',.3)}" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M40 330c86 10 202 10 300-2" fill="none" stroke="${rgba(a,.12)}" stroke-width="6" filter="url(#${id}-blur2)"/>
     </g>
     ${wheel(100, 310, 30)}
     ${wheel(282, 310, 27)}
@@ -381,6 +497,7 @@ export function bikeShape(id, colors, number) {
       <circle cx="92" cy="310" r="6" fill="#050608"/>
       ${[...Array(5)].map((_,i)=>{const ang=i*72*Math.PI/180;return `<line x1="92" y1="310" x2="${(92+Math.cos(ang)*17).toFixed(1)}" y2="${(310+Math.sin(ang)*17).toFixed(1)}" stroke="${rgba('#fff',.35)}" stroke-width="2"/>`}).join('')}
       <circle cx="268" cy="310" r="31" fill="#08090c"/>
+      <circle cx="268" cy="310" r="22" fill="none" stroke="${rgba('#c9d4e2',.24)}" stroke-width="4"/>
       <circle cx="268" cy="310" r="17" fill="#14171d" stroke="${rgba(a,.75)}" stroke-width="2.2"/>
       <circle cx="268" cy="310" r="5" fill="#050608"/>
       <path d="M250 300c11-9 30-9 38 3" stroke="${rgba('#fff',.3)}" stroke-width="2" fill="none"/>
@@ -399,6 +516,8 @@ export function bikeShape(id, colors, number) {
       <text x="274" y="324" text-anchor="middle" font-family="'Barlow Condensed',sans-serif" font-weight="800" font-size="16" fill="${light(a,.25)}">${esc(num)}</text>
       <!-- windscreen -->
       <path d="M282 288c10-12 24-16 34-8l-2 9c-8-5-17-3-24 4z" fill="${rgba('#bfe9ff',.24)}" stroke="${rgba('#fff',.2)}"/>
+      <path d="M286 286l17-6-1 5-15 6z" fill="${rgba('#e8f8ff',.3)}"/>
+      <path d="M292 300l20 3" stroke="${rgba('#c9d4e2',.35)}" stroke-width="2.4" stroke-linecap="round"/>
       <!-- front fork -->
       <path d="M296 290L276 310" stroke="${rgba('#c9d4e2',.55)}" stroke-width="4"/>
       <path d="M306 294L284 312" stroke="${rgba('#c9d4e2',.35)}" stroke-width="2"/>
@@ -407,6 +526,7 @@ export function bikeShape(id, colors, number) {
       <path d="M126 282c34-1 62 2 82 8" stroke="${rgba(a,.35)}" stroke-width="2"/>
       <!-- rider -->
       <path d="M156 290c-9-19 1-39 21-48 16-7 34 1 42 16l12 30-24 12c-18 2-38-1-51-10z" fill="${rgba('#0c0f14',.92)}"/>
+      <path d="M159 286c-6-16 1-32 17-41" fill="none" stroke="${rgba('#ffffff',.24)}" stroke-width="1.6" stroke-linecap="round"/>
       <path d="M180 249c8-17 26-25 42-18 16 6 25 22 21 38l-5 13-35 4c-17-8-26-22-23-37z" fill="url(#${id}-body)"/>
       <path d="M185 247c9-13 25-18 38-11" fill="none" stroke="${rgba('#fff',.35)}" stroke-width="1.6"/>
       <path d="M193 260c8-7 21-9 31-4 3 9-2 18-11 22-10 3-19-3-23-11z" fill="url(#${id}-visor)"/>
@@ -494,7 +614,11 @@ function momentScene(card, id, rnd) {
 }
 
 /* ---------- public ---------- */
+const ART_CACHE = new Map();
 export function cardArt(card, finish = 'base') {
+  const cacheKey = card.id + '|' + finish;
+  const cached = ART_CACHE.get(cacheKey);
+  if (cached) return cached;
   const id = ('art' + card.id + finish).replace(/[^a-z0-9]/gi, '').toLowerCase();
   const rnd = mulberry(hashStr(card.id + finish));
   const isPortrait = card.type === 'driver' || card.type === 'rider';
@@ -521,7 +645,10 @@ export function cardArt(card, finish = 'base') {
     `<rect width="360" height="504" fill="url(#${id}-vig)"/>`,
     `<rect y="300" width="360" height="204" fill="url(#${id}-fade)" opacity=".55"/>`,
   ];
-  return `<svg viewBox="0 0 360 504" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${parts.join('')}</svg>`;
+  const svg = `<svg viewBox="0 0 360 504" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${parts.join('')}</svg>`;
+  if (ART_CACHE.size > 1400) ART_CACHE.clear();
+  ART_CACHE.set(cacheKey, svg);
+  return svg;
 }
 
 export function rarityAura(card) { return card.rarityMeta?.glow || 'rgba(255,255,255,.3)'; }

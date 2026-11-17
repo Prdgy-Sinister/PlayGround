@@ -1,11 +1,15 @@
 /* ============================================================
    APEX RUSH — shared UI: cards, packs, modals, toasts, FX
    ============================================================ */
-import { CARD_MAP, RARITY, cardValue } from './data/index.js';
+import { CARD_MAP, RARITY } from './data/index.js';
 import { FINISHES } from './data/core.js';
 import { formatNumber, packAvailability } from './data/packs.js';
 import { cardArt, flagSVG, rgba } from './art.js';
 import { sfx } from './audio.js';
+import {
+  marketValue, itemMarketValue, priceInfo, gradeMultiplier, gradeLabel, gradeTone,
+  GRADING_SERVICES, gradeForecast, marketIndex, topMovers, priceHistory,
+} from './pricing.js';
 
 export const fmt = formatNumber;
 export const FINISH_ORDER = ['base', 'holo', 'gold', 'championship', 'anniversary', 'signature', 'shadow', 'numbered'];
@@ -40,12 +44,106 @@ export function packName(id) {
 export function rarityLabel(card) { return RARITY[card.rarity]?.label || 'COMMON'; }
 
 /* ------------------------------------------------------------
+   LIVE PRICES + MARKET PULSE
+   ------------------------------------------------------------ */
+function signedPct(n) {
+  const v = Number(n) || 0;
+  return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+}
+function dirArrow(dir) { return dir === 'up' ? '▲' : dir === 'down' ? '▼' : '•'; }
+
+function priceInnerHTML(value, info) {
+  const dir = info.direction || 'flat';
+  return `<b>◈ ${fmt(value)}</b><i class="${dir}">${dirArrow(dir)} ${Math.abs(info.change || 0).toFixed(1)}%</i>`;
+}
+
+export function livePriceHTML(card, finish = 'base', opts = {}) {
+  if (!card) return '';
+  const grade = opts.grading?.score || opts.grade || 0;
+  const info = priceInfo(card, finish);
+  const value = Math.round(info.value * (grade ? gradeMultiplier(grade) : 1));
+  return `<span class="live-price ${info.direction}${opts.className ? ' ' + opts.className : ''}" data-live-price data-price-card="${esc(card.id)}" data-price-finish="${esc(finish)}" data-price-grade="${grade || ''}" data-price-val="${value}">${priceInnerHTML(value, info)}</span>`;
+}
+
+export function sparklineHTML(values, opts = {}) {
+  if (!values?.length) return '';
+  const w = opts.width || 118, h = opts.height || 30, pad = 3;
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1 || 1)) * (w - pad * 2);
+    const y = h - pad - ((v - min) / span) * (h - pad * 2);
+    return [x, y];
+  });
+  const line = pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const up = values[values.length - 1] >= values[0];
+  const color = up ? '#3ee08a' : '#ff6b52';
+  const area = `M${pts[0][0].toFixed(1)} ${h - pad} L${line.replaceAll(' ', ' L')} L${pts[pts.length - 1][0].toFixed(1)} ${h - pad} Z`;
+  return `<svg class="sparkline ${up ? 'up' : 'down'}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${area}" fill="${color}" opacity=".12"/><polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+export function miniPriceSpark(card, finish = 'base') {
+  return sparklineHTML(priceHistory(card, finish), {width: 90, height: 24});
+}
+
+function marketTickerInner() {
+  const idx = marketIndex();
+  const movers = topMovers(3);
+  return `<div class="mt-index">
+      <span class="mt-kicker">APEX 100</span>
+      <b data-market-index>${idx.value.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</b>
+      <em class="mt-chg ${idx.direction}" data-market-change>${dirArrow(idx.direction)} ${Math.abs(idx.change).toFixed(1)}%</em>
+      <i class="mt-mood ${idx.direction}" data-market-mood>${idx.mood}</i>
+    </div>
+    <div class="mt-movers">
+      ${movers.map(m => `<span class="mt-mover" data-open-card="${esc(m.card.id)}"><i>${esc(m.card.name)}</i><b class="${m.change >= 0 ? 'up' : 'down'}">${signedPct(m.change)}</b></span>`).join('')}
+    </div>`;
+}
+
+export function marketTickerHTML() {
+  return `<div class="market-ticker" data-market-ticker>${marketTickerInner()}</div>`;
+}
+
+export function refreshLivePrices(root = document) {
+  const now = Date.now();
+  root.querySelectorAll('[data-live-price]').forEach(el => {
+    const card = CARD_MAP[el.dataset.priceCard];
+    if (!card) return;
+    const finish = el.dataset.priceFinish || 'base';
+    const grade = Number(el.dataset.priceGrade) || 0;
+    const info = priceInfo(card, finish, now);
+    const value = Math.round(info.value * (grade ? gradeMultiplier(grade) : 1));
+    const prev = Number(el.dataset.priceVal || value);
+    el.dataset.priceVal = value;
+    el.classList.remove('up', 'down', 'flat', 'tick-up', 'tick-down');
+    el.classList.add(info.direction);
+    if (value !== prev) {
+      el.classList.add(value > prev ? 'tick-up' : 'tick-down');
+      setTimeout(() => el.classList.remove('tick-up', 'tick-down'), 900);
+    }
+    el.innerHTML = priceInnerHTML(value, info);
+  });
+  root.querySelectorAll('[data-market-ticker]').forEach(el => { el.innerHTML = marketTickerInner(); });
+  root.querySelectorAll('[data-live-listing]').forEach(el => {
+    const card = CARD_MAP[el.dataset.priceCard];
+    if (!card) return;
+    const finish = el.dataset.listingFinish || 'base';
+    const grade = Number(el.dataset.listingGrade) || 0;
+    const spread = Number(el.dataset.listingSpread) || 1;
+    const value = Math.max(20, Math.round(marketValue(card, finish, now) * spread * (grade ? gradeMultiplier(grade) : 1) / 10) * 10);
+    el.dataset.liveValue = value;
+    el.innerHTML = `◈ ${fmt(value)}`;
+  });
+}
+
+/* ------------------------------------------------------------
    CARD
    ------------------------------------------------------------ */
 export function cardHTML(card, opts = {}) {
   if (!card) return '';
   const finish = opts.finish || 'base';
   const serial = opts.serial ?? null;
+  const grading = opts.grading || null;
   const label = card.attrLabels || ['Speed', 'Skill', 'Consistency', 'Racecraft'];
   const values = [card.stats.speed, card.stats.skill, card.stats.consistency, card.stats.racecraft];
   const hotIdx = values.indexOf(Math.max(...values));
@@ -58,16 +156,17 @@ export function cardHTML(card, opts = {}) {
   const countBadge = opts.count > 1 ? `<div class="count-badge">×${opts.count}</div>` : '';
   const newBadge = opts.isNew ? `<div class="new-badge">NEW</div>` : '';
   const locked = opts.locked ? ' unknown' : '';
+  const gradeHTML = grading ? `<div class="card-grade" style="--gc:${gradeTone(grading.score)}"><b>${grading.score}</b><span>${esc(gradeLabel(grading.score))}</span></div>` : '';
   return `<div class="card-cell${opts.count > 1 ? ' dupe' : ''}${opts.cellClass ? ' ' + opts.cellClass : ''}" ${opts.cardIdAttr === false ? '' : `data-open-card="${esc(card.id)}"`} ${opts.itemUid ? `data-item="${esc(opts.itemUid)}"` : ''}>
     ${newBadge}${countBadge}
-    <div class="card r-${card.rarity} finish-${finish}${locked}${opts.cardClass ? ' ' + opts.cardClass : ''}" data-card="${esc(card.id)}" title="${esc(card.name)} · ${esc(finishName(finish))}">
+    <div class="card r-${card.rarity} finish-${finish}${locked}${grading ? ' graded' : ''}${opts.cardClass ? ' ' + opts.cardClass : ''}" data-card="${esc(card.id)}" title="${esc(card.name)} · ${esc(finishName(finish))}${grading ? ` · ${grading.company || 'Apex'} ${grading.score} ${gradeLabel(grading.score)}` : ''}">
       <div class="card-art">${cardArt(card, finish)}</div>
       <div class="card-scrim"></div>
       <div class="card-grain"></div>
       <div class="card-foil"></div>
       <div class="card-shine"></div>
       <div class="card-frame"></div>
-      ${serialHTML}${championship}${signature}
+      ${gradeHTML}${serialHTML}${championship}${signature}
       <div class="card-top">
         <div class="ovr"><b>${card.overall}</b><i>OVR</i></div>
         <div class="card-tags">
@@ -316,30 +415,58 @@ export function openCardDetail(card, items, opts = {}) {
   const selected = (opts.itemUid && items.find(i => i.uid === opts.itemUid)) || items[0] || null;
   const finish = selected?.finish || opts.finish || 'base';
   const serial = selected?.serial;
-  const value = cardValue(card, finish);
+  const grading = selected?.grading || null;
+  const value = selected ? itemMarketValue(selected) : marketValue(card, 'base');
   const best = items.length ? [...items].sort((a, b) => FINISH_ORDER.indexOf(b.finish) - FINISH_ORDER.indexOf(a.finish))[0] : null;
   const fav = opts.favorite;
   const attrs = card.attrLabels || ['Speed', 'Skill', 'Consistency', 'Racecraft'];
   const stats = [card.stats.speed, card.stats.skill, card.stats.consistency, card.stats.racecraft];
   const finishNote = finish !== 'base' ? `<div class="finish-note"><span class="fn-ico">✦</span><div><b>${esc(finishName(finish))}${serial != null ? ' · ' + esc(serialText(serial, card)) : ''}</b>Premium finish. Collector value ${fmt(value)} coins and a permanent place in your vault.</div></div>` : '';
   const sellTarget = items.length > 1
-    ? [...items].sort((a, b) => FINISH_ORDER.indexOf(a.finish) - FINISH_ORDER.indexOf(b.finish))[0]
+    ? [...items].sort((a, b) => itemMarketValue(a) - itemMarketValue(b))[0]
     : selected;
-  const sellValue = sellTarget ? cardValue(card, sellTarget.finish) : value;
+  const sellValue = sellTarget ? itemMarketValue(sellTarget) : value;
   const ownedLine = items.length
-    ? `<div class="dc-owned"><span>In your vault</span><b>${items.length} ${items.length === 1 ? 'copy' : 'copies'}${best && best.finish !== 'base' ? ' · ' + esc(finishName(best.finish)) : ''}</b></div>`
+    ? `<div class="dc-owned"><span>In your vault</span><b>${items.length} ${items.length === 1 ? 'copy' : 'copies'}${best && best.finish !== 'base' ? ' · ' + esc(finishName(best.finish)) : ''}${grading ? ' · slabbed' : ''}</b></div>`
     : `<div class="dc-owned"><span>Not collected yet</span><b>Find it in packs</b></div>`;
+  const forecast = gradeForecast(card, finish);
+  const subgrid = grading?.subgrades ? `<div class="gp-subs">${Object.entries(grading.subgrades).map(([k, v]) => `<div class="gp-sub"><span>${esc(k)}</span><b>${v.toFixed(1)}</b><i style="width:${v * 10}%"></i></div>`).join('')}</div>` : '';
+  const gradePanel = selected ? (grading ? `<div class="grade-panel graded" style="--gc:${gradeTone(grading.score)}">
+      <div class="gp-head">
+        <div class="gp-score"><b>${grading.score}</b><span>/10</span></div>
+        <div class="gp-title"><small>${esc(grading.company || 'APEX')} CERTIFIED · ${esc(grading.cert)}</small><strong>${esc(grading.label)}</strong><em>Graded slab</em></div>
+        <div class="gp-value">${livePriceHTML(card, finish, { grading })}</div>
+      </div>
+      ${subgrid}
+      <p class="gp-note">Sealed slab. Grade multiplier ×${gradeMultiplier(grading.score).toFixed(2)} applies to every sale and trade. Grading is permanent.</p>
+    </div>` : `<div class="grade-panel">
+      <div class="gp-head">
+        <div class="gp-title"><small>APEX GRADING LAB</small><strong>Raw card</strong><em>Not graded</em></div>
+        <div class="gp-value">${livePriceHTML(card, finish)}</div>
+      </div>
+      <div class="gp-forecast">
+        ${forecast.rows.map(r => `<span><b>${r.score}</b>${esc(r.label)}<em>◈ ${fmt(r.value)}</em></span>`).join('')}
+      </div>
+      <div class="gp-services">
+        ${GRADING_SERVICES.map(svc => `<button class="grade-service" data-grade-item="${esc(selected.uid)}" data-grade-service="${esc(svc.id)}" data-grade-card="${esc(card.id)}">
+          <span class="gs-company">${esc(svc.company)} · ${esc(svc.name)}</span>
+          <b>${svc.currency === 'gems' ? '◆' : '◈'} ${fmt(svc.cost)}</b>
+          <em>${esc(svc.desc)}</em>
+        </button>`).join('')}
+      </div>
+      <p class="gp-note">Grading is permanent. High grades multiply value; low grades can reduce it. Current raw value ◈ ${fmt(forecast.raw)}.</p>
+    </div>`) : '';
   const actions = items.length
     ? `${fav ? `<button class="btn btn-sm" data-fav="${esc(card.id)}">★ Favourite</button>` : `<button class="btn btn-sm" data-fav="${esc(card.id)}">☆ Set favourite</button>`}
        <button class="btn btn-sm btn-gold" data-sell-one="${esc(sellTarget.uid)}" data-card-id="${esc(card.id)}">Sell ${items.length > 1 ? 'spare' : 'copy'} · ◈ ${fmt(sellValue)}</button>
        ${items.length > 1 ? `<button class="btn btn-sm" data-sell-dupes-card="${esc(card.id)}">Sell duplicates</button>` : ''}
-       <div class="price-tag">Collector value<b>◈ ${fmt(cardValue(card, best?.finish || finish))}</b></div>`
+       <div class="price-tag">Collector value${livePriceHTML(card, finish, { grading })}</div>`
     : `<button class="btn btn-sm btn-primary" data-nav="packs">Open packs</button>
-       <div class="price-tag">Market value<b>◈ ${fmt(cardValue(card, 'base'))}</b></div>`;
+       <div class="price-tag">Market value${livePriceHTML(card, 'base')}</div>`;
 
   openModal(`<div class="detail-grid">
     <div class="detail-card-col">
-      ${cardHTML(card, { finish, serial, itemUid: selected?.uid, cardIdAttr: false })}
+      ${cardHTML(card, { finish, serial, itemUid: selected?.uid, cardIdAttr: false, grading })}
       ${ownedLine}
     </div>
     <div class="detail-info">
@@ -348,11 +475,17 @@ export function openCardDetail(card, items, opts = {}) {
         <span class="chip" style="color:${RARITY[card.rarity].color};border-color:${rgba(RARITY[card.rarity].color, .3)}">${esc(rarityLabel(card))}</span>
         <span class="chip">${esc(card.era)}</span>
         <span class="chip">${esc(card.typeLabel)}</span>
+        ${grading ? `<span class="chip graded-chip" style="color:${gradeTone(grading.score)};border-color:${rgba(gradeTone(grading.score), .35)}">GRADED ${grading.score}</span>` : ''}
       </div>
       <h2>${esc(card.name)}</h2>
       <div class="di-sub"><span class="flag">${flagSVG(card.country)}</span>${esc(card.team || card.typeLabel)} · ${esc(card.tagline || '')}</div>
       <p class="di-bio">${esc(card.bio)}</p>
       ${finishNote}
+      <div class="di-market">
+        <div class="dm-main"><span>Live collector value</span>${livePriceHTML(card, finish, { grading, className: 'lg' })}</div>
+        <div class="dm-spark">${sparklineHTML(priceHistory(card, finish), { width: 170, height: 38 })}<small>24h market trend</small></div>
+      </div>
+      ${gradePanel}
       <div class="attr-list">
         ${attrs.map((a, i) => `<div class="attr"><span class="an">${esc(a)}</span><span class="progress-track"><i style="width:${stats[i]}%"></i></span><span class="av">${stats[i]}</span></div>`).join('')}
       </div>
@@ -364,6 +497,7 @@ export function openCardDetail(card, items, opts = {}) {
         <span class="chip">${esc(card.years || card.year || '')}</span>
         <span class="chip">${esc(card.country)}</span>
         <span class="chip">${esc(finishName(finish))}</span>
+        ${grading ? `<span class="chip" style="color:${gradeTone(grading.score)}">${esc(grading.company || 'APEX')} ${grading.score}</span>` : ''}
       </div>
       <div class="detail-actions">${actions}</div>
     </div>

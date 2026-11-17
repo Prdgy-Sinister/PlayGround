@@ -1,8 +1,12 @@
 /* ============================================================
    APEX RUSH — game state, economy, packs, market, trading
    ============================================================ */
-import { CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, RARITY, cardValue } from './data/index.js';
+import { CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, RARITY } from './data/index.js';
 import { PACKS, PACK_MAP, getPackOfTheDay, finishWeights, packAvailability } from './data/packs.js';
+import {
+  marketValue, itemMarketValue, rollGrade, gradingFromScore,
+  GRADING_SERVICES, gradeService, gradeMultiplier,
+} from './pricing.js';
 import {
   DAILY_REWARDS, DAILY_CHALLENGE_POOL, ACHIEVEMENTS, levelNeeded,
   localDateKey, challengeForToday,
@@ -46,7 +50,7 @@ function freshState() {
       packsOpened: 0, cardsPulled: 0, cardsSold: 0, cardsBought: 0, trades: 0,
       epicPulls: 0, legendaryPulls: 0, iconicPulls: 0, goldPacks: 0, dailyPacks: 0,
       coinsSpent: 0, coinsEarned: 0, maxUnique: 0, albumsCompleted: 0, bestStreak: 0,
-      marketRefresh: 0, xpEarned: 0, eventPacks: 0, offerPacks: 0,
+      marketRefresh: 0, xpEarned: 0, eventPacks: 0, offerPacks: 0, graded: 0, gradingSpend: 0,
     },
     daily: {
       date: now, packsOpened: 0, newCards: 0, epicPulls: 0, legendaryPulls: 0,
@@ -182,7 +186,7 @@ export function addItem(cardId, finish = 'base', opts = {}) {
   const card = CARD_MAP[cardId];
   if (!card) throw gameError('NO_CARD', 'Unknown card');
   const serial = finish === 'numbered' ? (opts.serial ?? Math.floor(Math.random() * (card.rarity === 'iconic' ? 25 : card.rarity === 'legendary' ? 50 : 99)) + 1) : null;
-  const item = {uid: uid(), cardId, finish, serial, at: Date.now(), source: opts.source || 'pull'};
+  const item = {uid: uid(), cardId, finish, serial, at: Date.now(), source: opts.source || 'pull', grading: opts.grading || null};
   state.items.push(item);
   const uniq = uniqueCount();
   if (uniq > state.stats.maxUnique) state.stats.maxUnique = uniq;
@@ -192,7 +196,7 @@ export function uniqueCount() { return new Set(state.items.map(i => i.cardId)).s
 export function cardCount(cardId) { return state.items.filter(i => i.cardId === cardId).length; }
 export function ownsCard(cardId) { return state.items.some(i => i.cardId === cardId); }
 export function itemsOfCard(cardId) { return state.items.filter(i => i.cardId === cardId); }
-export function collectionValue() { return state.items.reduce((sum, i) => sum + cardValue(CARD_MAP[i.cardId], i.finish), 0); }
+export function collectionValue(now = Date.now()) { return state.items.reduce((sum, i) => sum + itemMarketValue(i, now), 0); }
 export function groupedCollection() {
   const map = new Map();
   for (const item of state.items) {
@@ -210,7 +214,7 @@ export function duplicateGroups() {
   return groupedCollection().filter(g => g.count > 1).map(g => ({
     ...g,
     spare: g.count - 1,
-    value: cardValue(g.card, g.best),
+    value: Math.min(...g.items.map(i => itemMarketValue(i))),
   }));
 }
 export function sellItem(itemUid) {
@@ -218,7 +222,7 @@ export function sellItem(itemUid) {
   if (idx < 0) throw gameError('NO_ITEM', 'Card not found');
   const item = state.items[idx];
   const card = CARD_MAP[item.cardId];
-  const value = cardValue(card, item.finish);
+  const value = itemMarketValue(item);
   state.items.splice(idx, 1);
   state.coins += value;
   state.stats.cardsSold++;
@@ -235,10 +239,10 @@ export function sellAllDuplicates(filterFn = null) {
   for (const g of groups) {
     if (filterFn && !filterFn(g.card)) continue;
     if (g.items.length <= 1) continue;
-    // keep the best copy, sell the rest
-    const sorted = [...g.items].sort((a,b) => FINISH_ORDER.indexOf(b.finish) - FINISH_ORDER.indexOf(a.finish));
+    // keep the most valuable copy, sell the rest
+    const sorted = [...g.items].sort((a,b) => itemMarketValue(b) - itemMarketValue(a));
     for (const item of sorted.slice(1)) {
-      total += cardValue(g.card, item.finish);
+      total += itemMarketValue(item);
       count++;
       remove.push(item.uid);
     }
@@ -260,9 +264,9 @@ export function sellAllCommons() {
   for (const g of groups) {
     if (g.card.rarity !== 'common') continue;
     if (g.items.length <= 1) continue;
-    const sorted = [...g.items].sort((a,b) => FINISH_ORDER.indexOf(b.finish) - FINISH_ORDER.indexOf(a.finish));
+    const sorted = [...g.items].sort((a,b) => itemMarketValue(b) - itemMarketValue(a));
     for (const item of sorted.slice(1)) {
-      total += cardValue(g.card, item.finish); count++; remove.push(item.uid);
+      total += itemMarketValue(item); count++; remove.push(item.uid);
     }
   }
   if (!count) return {count:0, total:0};
@@ -483,7 +487,7 @@ export function openPack(packId, opts = {}) {
   const results = [];
   for (const p of pulls) {
     const item = addItem(p.card.id, p.finish, {serial: p.serial, source: packId});
-    const value = cardValue(p.card, p.finish);
+    const value = marketValue(p.card, p.finish);
     results.push({...p, item, value});
     state.stats.cardsPulled++;
     if (p.isNew) { state.daily.newCards++; }
@@ -539,7 +543,7 @@ export function choosePackCard(result, cardId) {
   const option = choice.options.find(o => o.card.id === cardId && !o.taken);
   if (!option) throw gameError('NO_OPTION', 'That card is not one of the choices');
   const item = addItem(option.card.id, option.finish, {serial: option.serial, source:'choice'});
-  const value = cardValue(option.card, option.finish);
+  const value = marketValue(option.card, option.finish);
   option.taken = true;
   option.item = item;
   option.value = value;
@@ -711,11 +715,20 @@ export function marketListings() {
     used.add(card.id);
     const finishRoll = rnd();
     const finish = finishRoll > .93 ? 'gold' : finishRoll > .8 ? 'holo' : 'base';
-    const price = Math.max(80, Math.round(cardValue(card, finish) * (1.15 + rnd() * 1.15) / 10) * 10);
+    const spread = 1.08 + rnd() * .5;
+    let grading = null;
+    if (RANK[card.rarity] >= 2 && rnd() > .68) {
+      const score = 8 + Math.floor(rnd() * 3) - (rnd() > .82 ? 1 : 0);
+      grading = gradingFromScore(card, score, 'market', state.market.seed * 31 + i);
+    }
+    const price = Math.max(20, Math.round(marketValue(card, finish) * spread * gradeMultiplier(grading?.score || 0) / 10) * 10);
     listings.push({
       id: `m${state.market.seed}_${i}`,
       card, finish,
+      grading,
+      spread,
       price,
+      rawPrice: marketValue(card, finish),
       bought: state.market.bought.includes(`m${state.market.seed}_${i}`),
       seller: ['ApexCollector','GridKing_88','Vale46Fan','SennaVault','TifosiTom','DesmoDani'][Math.floor(rnd()*6)],
     });
@@ -733,7 +746,7 @@ export function buyListing(listingId) {
   state.daily.coinsSpent += listing.price;
   state.stats.cardsBought++;
   state.market.bought.push(listingId);
-  const item = addItem(listing.card.id, listing.finish, {source:'market'});
+  const item = addItem(listing.card.id, listing.finish, {source:'market', grading: listing.grading});
   addXp(8);
   save(); emit();
   return {listing, item};
@@ -750,6 +763,34 @@ export function refreshMarket() {
   save(); emit();
 }
 
+/* ---------------- grading ---------------- */
+export function gradeItem(itemUid, serviceId = 'standard') {
+  ensureToday();
+  const item = state.items.find(i => i.uid === itemUid);
+  if (!item) throw gameError('NO_ITEM', 'Card not found');
+  if (item.grading) throw gameError('ALREADY_GRADED', 'This card is already sealed in a slab');
+  const card = CARD_MAP[item.cardId];
+  if (!card) throw gameError('NO_CARD', 'Unknown card');
+  const svc = gradeService(serviceId);
+  if (!svc || !GRADING_SERVICES.some(s => s.id === svc.id)) throw gameError('NO_SERVICE', 'Unknown grading service');
+  spendCurrency(svc.currency, svc.cost);
+  item.grading = rollGrade(card, svc.id);
+  state.stats.graded = (state.stats.graded || 0) + 1;
+  state.stats.gradingSpend = (state.stats.gradingSpend || 0) + svc.cost;
+  addXp(18);
+  save(); emit();
+  return {item, card, grading: item.grading, service: svc};
+}
+export function ungradedItems(minValue = 0) {
+  return state.items
+    .filter(i => !i.grading)
+    .map(i => ({item: i, card: CARD_MAP[i.cardId], value: itemMarketValue(i)}))
+    .filter(r => r.card && r.value >= minValue)
+    .sort((a, b) => b.value - a.value);
+}
+export function gradedCount() { return state.items.filter(i => i.grading).length; }
+
+
 /* ---------------- trading ---------------- */
 export function tradeOffers() {
   const rnd = rngFrom(9001 + state.tradeSeed * 3517);
@@ -758,10 +799,10 @@ export function tradeOffers() {
   if (!groups.length) return offers;
   const dupes = [];
   for (const g of groups) {
-    // Keep the best finish; offer the lowest-value spare copy in a trade.
-    const copies = [...g.items].sort((a,b) => FINISH_ORDER.indexOf(a.finish) - FINISH_ORDER.indexOf(b.finish));
-    const spare = copies[0];
-    dupes.push({group: g, item: spare, value: cardValue(g.card, spare.finish)});
+    // Offer the lowest-value spare copy in a trade.
+    const copies = [...g.items].sort((a,b) => itemMarketValue(b) - itemMarketValue(a));
+    const spare = copies[copies.length - 1];
+    dupes.push({group: g, item: spare, value: itemMarketValue(spare)});
   }
   const owned = new Set(state.items.map(i => i.cardId));
   const offeredIds = new Set();
@@ -780,7 +821,7 @@ export function tradeOffers() {
     if (!candidates.length) break;
     const offerCard = candidates[Math.floor(rnd() * candidates.length)];
     offeredIds.add(offerCard.id);
-    const offerValue = cardValue(offerCard, 'base');
+    const offerValue = marketValue(offerCard, 'base');
     const ratio = offerValue / Math.max(1, d.value);
     offers.push({
       id: `t${state.tradeSeed}_${i}`,

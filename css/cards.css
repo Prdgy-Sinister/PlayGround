@@ -227,3 +227,11 @@
   .card-grid.sm{grid-template-columns:repeat(auto-fill,minmax(106px,1fr));gap:8px}
   .pack-tile .pack-info .nm{font-size:17px}
 }
+
+/* ---- grading slab badge ---- */
+.card-grade{position:absolute;top:3.1cqw;left:50%;transform:translateX(-50%);z-index:7;display:flex;flex-direction:column;align-items:center;line-height:.82;padding:.55cqw 1.35cqw .5cqw;border-radius:.7cqw;background:linear-gradient(180deg,rgba(5,7,10,.94),rgba(5,7,10,.7));border:.45px solid color-mix(in srgb,var(--gc,#f6c453) 62%, transparent);box-shadow:0 0 14px color-mix(in srgb,var(--gc,#f6c453) 28%, transparent), inset 0 1px 0 rgba(255,255,255,.18);backdrop-filter:blur(5px)}
+.card-grade b{font-family:var(--font-display);font-weight:800;font-size:4.7cqw;line-height:.82;color:var(--gc,#f6c453);text-shadow:0 0 10px color-mix(in srgb,var(--gc,#f6c453) 45%, transparent)}
+.card-grade span{font-family:var(--font-tech);font-weight:700;font-size:1.35cqw;letter-spacing:.1em;text-transform:uppercase;color:#dfe6f1;white-space:nowrap;margin-top:.3cqw}
+.card.graded{box-shadow:0 2px 0 rgba(255,255,255,.12) inset, 0 24px 42px -18px rgba(0,0,0,1), 0 0 0 1px color-mix(in srgb,var(--gc,#f6c453) 22%, rgba(0,0,0,.7)), 0 0 26px -10px color-mix(in srgb,var(--gc,#f6c453) 30%, transparent)}
+.card.graded .card-frame{background:linear-gradient(155deg,rgba(255,255,255,.7),color-mix(in srgb,var(--gc,#f6c453) 45%, transparent) 28%,rgba(255,255,255,.05) 58%,rgba(255,255,255,.45));opacity:.8}
+.card.graded::after{background:linear-gradient(115deg,rgba(255,255,255,.22) 0%,transparent 10%,transparent 86%,rgba(255,255,255,.14) 94%,transparent 100%),linear-gradient(180deg,transparent 70%,color-mix(in srgb,var(--gc,#f6c453) 8%, transparent) 100%);opacity:.8}
