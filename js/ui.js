@@ -510,6 +510,10 @@ export function openCardDetail(card, items, opts = {}) {
       <div class="di-market">
         <div class="dm-main"><span>Live collector value</span>${livePriceHTML(card, finish, { grading, className: 'lg' })}</div>
         <div class="dm-spark">${sparklineHTML(priceHistory(card, finish), { width: 170, height: 38 })}<small>24h market trend</small></div>
+        <div class="dm-changes">
+          ${[['24h', priceInfo(card, finish).change24], ['7d', priceInfo(card, finish).change7], ['30d', priceInfo(card, finish).change30]].map(([label, chg]) => `<span class="${chg > .15 ? 'up' : chg < -.15 ? 'down' : 'flat'}"><small>${label}</small>${signedPct(chg)}</span>`).join('')}
+        </div>
+        <div class="dm-signals">${priceInfo(card, finish).indicators.map(i => `<span class="sig ${esc(i.cls)}">${esc(i.label)}</span>`).join('')}</div>
       </div>
       ${gradePanel}
       <div class="attr-list">

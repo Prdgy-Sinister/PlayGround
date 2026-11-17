@@ -24,35 +24,106 @@ function phase(seed) {
 }
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-/* ---------------- live market ---------------- */
-const RARITY_VOL = { common: .035, rare: .05, epic: .07, legendary: .1, iconic: .14 };
+/* ---------------- live market ----------------
+   Prices are a genuinely two-sided, seeded simulation. Four layers combine:
+
+     1. a slow multi-week trend (fixed direction per card — some climb,
+        many decay)
+     2. short-to-medium waves (the "sentiment" cycle)
+     3. a per-day shock, with rare hype spikes for a small subset of cards
+     4. an anniversary / race-window event multiplier
+
+   Volatility scales with rarity, grading finish, scarcity and how recently a
+   card was released. Every layer is seeded from the card id and the clock, so
+   every view agrees without a backend, while values can and do fall hard.
+   ------------------------------------------------ */
+const DAY = 24 * HOUR;
+const RARITY_VOL = { common: .035, rare: .05, epic: .075, legendary: .11, iconic: .16 };
 const FINISH_VOL = { base: 1, holo: .92, gold: .88, championship: .86, anniversary: .9, signature: .84, shadow: .8, numbered: .78 };
+
+function unit(seed) { return hash32(String(seed)) / 4294967296; }
+function signed(seed) { return unit(seed) * 2 - 1; }
+
+function cardVol(card, finish) {
+  const r = RARITY_VOL[card.rarity] || .06;
+  const f = FINISH_VOL[finish] ?? 1;
+  const capped = (card.exclusive || card.autograph) ? 2.1 : 1;
+  const fresh = (card.year === 2026 || /(^|\D)2026(\D|$)/.test(card.years || '')) ? 1.7 : 1;
+  const demand = 1 + Math.min(.6, (card.titles || 0) * .06);
+  return r * f * capped * fresh * demand;
+}
 
 function sentiment(t) {
   return Math.sin(t / 91 + 1.7) * .55 + Math.sin(t / 37 + .3) * .3 + Math.sin(t / 13.7) * .15;
 }
 
+/* A fixed per-card drift direction over a multi-week cycle. Roughly half of
+   all cards are on a down-trend at any moment — there is no floor bias. */
+function trendFactor(card, finish, now) {
+  const dir = signed('trend.dir|' + card.id) < 0 ? -1 : 1;
+  const strength = .45 + unit('trend.str|' + card.id) * 1.05;
+  const cycle = 21 + Math.floor(unit('trend.len|' + card.id) * 16);
+  const wave = Math.sin((now / DAY / cycle) * Math.PI * 2 + phase('trend.ph|' + card.id));
+  return clamp(1 + dir * strength * cardVol(card, finish) * wave * 1.35, .62, 1.5);
+}
+
 function smoothFactor(card, finish, now) {
   const t = now / HOUR;
   const p = phase(card.id + '|' + finish);
-  const vol = (RARITY_VOL[card.rarity] || .06) * (FINISH_VOL[finish] || 1);
-  const wave = Math.sin(t / 11 + p) * .45
-    + Math.sin(t / 37 + p * 1.7) * .33
-    + Math.sin(t / 97 + p * 2.1) * .22;
-  return clamp(1 + wave * vol + sentiment(t) * vol * .45, .62, 1.55);
+  const vol = cardVol(card, finish);
+  const wave = Math.sin(t / 11 + p) * .5
+    + Math.sin(t / 37 + p * 1.7) * .34
+    + Math.sin(t / 97 + p * 2.1) * .24;
+  return clamp((1 + wave * vol + sentiment(t) * vol * .4) * trendFactor(card, finish, now), .5, 1.8);
+}
+
+/* Daily shocks jump at midnight. A small fraction of card-days get a hype
+   spike; capped and limited editions react far more strongly to demand. */
+export function dailyShock(card, finish = 'base', now = Date.now()) {
+  const day = Math.floor(now / DAY);
+  const vol = cardVol(card, finish);
+  const drift = signed(`${card.id}|${finish}|shock|${day}`) * vol * 1.25;
+  const roll = unit(`${card.id}|hype|${day}`);
+  const spike = roll > .965 ? ((roll - .965) / .035) * (1.1 + unit(card.id) * 1.5) * vol * 3.2 : 0;
+  return { factor: clamp(1 + drift + spike, .5, 2.5), spiking: spike > .05 };
+}
+
+/* Anniversaries and recurring race windows create genuine, dated events. */
+export function marketEvents(card, now = Date.now()) {
+  const d = new Date(now);
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth() + 1;
+  const out = [];
+  const sourceYear = card.year || parseInt(String(card.years || '').match(/\d{4}/)?.[0] || '', 10);
+  if (sourceYear) {
+    const age = year - sourceYear;
+    if (age > 0 && age % 25 === 0) out.push({label:`${age}-year title anniversary`, factor:1.18});
+    else if (age > 0 && age % 10 === 0) out.push({label:`${age}-year season anniversary`, factor:1.08});
+  }
+  if (month === 5 && card.sport === 'f1') out.push({label:'Monaco race week', factor:1.06});
+  if (month === 7 && card.sport === 'f1') out.push({label:'British GP week', factor:1.05});
+  if (month === 9 && card.sport === 'motogp') out.push({label:'Misano race week', factor:1.05});
+  if ((card.titles || 0) >= 3 && [5,6,7,9,10].includes(month)) out.push({label:'Champion demand surge', factor:1.04});
+  return out;
+}
+
+function eventFactor(card, now) {
+  return marketEvents(card, now).reduce((f, e) => f * e.factor, 1);
 }
 
 function tickFactor(card, finish, now) {
   const bucket = Math.floor(now / 15000);
   const jitter = ((hash32(card.id + '|' + finish + '|' + bucket) % 2000) / 1000) - 1;
-  const vol = (RARITY_VOL[card.rarity] || .085) * (FINISH_VOL[finish] || 1);
-  return jitter * vol * .45;
+  return jitter * cardVol(card, finish) * .4;
 }
 
 export function marketFactor(card, finish = 'base', now = Date.now(), opts = {}) {
-  const smooth = smoothFactor(card, finish, now);
+  const smooth = clamp(
+    smoothFactor(card, finish, now) * dailyShock(card, finish, now).factor * eventFactor(card, now) * (opts.circulation != null ? clamp(1 - opts.circulation * .03, .7, 1) : 1),
+    .38, 2.6,
+  );
   if (opts.smooth) return smooth;
-  return clamp(smooth + tickFactor(card, finish, now), .52, 1.9);
+  return clamp(smooth + tickFactor(card, finish, now), .34, 2.9);
 }
 
 export function marketValue(card, finish = 'base', now = Date.now(), opts = {}) {
@@ -69,21 +140,37 @@ export function changePct(card, finish = 'base', now = Date.now(), span = 6 * HO
   return (nowVal - prevVal) / prevVal * 100;
 }
 
+/* Market indicators surface the reason a price is moving, not just the sign. */
+export function marketIndicators(card, finish = 'base', now = Date.now()) {
+  const day = changePct(card, finish, now, DAY);
+  const out = [];
+  out.push(day > 1.5 ? {label:'Rising value', cls:'up'} : day < -1.5 ? {label:'Falling value', cls:'down'} : {label:'Stable value', cls:'flat'});
+  if ((card.titles || 0) >= 3 || card.rarity === 'iconic' || unit(card.id + '|demand') > .62) out.push({label:'High demand', cls:'hot'});
+  if (card.exclusive || card.autograph || (card.supply && card.supply <= 50)) out.push({label:'Low supply', cls:'rare'});
+  if (dailyShock(card, finish, now).spiking) out.push({label:'Market hype', cls:'hype'});
+  for (const ev of marketEvents(card, now)) out.push({label:ev.label, cls:'event'});
+  return out;
+}
+
 export function priceInfo(card, finish = 'base', now = Date.now()) {
   const value = marketValue(card, finish, now);
   const c6 = changePct(card, finish, now, 6 * HOUR);
-  const c24 = changePct(card, finish, now, 24 * HOUR);
+  const c24 = changePct(card, finish, now, DAY);
+  const c7 = changePct(card, finish, now, 7 * DAY);
+  const c30 = changePct(card, finish, now, 30 * DAY);
   const spark = [];
-  for (let i = 11; i >= 0; i--) {
-    spark.push(marketValue(card, finish, now - i * 2 * HOUR, { smooth: true }));
-  }
+  for (let i = 11; i >= 0; i--) spark.push(marketValue(card, finish, now - i * 2 * HOUR, { smooth: true }));
   return {
     raw: cardValue(card, finish),
     value,
     factor: marketFactor(card, finish, now),
     change: c6,
     change24: c24,
-    direction: c6 > .15 ? 'up' : c6 < -.15 ? 'down' : 'flat',
+    change7: c7,
+    change30: c30,
+    direction: c24 > .15 ? 'up' : c24 < -.15 ? 'down' : 'flat',
+    indicators: marketIndicators(card, finish, now),
+    events: marketEvents(card, now),
     spark,
   };
 }
@@ -220,24 +307,41 @@ export function marketIndex(now = Date.now()) {
   };
 }
 
+function moverTable(now, span) {
+  return MOVER_POOL.map(card => ({card, change: changePct(card, 'base', now, span)}));
+}
 export function topMovers(limit = 3, now = Date.now()) {
-  return MOVER_POOL
-    .map(card => ({card, change: changePct(card, 'base', now, 6 * HOUR)}))
+  return moverTable(now, DAY)
     .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
     .slice(0, limit);
+}
+export function topGainers(limit = 4, now = Date.now()) {
+  return moverTable(now, DAY).sort((a, b) => b.change - a.change).filter(m => m.change > 0).slice(0, limit);
+}
+export function topLosers(limit = 4, now = Date.now()) {
+  return moverTable(now, DAY).sort((a, b) => a.change - b.change).filter(m => m.change < 0).slice(0, limit);
 }
 
 export function marketSample(limit = 6, now = Date.now()) {
   return MOVER_POOL.slice(0, limit).map(card => {
     const info = priceInfo(card, 'base', now);
-    return {card, value: info.value, change: info.change, direction: info.direction};
+    return {card, value: info.value, change: info.change24, direction: info.direction};
   });
 }
 
-export function priceHistory(card, finish = 'base', now = Date.now(), points = 14) {
+/* Historical chart series. `span` is the full window in ms; points are
+   sampled evenly so 24h / 7d / 30d charts all work from the same source. */
+export function priceSeries(card, finish = 'base', now = Date.now(), points = 24, span = 7 * DAY) {
   const out = [];
-  for (let i = points - 1; i >= 0; i--) out.push(marketValue(card, finish, now - i * 2 * HOUR, { smooth: true }));
+  const step = span / Math.max(1, points - 1);
+  for (let i = points - 1; i >= 0; i--) {
+    const at = now - i * step;
+    out.push({at, value: marketValue(card, finish, at, { smooth: true })});
+  }
   return out;
+}
+export function priceHistory(card, finish = 'base', now = Date.now(), points = 14, span = 28 * HOUR) {
+  return priceSeries(card, finish, now, points, span).map(p => p.value);
 }
 
 export { RARITY };

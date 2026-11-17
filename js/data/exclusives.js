@@ -10,8 +10,44 @@
    nothing here represents official authentication or licensing.
    ============================================================ */
 import { AUTOGRAPH_EDITIONS } from './core.js';
+import { SEASON_EXCLUSIVE_SPECS } from './seasons.js';
 
 const PACKS = (...ids) => ids;
+
+/* Challenge reward editions. `exclusiveTo: []` means they are never rolled
+   from a pack — they can only be granted by completing historical challenges. */
+export const CHALLENGE_REWARD_SPECS = [
+  {
+    id:'challenge-f1-pioneer', base:'f1-1950-champion', finish:'hof', supply:50, rarity:'iconic',
+    exclusiveTo:[], edition:'Archive Pioneer', tagline:'Historical Challenge reward · 1 of 50',
+    bio:'A capped collection-edition card awarded for completing a Formula 1 historical challenge. A fictional digital collectible, not an officially licensed or authenticated item.',
+  },
+  {
+    id:'challenge-f1-dynasty', base:'f1-2000-champion', finish:'champ', supply:50, rarity:'iconic',
+    exclusiveTo:[], edition:'Dynasty Edition', tagline:'Historical Challenge reward · 1 of 50',
+    bio:'A capped digital edition awarded for mastering a Formula 1 championship challenge.',
+  },
+  {
+    id:'challenge-gp-king', base:'motogp-1966-champion', finish:'hof', supply:50, rarity:'iconic',
+    exclusiveTo:[], edition:'Grand Prix Royalty', tagline:'Historical Challenge reward · 1 of 50',
+    bio:'A capped collection-edition card awarded for completing a grand prix historical challenge.',
+  },
+  {
+    id:'challenge-gp-doctor', base:'motogp-2001-champion', finish:'champ', supply:50, rarity:'iconic',
+    exclusiveTo:[], edition:'Doctor Edition', tagline:'Historical Challenge reward · 1 of 50',
+    bio:'A capped digital edition awarded for completing a MotoGP historical challenge.',
+  },
+  {
+    id:'challenge-rivalry-f1', base:'f1-1988-champion', finish:'dual', supply:25, rarity:'iconic',
+    exclusiveTo:[], edition:'Rivals Edition', tagline:'Rivalry Challenge reward · 1 of 25',
+    bio:'A scarce dual-themed collector edition for collectors who complete a legendary rivalry set.',
+  },
+  {
+    id:'challenge-archive-master', base:'f1-2025-champion', finish:'legends', supply:25, rarity:'iconic',
+    exclusiveTo:[], edition:'Archive Master', tagline:'Master Challenge reward · 1 of 25',
+    bio:'The rarest historical challenge edition, reserved for collectors who finish an entire decade archive.',
+  },
+];
 
 /* ---------------- pack-exclusive editions ---------------- */
 export const EXCLUSIVE_SPECS = [
@@ -304,6 +340,10 @@ export const EXCLUSIVE_SPECS = [
     edition:'Hall of Fame', tagline:'Hall of Fame exclusive · 1 of 20',
     bio:'Max Verstappen’s Hall of Fame induction card, capped at twenty serialised copies.',
   },
+
+  /* ----- historical season + challenge editions ----- */
+  ...SEASON_EXCLUSIVE_SPECS,
+  ...CHALLENGE_REWARD_SPECS,
 ];
 
 /* ---------------- authenticated autographs ---------------- */

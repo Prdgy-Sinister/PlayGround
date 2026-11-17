@@ -15,13 +15,15 @@ All progress is saved locally in the browser. Use **Settings & Save** to export 
 
 ## Departments
 
-Use the sidebar to switch between **Cards**, **Albums**, **Memorabilia**, **Merchandise**, **Marketplace**, **My Showroom**, the **Collector Vault**, trading and the daily hub.
+Use the sidebar to switch between **Cards**, **Albums**, **Archive**, **Memorabilia**, **Merchandise**, **Marketplace**, **My Showroom**, the **Collector Vault**, trading, challenges and the daily hub.
 
 ## Features
 
-- **560 cards** across five rarity tiers — Common, Rare, Epic, Legendary and Iconic, plus 46 serialised exclusives and 60 autograph cards.
+- **1,341 cards** across five rarity tiers — Common, Rare, Epic, Legendary and Iconic, plus 207 serialised exclusives and 60 autograph cards.
 - **Eight card finishes**, including Holo, Gold, Championship, Anniversary, Signature, Shadow and numbered Limited editions.
-- **37 sealed card packs** for F1, MotoGP, crossover and premium specials, including duplicate-protected, choice, event and rotating-offer packs, plus a daily free pack and a rotating discounted Pack of the Day.
+- **229 sealed card packs** for F1, MotoGP, crossover, historical seasons and premium specials, including duplicate-protected, choice, event and rotating-offer packs, plus a daily free pack and a rotating discounted Pack of the Day.
+- **Historical Archive** — all 77 Formula 1 seasons (1950–2026) and 78 premier-class motorcycle seasons (1949–2026), each with a completable four-card collection, a dedicated season pack and factual champion/constructor/machine cards. Search or group by year, decade, championship and country. The 2026 seasons are marked in progress with no champion card.
+- **216 historical challenges** — per-season, decade, manufacturer, machine, rookie, rivalry and milestone goals with live progress, difficulty tiers and full reward previews. Rewards include capped collector editions, challenge-only vault packs, XP, Collector Tokens and showroom decorations. Archive prestige and collector titles grow as seasons are completed.
 - **253 fictional collectibles** — 150 memorabilia pieces (helmets, suits, parts, artefacts and signed replicas) and 103 merchandise items (apparel, accessories, miniatures and premium collections).
 - **Six memorabilia rarity levels** from Standard Collectible through Museum Piece, with fixed numbered runs and a permanent serial ledger.
 - **Four memorabilia packs** with published per-tier odds, plus four rotating daily merchandise collections and limited seasonal drops.
@@ -29,7 +31,7 @@ Use the sidebar to switch between **Cards**, **Albums**, **Memorabilia**, **Merc
 - **Cinematic reveals** with tear, walkout, rare-pull celebration, certificate panels and choice-pack sequences.
 - **Collector Vault** — redeem Collector Tokens for serialised autograph editions, signed certificates and exclusive cards. One-of-One editions are never sold.
 - **Collector economy** — marketplace singles, duplicate selling, trade offers, daily rewards, rotating objectives, achievements, challenge-earned pack tokens, level progression and flash offers.
-- **Live market** — an APEX 100 index, drifting card prices, price-history sparklines and a top-movers ticker. Memorabilia listings, simulated rival auctions and sale history sit alongside cards.
+- **Live market** — a genuinely two-sided simulated exchange. Prices rise *and* fall through per-card multi-week trends, sentiment waves, daily shocks and dated events (anniversaries, race weeks, champion demand). Every card shows 24-hour, 7-day and 30-day changes, price history charts and market indicators (rising/falling, demand, supply, hype, events). The APEX 100 index, top gainers/losers and a top-movers ticker round it out. Memorabilia listings, simulated rival auctions and sale history sit alongside cards.
 - **Card grading** — send raw cards to the APEX lab, roll subgrades into a permanent 1–10 slab with a certificate; grade 8+ multiplies value.
 - **Interactive 2.5D showroom** — an isometric Canvas museum with drag-to-orbit, zoom, procedural display models, click-to-inspect, nine unlockable rooms, collectible-driven prestige, custom themes, floors, lighting, banners and layouts.
 - **Simulated community** — visit, like and rank rival showrooms generated from your local save; all auctions, visits and prices are local, with no backend.
@@ -39,9 +41,11 @@ Use the sidebar to switch between **Cards**, **Albums**, **Memorabilia**, **Merc
 
 Every memorabilia piece, autograph and merchandise item in this project is a **fictional digital replica** created for gameplay. Nothing is officially licensed, genuinely race-used, or an authenticated autograph. This disclosure is shown in the collecting departments, item details, pack odds, reveals and marketplace.
 
+Historical season champions, constructors/manufacturers and country data are factual championship records. The cards, "Champion Edition" variants, artwork, ratings, pack odds and challenge rewards are fictional digital collectibles created for gameplay; they are not officially licensed or authenticated items. The 2026 seasons are represented as in progress and carry no champion card.
+
 ## Market & grading
 
-Prices are deterministic functions of time, so every screen agrees without a backend. The market drifts continuously while you browse: listings reprice live, the APEX 100 index and top-movers ticker update in place, and each card detail shows a 24-hour trend. Memorabilia values follow rarity, signature status and scarcity, with deterministic rival listings and auctions.
+Prices are deterministic functions of time, so every screen agrees without a backend. The market drifts continuously while you browse: listings reprice live, the APEX 100 index and top-movers ticker update in place, and each card detail shows 24-hour, 7-day and 30-day changes plus market indicators. Values genuinely fall as well as rise — roughly half of all cards are on a down-trend at any moment — and daily shocks can spike or dent a price. Anniversary years and race weeks create dated demand events. Memorabilia values follow rarity, signature status and scarcity, with deterministic rival listings and auctions.
 
 Grading is permanent. The APEX lab offers three services — Standard (coins), Express (gems, floor 4) and Black Label (gems, floor 6). Each roll produces four subgrades and an overall 1–10 grade stored on the card, with a certificate number. From grade 8 upward the market value is multiplied; below that it can fall. Graded cards show a slab badge on the card and a certificate panel in the detail view, and their value flows through selling, duplicates, trades and the live market.
 
