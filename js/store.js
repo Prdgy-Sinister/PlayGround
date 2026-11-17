@@ -1,7 +1,12 @@
 /* ============================================================
    APEX RUSH — game state, economy, packs, market, trading
    ============================================================ */
-import { CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, RARITY } from './data/index.js';
+import {
+  CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, RARITY,
+  EXCLUSIVE_MAP, AUTOGRAPH_MAP, EXCLUSIVE_CARDS, AUTOGRAPH_CARDS,
+} from './data/index.js';
+import { EXCLUSIVE_SPECS, AUTOGRAPH_SPECS, exclusiveIdsForPack } from './data/exclusives.js';
+import { NUMBERED_CAPS, AUTOGRAPH_EDITIONS } from './data/core.js';
 import { PACKS, PACK_MAP, getPackOfTheDay, finishWeights, packAvailability } from './data/packs.js';
 import {
   marketValue, itemMarketValue, rollGrade, gradingFromScore,
@@ -12,6 +17,12 @@ import {
   localDateKey, challengeForToday,
 } from './data/progress.js';
 import { sfx } from './audio.js';
+import {
+  RELICS, RELIC_MAP, MEMORABILIA, MERCHANDISE, RELIC_RARITY,
+  RELIC_ALBUMS, RELIC_ALBUM_MAP, relicsForAlbum, relicValue,
+  MEMORABILIA_PACKS, MEMORABILIA_PACK_MAP,
+} from './data/relics.js';
+import { ROOMS, ROOM_MAP, DISPLAYS, DISPLAY_MAP, THEMES, THEME_MAP, PRESTIGE, RIVAL_COLLECTORS } from './data/showroom.js';
 
 const KEY = 'apexrush.save.v3';
 const todayKey = () => localDateKey(new Date());
@@ -41,9 +52,27 @@ function freshState() {
     createdAt: Date.now(),
     coins: 3500,
     gems: 150,
+    collectorTokens: 20,
     xp: 0,
     level: 1,
     items: [],
+    relics: [],
+    issuedRelics: {},
+    relicClaims: [],
+    relicPackOpened: 0,
+    relicMarket: {seed: 0, date: now, bought: [], history: []},
+    auctions: {seed: 0, date: now, bids: {}, history: []},
+    showroom: {
+      rooms: ['main'],
+      displays: [],
+      items: [],
+      custom: {
+        theme: 'carbon', floor: 'polished', lighting: 'spotlight',
+        banners: 'none', furniture: 'basic', layout: 'classic',
+        teamColor: '#ff2d2d', decorations: [],
+      },
+      liked: [], visited: [], visits: 0,
+    },
     tokens: ['f1-standard'],
     favorite: null,
     stats: {
@@ -51,6 +80,9 @@ function freshState() {
       epicPulls: 0, legendaryPulls: 0, iconicPulls: 0, goldPacks: 0, dailyPacks: 0,
       coinsSpent: 0, coinsEarned: 0, maxUnique: 0, albumsCompleted: 0, bestStreak: 0,
       marketRefresh: 0, xpEarned: 0, eventPacks: 0, offerPacks: 0, graded: 0, gradingSpend: 0,
+      exclusivesPulled: 0, autographsPulled: 0, tokensEarned: 0, vaultRedeems: 0,
+      relicsCollected: 0, relicPacksOpened: 0, relicsSold: 0, relicsBought: 0,
+      auctionsWon: 0, roomsUnlocked: 0, showroomItems: 0,
     },
     daily: {
       date: now, packsOpened: 0, newCards: 0, epicPulls: 0, legendaryPulls: 0,
@@ -64,8 +96,11 @@ function freshState() {
     claimedAchievements: [],
     claimedAlbums: [],
     recentPulls: [],
-    market: {seed: 0, bought: [], date: now},
+    issued: {},
+    market: {seed: 0, bought: [], date: now, history: []},
     tradeSeed: 1,
+    tradeHistory: [],
+    vault: {redeemed: [], opened: 0},
     settings: {muted: false},
     starter: true,
   };
@@ -80,7 +115,44 @@ function hydrate(raw) {
   s.settings = {...base.settings, ...(raw.settings || {})};
   s.potd = {...base.potd, ...(raw.potd || {})};
   s.market = {...base.market, ...(raw.market || {})};
+  s.market.history = Array.isArray(s.market.history) ? s.market.history : [];
+  s.collectorTokens = Math.max(0, Number(raw.collectorTokens) || 0);
   s.items = Array.isArray(raw.items) ? raw.items.filter(it => it && CARD_MAP[it.cardId]) : [];
+  s.relics = Array.isArray(raw.relics) ? raw.relics.filter(it => it && RELIC_MAP[it.relicId]) : [];
+  s.issuedRelics = raw.issuedRelics && typeof raw.issuedRelics === 'object' && !Array.isArray(raw.issuedRelics) ? {...raw.issuedRelics} : {};
+  for (const item of s.relics) {
+    if (item.serial == null) continue;
+    if (!Array.isArray(s.issuedRelics[item.relicId])) s.issuedRelics[item.relicId] = [];
+    if (!s.issuedRelics[item.relicId].includes(item.serial)) s.issuedRelics[item.relicId].push(item.serial);
+  }
+  s.issued = raw.issued && typeof raw.issued === 'object' && !Array.isArray(raw.issued) ? {...raw.issued} : {};
+  // Older saves never had a supply ledger — reconstruct one from existing
+  // serialised copies so no cap can be exceeded after an import.
+  for (const item of s.items) {
+    if (item.serial == null) continue;
+    const key = `${item.cardId}|${item.finish || 'base'}`;
+    if (!Array.isArray(s.issued[key])) s.issued[key] = [];
+    if (!s.issued[key].includes(item.serial)) s.issued[key].push(item.serial);
+  }
+  s.tradeHistory = Array.isArray(raw.tradeHistory) ? raw.tradeHistory : [];
+  s.vault = {...base.vault, ...(raw.vault || {})};
+  s.vault.redeemed = Array.isArray(s.vault.redeemed) ? s.vault.redeemed : [];
+  s.relicClaims = Array.isArray(raw.relicClaims) ? raw.relicClaims : [];
+  s.relicMarket = {...base.relicMarket, ...(raw.relicMarket || {})};
+  s.relicMarket.history = Array.isArray(s.relicMarket.history) ? s.relicMarket.history : [];
+  s.relicMarket.bought = Array.isArray(s.relicMarket.bought) ? s.relicMarket.bought : [];
+  s.auctions = {...base.auctions, ...(raw.auctions || {})};
+  s.auctions.bids = raw.auctions?.bids && typeof raw.auctions.bids === 'object' ? {...raw.auctions.bids} : {};
+  s.auctions.history = Array.isArray(s.auctions?.history) ? s.auctions.history : [];
+  s.showroom = {...base.showroom, ...(raw.showroom || {})};
+  s.showroom.rooms = Array.isArray(s.showroom.rooms) ? s.showroom.rooms.filter(id => ROOM_MAP[id]) : ['main'];
+  if (!s.showroom.rooms.includes('main')) s.showroom.rooms.unshift('main');
+  s.showroom.displays = Array.isArray(s.showroom.displays) ? s.showroom.displays.filter(d => d && ROOM_MAP[d.room] && DISPLAY_MAP[d.type]) : [];
+  s.showroom.items = Array.isArray(s.showroom.items) ? s.showroom.items.filter(d => d && ROOM_MAP[d.room]) : [];
+  s.showroom.custom = {...base.showroom.custom, ...(raw.showroom?.custom || {})};
+  s.showroom.custom.decorations = Array.isArray(s.showroom.custom.decorations) ? s.showroom.custom.decorations : [];
+  s.showroom.liked = Array.isArray(s.showroom.liked) ? s.showroom.liked : [];
+  s.showroom.visited = Array.isArray(s.showroom.visited) ? s.showroom.visited : [];
   s.tokens = Array.isArray(raw.tokens) ? raw.tokens.filter(t => PACK_MAP[t]) : [];
   s.claimedAchievements = Array.isArray(raw.claimedAchievements) ? raw.claimedAchievements : [];
   s.claimedAlbums = Array.isArray(raw.claimedAlbums) ? raw.claimedAlbums : [];
@@ -116,6 +188,10 @@ function ensureToday(s = state) {
     s.dailyClaims = {};
     s.market.bought = [];
     s.market.date = today;
+    s.relicMarket.bought = [];
+    s.relicMarket.date = today;
+    s.auctions.bids = {};
+    s.auctions.date = today;
     s.potd = {date: today, purchases: 0};
   }
   if (s.potd.date !== today) s.potd = {date: today, purchases: 0};
@@ -146,6 +222,13 @@ export function addCurrency(coins = 0, gems = 0) {
   if (coins) { state.coins += Math.round(coins); state.stats.coinsEarned += Math.round(coins); }
   if (gems) state.gems += Math.round(gems);
 }
+export function addCollectorTokens(amount = 0) {
+  const n = Math.max(0, Math.round(amount));
+  if (!n) return 0;
+  state.collectorTokens += n;
+  state.stats.tokensEarned = (state.stats.tokensEarned || 0) + n;
+  return n;
+}
 function spendCurrency(currency, amount) {
   if (currency === 'coins') {
     if (state.coins < amount) throw gameError('NOT_ENOUGH_COINS', 'Not enough coins');
@@ -158,6 +241,48 @@ function spendCurrency(currency, amount) {
   }
 }
 function gameError(code, message, extra = {}) { return Object.assign(new Error(message), {code, ...extra}); }
+
+/* ---------------- supply ledger ----------------
+   Every capped card keeps a permanent, serial-level issue ledger in the save.
+   Selling a card never frees its serial: the global run stays exhausted, so
+   a numbered edition can never exceed its published supply. */
+const ledgerKey = (card, finish) => `${card.id}|${finish}`;
+function capFor(card, finish) {
+  if (!card) return null;
+  if (card.supply && finish === card.finish) return card.supply;
+  if (finish === 'numbered') return NUMBERED_CAPS[card.rarity] || 99;
+  return null;
+}
+function usedSerials(card, finish) {
+  const value = state.issued[ledgerKey(card, finish)];
+  return Array.isArray(value) ? value : null;
+}
+export function supplyInfo(cardOrId, finish) {
+  const card = typeof cardOrId === 'string' ? CARD_MAP[cardOrId] : cardOrId;
+  if (!card) return {cap:0, issued:0, remaining:0, owned:0};
+  const f = finish || card.finish || 'base';
+  const cap = capFor(card, f) || 0;
+  const used = usedSerials(card, f) || [];
+  const owned = f === card.finish || f === 'numbered' ? state.items.filter(i => i.cardId === card.id && i.finish === f).length : 0;
+  return {cap, issued: used.length, remaining: cap ? Math.max(0, cap - used.length) : 0, owned, serials:[...used]};
+}
+function issueSerial(card, finish) {
+  const cap = capFor(card, finish);
+  if (!cap) return null;
+  const key = ledgerKey(card, finish);
+  if (!Array.isArray(state.issued[key])) state.issued[key] = [];
+  const used = state.issued[key];
+  if (used.length >= cap) throw gameError('SOLD_OUT', `${card.name} has reached its ${cap}-copy supply cap`);
+  for (let tries = 0; tries < 40; tries++) {
+    const n = 1 + Math.floor(Math.random() * cap);
+    if (!used.includes(n)) { used.push(n); return n; }
+  }
+  for (let n = 1; n <= cap; n++) {
+    if (!used.includes(n)) { used.push(n); return n; }
+  }
+  throw gameError('SOLD_OUT', `${card.name} has reached its ${cap}-copy supply cap`);
+}
+export function supplyAvailable(card, finish) { return supplyInfo(card, finish).remaining > 0; }
 
 export function xpProgress(s = state) {
   const need = levelNeeded(s.level);
@@ -185,9 +310,14 @@ export function addXp(amount) {
 export function addItem(cardId, finish = 'base', opts = {}) {
   const card = CARD_MAP[cardId];
   if (!card) throw gameError('NO_CARD', 'Unknown card');
-  const serial = finish === 'numbered' ? (opts.serial ?? Math.floor(Math.random() * (card.rarity === 'iconic' ? 25 : card.rarity === 'legendary' ? 50 : 99)) + 1) : null;
-  const item = {uid: uid(), cardId, finish, serial, at: Date.now(), source: opts.source || 'pull', grading: opts.grading || null};
+  // Capped variants always carry their own edition finish; a caller cannot
+  // relabel one as a standard card and bypass the supply ledger.
+  const itemFinish = card.supply ? (card.finish || finish) : finish;
+  const serial = capFor(card, itemFinish) ? issueSerial(card, itemFinish) : null;
+  const item = {uid: uid(), cardId, finish: itemFinish, serial, at: Date.now(), source: opts.source || 'pull', grading: opts.grading || null};
   state.items.push(item);
+  if (card.autograph) state.stats.autographsPulled = (state.stats.autographsPulled || 0) + 1;
+  if (card.exclusive) state.stats.exclusivesPulled = (state.stats.exclusivesPulled || 0) + 1;
   const uniq = uniqueCount();
   if (uniq > state.stats.maxUnique) state.stats.maxUnique = uniq;
   return item;
@@ -228,6 +358,11 @@ export function sellItem(itemUid) {
   state.stats.cardsSold++;
   state.stats.coinsEarned += value;
   state.daily.cardsSold++;
+  state.market.history.unshift({
+    type:'sale', cardId: item.cardId, finish: item.finish, serial: item.serial,
+    price: value, at: Date.now(), buyer: 'Market collector',
+  });
+  state.market.history = state.market.history.slice(0, 24);
   addXp(4);
   save(); emit();
   return {value, card, finish: item.finish};
@@ -292,8 +427,9 @@ function weighted(entries, rnd = Math.random) {
   for (const [key, w] of entries) { r -= w; if (r <= 0) return key; }
   return entries[entries.length-1][0];
 }
+const BASE_CARDS = CARDS.filter(c => !c.exclusive && !c.autograph);
 function packPool(pack) {
-  let pool = CARDS;
+  let pool = BASE_CARDS;
   if (pack.scope === 'f1') pool = pool.filter(c => c.sport === 'f1');
   else if (pack.scope === 'motogp') pool = pool.filter(c => c.sport === 'motogp');
   else if (pack.scope === 'crossover') pool = pool;
@@ -307,22 +443,14 @@ function packPool(pack) {
   if (f.ids) { const set = new Set(f.ids); pool = pool.filter(c => set.has(c.id)); }
   if (f.signatures) pool = pool.filter(c => !!c.signature);
   if (f.query) pool = pool.filter(c => c.searchable.includes(f.query));
-  return pool.length ? pool : CARDS;
+  return pool.length ? pool : BASE_CARDS;
 }
 function rollRarity(pack, rnd) {
-  const base = {...pack.odds};
-  // Reworked odds: top tiers are significantly harder to hit. Removed
-  // weight is pushed into the lowest available tier so pack totals stay 100.
-  const cuts = {epic: .78, legendary: .42, iconic: .3};
-  let removed = 0;
-  for (const k of ['epic','legendary','iconic']) {
-    const before = base[k] || 0;
-    base[k] = before * cuts[k];
-    removed += before - base[k];
-  }
-  const sink = base.common > 0 ? 'common' : (base.rare > 0 ? 'rare' : (base.epic > 0 ? 'epic' : 'legendary'));
-  base[sink] = (base[sink] || 0) + removed;
-  return weighted(Object.entries(base).map(([k,v]) => [k, v]), rnd);
+  // Roll exactly the published odds. The data layer balances the economy at
+  // definition time; nothing is adjusted again here, so what the collector
+  // reads on the pack card is what the roller actually uses.
+  const entries = Object.entries(pack.odds || {}).filter(([, v]) => (Number(v) || 0) > 0);
+  return weighted(entries, rnd);
 }
 function cardOfRarity(pool, rarity, exclude, unownedOnly, owned, rnd) {
   let candidates = pool.filter(c => c.rarity === rarity && !exclude.has(c.id) && (!unownedOnly || !owned.has(c.id)));
@@ -345,9 +473,55 @@ function rollFinish(pack, card, rnd) {
   const entries = Object.entries(weights).filter(([k,w]) => w > 0 && (k !== 'signature' || !!card.signature));
   return weighted(entries, rnd);
 }
-function serialFor(card) {
-  const max = card.rarity === 'iconic' ? 25 : card.rarity === 'legendary' ? 50 : 99;
-  return Math.floor(Math.random() * max) + 1;
+function pickAutographEdition(allowed, rnd = Math.random) {
+  // All six editions can be pulled from specialist packs — including the
+  // One-of-One, which is weighted to a vanishingly rare 1-in-~1,300 chance.
+  // The token-display flag only restricts Vault redemption, never pack drops.
+  const editions = AUTOGRAPH_EDITIONS.filter(e => !allowed || allowed.includes(e.id));
+  const available = editions.filter(e => AUTOGRAPH_SPECS.some(s => s.editionId === e.id && supplyAvailable(AUTOGRAPH_MAP[s.id], AUTOGRAPH_MAP[s.id]?.finish)));
+  const pool = available.length ? available : editions;
+  if (!pool.length) return null;
+  return weighted(pool.map(e => [e, Math.min(e.supply, 500)]), rnd);
+}
+function injectCollectibles(pack, result, owned) {
+  if (!result?.length) return result;
+  const rnd = Math.random;
+  const weakest = () => result.reduce((low, r, i) => RANK[r.card.rarity] < RANK[result[low].card.rarity] ? i : low, 0);
+
+  /* Pack-exclusive editions are never part of the ordinary card pool. They
+     replace one pulled slot only when the pack advertises an exclusive. */
+  const exIds = exclusiveIdsForPack(pack.id);
+  if (exIds.length && pack.exclusiveChance && rnd() < pack.exclusiveChance) {
+    const candidates = exIds
+      .map(id => EXCLUSIVE_MAP[id])
+      .filter(c => c && supplyAvailable(c, c.finish));
+    if (candidates.length) {
+      const card = candidates[Math.floor(rnd() * candidates.length)];
+      const idx = weakest();
+      result[idx] = {card, finish: card.finish, isNew: !owned.has(card.id), serial: null, exclusive: true};
+    }
+  }
+
+  /* Autographs only exist in explicitly flagged specialist packs. Ordinary
+     core, featured, F1, MotoGP, event and daily packs have no autograph hook. */
+  const autographCfg = pack.autographs;
+  if (autographCfg && (autographCfg.guaranteed || rnd() < (autographCfg.chance || 0))) {
+    const preferred = pickAutographEdition(autographCfg.editions, rnd);
+    const order = preferred ? [preferred, ...AUTOGRAPH_EDITIONS.filter(e => e.id !== preferred.id)] : AUTOGRAPH_EDITIONS;
+    let injected = null;
+    for (const edition of order) {
+      const candidates = AUTOGRAPH_SPECS
+        .filter(s => s.editionId === edition.id)
+        .map(s => AUTOGRAPH_MAP[s.id])
+        .filter(c => c && supplyAvailable(c, c.finish));
+      if (!candidates.length) continue;
+      const card = candidates[Math.floor(rnd() * candidates.length)];
+      injected = {card, finish: card.finish, isNew: !owned.has(card.id), serial: null, autograph: true};
+      break;
+    }
+    if (injected) result[autographCfg.guaranteed ? 0 : weakest()] = injected;
+  }
+  return result;
 }
 
 function generatePull(pack, forcedFinish = null) {
@@ -431,10 +605,9 @@ function generatePull(pack, forcedFinish = null) {
     const idx = result.reduce((best, r, i) => RANK[r.card.rarity] > RANK[result[best].card.rarity] ? i : best, 0);
     result[idx].finish = pack.guaranteedFinish;
   }
-  for (const r of result) {
-    if (r.finish === 'numbered') r.serial = serialFor(r.card);
-  }
-  return result;
+  // Serial numbers are allocated by addItem from the permanent supply ledger,
+  // never by the roller, so a sold-out run can never be issued again.
+  return injectCollectibles(pack, result, owned);
 }
 
 export function openPack(packId, opts = {}) {
@@ -495,7 +668,7 @@ export function openPack(packId, opts = {}) {
     if (RANK[p.card.rarity] >= 2) state.daily.epicPulls++;
     if (RANK[p.card.rarity] >= 3) { state.stats.legendaryPulls++; state.daily.legendaryPulls++; }
     if (RANK[p.card.rarity] >= 4) state.stats.iconicPulls++;
-    state.recentPulls.unshift({cardId: p.card.id, finish: p.finish, serial: p.serial, isNew: p.isNew, at: Date.now(), uid: item.uid});
+    state.recentPulls.unshift({cardId: p.card.id, finish: item.finish, serial: item.serial, isNew: p.isNew, at: Date.now(), uid: item.uid});
   }
   state.recentPulls = state.recentPulls.slice(0, 24);
   state.stats.packsOpened++;
@@ -504,6 +677,7 @@ export function openPack(packId, opts = {}) {
   if (packId === 'daily') { state.stats.dailyPacks++; state.daily.dailyPacks++; }
   if (packId === 'gold' || packId === 'f1-gold' || packId === 'motogp-gold') { state.stats.goldPacks++; state.daily.goldPacks++; }
   if (pack.category === 'event') state.stats.eventPacks = (state.stats.eventPacks || 0) + 1;
+  if (pack.category === 'vault' || pack.category === 'exclusive') state.vault.opened = (state.vault.opened || 0) + 1;
   if (deal) state.stats.offerPacks = (state.stats.offerPacks || 0) + 1;
   if (packId === 'potd') state.potd.purchases++;
 
@@ -525,7 +699,6 @@ export function openPack(packId, opts = {}) {
       options.push({card, finish, serial: null, isNew: !ownedNow.has(card.id)});
       used.add(card.id);
     }
-    for (const o of options) if (o.finish === 'numbered') o.serial = serialFor(o.card);
     choice = {options, picks: cfg.picks || 1, chosenCount: 0, chosen: null};
   }
 
@@ -555,7 +728,7 @@ export function choosePackCard(result, cardId) {
   if (RANK[option.card.rarity] >= 2) { state.stats.epicPulls++; state.daily.epicPulls++; }
   if (RANK[option.card.rarity] >= 3) { state.stats.legendaryPulls++; state.daily.legendaryPulls++; }
   if (RANK[option.card.rarity] >= 4) state.stats.iconicPulls++;
-  state.recentPulls.unshift({cardId: option.card.id, finish: option.finish, serial: option.serial, isNew: option.isNew, at: Date.now(), uid: item.uid});
+  state.recentPulls.unshift({cardId: option.card.id, finish: item.finish, serial: item.serial, isNew: option.isNew, at: Date.now(), uid: item.uid});
   state.recentPulls = state.recentPulls.slice(0, 24);
   addXp(18);
   if (state.stats.maxUnique < uniqueCount()) state.stats.maxUnique = uniqueCount();
@@ -579,6 +752,7 @@ export function claimAlbum(albumId) {
   state.coins += album.reward.coins;
   state.gems += album.reward.gems;
   state.stats.coinsEarned += album.reward.coins;
+  addCollectorTokens(album.reward.tokens || 0);
   state.stats.albumsCompleted++;
   const levelUps = addXp(120);
   save(); emit();
@@ -618,6 +792,7 @@ export function claimDaily() {
   state.coins += reward.coins || 0;
   state.gems += reward.gems || 0;
   state.stats.coinsEarned += reward.coins || 0;
+  addCollectorTokens(reward.tokens || 0);
   if (reward.pack) state.tokens.push(reward.pack);
   const levelUps = addXp(50);
   save(); emit();
@@ -657,6 +832,7 @@ export function claimChallenge(id, kind = 'daily') {
     state.coins += def.reward.coins || 0;
     state.gems += def.reward.gems || 0;
     state.stats.coinsEarned += def.reward.coins || 0;
+    addCollectorTokens(def.reward.tokens || 0);
     if (def.reward.pack) state.tokens.push(def.reward.pack);
     const levelUps = addXp(40);
     save(); emit();
@@ -670,6 +846,7 @@ export function claimChallenge(id, kind = 'daily') {
   state.coins += def.reward.coins || 0;
   state.gems += def.reward.gems || 0;
   state.stats.coinsEarned += def.reward.coins || 0;
+  addCollectorTokens(def.reward.tokens || 0);
   if (def.reward.pack) state.tokens.push(def.reward.pack);
   const levelUps = addXp(60);
   save(); emit();
@@ -680,19 +857,20 @@ export function claimAllAvailable() {
     ...dailyChallenges().filter(c => c.completed && !c.claimed).map(c => ({id:c.id, kind:'daily'})),
     ...achievements().filter(c => c.completed && !c.claimed && c.kind !== 'none').map(c => ({id:c.id, kind:'career'})),
   ];
-  let coins = 0, gems = 0, count = 0, packs = 0;
+  let coins = 0, gems = 0, tokens = 0, count = 0, packs = 0;
   const allLevels = [];
   for (const entry of list) {
     try {
       const res = claimChallenge(entry.id, entry.kind);
       coins += res.def.reward.coins || 0;
       gems += res.def.reward.gems || 0;
+      tokens += res.def.reward.tokens || 0;
       if (res.def.reward.pack) packs++;
       count++;
       allLevels.push(...res.levelUps);
     } catch {}
   }
-  return {coins, gems, count, packs, levelUps: allLevels};
+  return {coins, gems, tokens, count, packs, levelUps: allLevels};
 }
 
 /* ---------------- market ---------------- */
@@ -702,7 +880,9 @@ export function marketListings() {
   const seed = 1103 + state.market.seed * 7919 + (dateSeed % 9973);
   const rnd = rngFrom(seed);
   const listings = [];
-  const pool = [...CARDS];
+  // Ordinary listings are base cards only. Capped editions are listed below
+  // at their own fixed finish and price — never mispriced as a base card.
+  const pool = BASE_CARDS;
   const used = new Set();
   for (let i = 0; i < 8; i++) {
     let card;
@@ -733,6 +913,25 @@ export function marketListings() {
       seller: ['ApexCollector','GridKing_88','Vale46Fan','SennaVault','TifosiTom','DesmoDani'][Math.floor(rnd()*6)],
     });
   }
+
+  /* One premium collectible lot per board, when supply remains. These are
+     presented with their serial cap and edition just like any other lot. */
+  const collectibles = [...AUTOGRAPH_CARDS, ...EXCLUSIVE_CARDS]
+    .filter(c => c.supply && supplyAvailable(c, c.finish) && !used.has(c.id));
+  if (collectibles.length && rnd() < .55) {
+    const card = collectibles[Math.floor(rnd() * collectibles.length)];
+    const spread = 1.15 + rnd() * .35;
+    const price = Math.max(20, Math.round(marketValue(card, card.finish) * spread / 10) * 10);
+    const id = `m${state.market.seed}_c`;
+    listings[listings.length - 1] = {
+      id, card, finish: card.finish, grading: null, spread, price,
+      rawPrice: marketValue(card, card.finish),
+      bought: state.market.bought.includes(id),
+      seller: 'VaultBroker',
+      collectible: true,
+    };
+    used.add(card.id);
+  }
   return listings;
 }
 export function buyListing(listingId) {
@@ -747,6 +946,11 @@ export function buyListing(listingId) {
   state.stats.cardsBought++;
   state.market.bought.push(listingId);
   const item = addItem(listing.card.id, listing.finish, {source:'market', grading: listing.grading});
+  state.market.history.unshift({
+    type:'buy', cardId: item.cardId, finish: item.finish, serial: item.serial,
+    price: listing.price, at: Date.now(), buyer: listing.seller,
+  });
+  state.market.history = state.market.history.slice(0, 24);
   addXp(8);
   save(); emit();
   return {listing, item};
@@ -761,6 +965,546 @@ export function refreshMarket() {
   state.market.seed++;
   state.market.bought = [];
   save(); emit();
+}
+
+/* ============================================================
+   MEMORABILIA & MERCHANDISE
+   ============================================================ */
+const relicLedgerKey = relic => relic.id;
+export function relicSupplyInfo(relicOrId) {
+  const relic = typeof relicOrId === 'string' ? RELIC_MAP[relicOrId] : relicOrId;
+  if (!relic) return {cap:0, issued:0, remaining:0, owned:0, serials:[]};
+  const cap = relic.supply || 0;
+  const used = Array.isArray(state.issuedRelics[relicLedgerKey(relic)]) ? state.issuedRelics[relicLedgerKey(relic)] : [];
+  const owned = state.relics.filter(r => r.relicId === relic.id).length;
+  return {cap, issued: used.length, remaining: cap ? Math.max(0, cap - used.length) : 0, owned, serials:[...used]};
+}
+function issueRelicSerial(relic) {
+  const cap = relic.supply || 0;
+  if (!cap) return null;
+  const key = relicLedgerKey(relic);
+  if (!Array.isArray(state.issuedRelics[key])) state.issuedRelics[key] = [];
+  const used = state.issuedRelics[key];
+  if (used.length >= cap) throw gameError('SOLD_OUT', `${relic.name} has reached its ${cap}-piece edition cap`);
+  for (let tries = 0; tries < 60; tries++) {
+    const n = 1 + Math.floor(Math.random() * cap);
+    if (!used.includes(n)) { used.push(n); return n; }
+  }
+  for (let n = 1; n <= cap; n++) {
+    if (!used.includes(n)) { used.push(n); return n; }
+  }
+  throw gameError('SOLD_OUT', `${relic.name} is fully issued`);
+}
+export function addRelic(relicId, opts = {}) {
+  const relic = RELIC_MAP[relicId];
+  if (!relic) throw gameError('NO_RELIC', 'Unknown collectible');
+  const serial = issueRelicSerial(relic);
+  const item = {uid: 'r' + uid(), relicId, serial, at: Date.now(), source: opts.source || 'pack'};
+  state.relics.push(item);
+  state.stats.relicsCollected = (state.stats.relicsCollected || 0) + 1;
+  if (relic.kind === 'memorabilia') state.stats.maxUnique = Math.max(state.stats.maxUnique, uniqueCount());
+  return {item, relic, serial, value: relicValue(relic)};
+}
+export function ownedRelics() {
+  return state.relics.map(item => {
+    const relic = RELIC_MAP[item.relicId];
+    return relic ? {item, relic, value: relicValue(relic)} : null;
+  }).filter(Boolean);
+}
+export function uniqueRelicCount() { return new Set(state.relics.map(r => r.relicId)).size; }
+export function relicPackOdds(pack) {
+  const counts = {};
+  for (const rar of pack.rarities || []) counts[rar] = (counts[rar] || 0) + 1;
+  const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+  return Object.entries(counts).map(([rarity, n]) => ({rarity, pct: n / total * 100}));
+}
+export function openRelicPack(packId) {
+  const pack = MEMORABILIA_PACK_MAP[packId];
+  if (!pack) throw gameError('NO_PACK', 'Unknown memorabilia pack');
+  spendCurrency(pack.currency, pack.cost);
+  const results = [];
+  for (let slot = 0; slot < pack.cards; slot++) {
+    const rarity = pack.rarities[Math.floor(Math.random() * pack.rarities.length)];
+    let pool = MEMORABILIA.filter(r => r.rarity === rarity && (!r.supply || relicSupplyInfo(r).remaining > 0));
+    if (!pool.length) pool = MEMORABILIA.filter(r => !r.supply || relicSupplyInfo(r).remaining > 0);
+    if (!pool.length) throw gameError('SOLD_OUT', 'Every piece in this tier has been issued');
+    const relic = pool[Math.floor(Math.random() * pool.length)];
+    const added = addRelic(relic.id, {source: packId});
+    results.push({...added, isNew: !state.relics.some(r => r.relicId === relic.id && r.uid !== added.item.uid)});
+  }
+  state.relicPackOpened = (state.relicPackOpened || 0) + 1;
+  state.stats.relicPacksOpened = (state.stats.relicPacksOpened || 0) + 1;
+  const xp = 25 + results.length * 12;
+  const levelUps = addXp(xp);
+  save(); emit();
+  return {pack, results, xp, levelUps};
+}
+export function relicAlbumProgress(albumOrId, s = state) {
+  const album = typeof albumOrId === 'string' ? RELIC_ALBUM_MAP[albumOrId] : albumOrId;
+  if (!album) return {have:0, total:0, pct:0, complete:false, claimed:false};
+  const pool = relicsForAlbum(album);
+  const owned = new Set(s.relics.map(r => r.relicId));
+  const have = pool.filter(r => owned.has(r.id)).length;
+  return {
+    have, total: pool.length,
+    pct: pool.length ? Math.round(have / pool.length * 100) : 0,
+    complete: have >= pool.length,
+    claimed: s.relicClaims.includes(album.id),
+  };
+}
+export function relicAlbums() {
+  return RELIC_ALBUMS.map(album => ({album, ...relicAlbumProgress(album)}));
+}
+export function claimRelicAlbum(albumId) {
+  const album = RELIC_ALBUM_MAP[albumId];
+  if (!album) throw gameError('NO_ALBUM', 'Unknown collection');
+  const prog = relicAlbumProgress(album);
+  if (!prog.complete) throw gameError('ALBUM_INCOMPLETE', 'This collection is not complete yet');
+  if (prog.claimed) throw gameError('ALREADY_CLAIMED', 'Reward already claimed');
+  state.relicClaims.push(albumId);
+  const reward = album.reward || {};
+  if (reward.coins) { state.coins += reward.coins; state.stats.coinsEarned += reward.coins; }
+  if (reward.gems) state.gems += reward.gems;
+  addCollectorTokens(reward.tokens || 0);
+  if (reward.decoration && !state.showroom.custom.decorations.includes(reward.decoration)) {
+    state.showroom.custom.decorations.push(reward.decoration);
+  }
+  let bonus = null;
+  if (reward.relicId) bonus = addRelic(reward.relicId, {source:'album-reward'});
+  const levelUps = addXp(140);
+  save(); emit();
+  return {album, reward, bonus, levelUps};
+}
+export function buyRelic(relicId) {
+  const relic = MERCHANDISE.find(r => r.id === relicId);
+  if (!relic) throw gameError('NO_RELIC', 'This item is not in the store');
+  if (relic.supply && relicSupplyInfo(relic).remaining <= 0) throw gameError('SOLD_OUT', `${relic.name} is sold out`);
+  if (state.coins < relic.price) throw gameError('NOT_ENOUGH_COINS', 'Not enough coins');
+  spendCurrency('coins', relic.price);
+  const added = addRelic(relic.id, {source:'store'});
+  state.stats.relicsBought = (state.stats.relicsBought || 0) + 1;
+  state.relicMarket.history.unshift({
+    type:'buy', relicId, price: relic.price, at: Date.now(), buyer:'Merchandise Store', serial: added.serial,
+  });
+  state.relicMarket.history = state.relicMarket.history.slice(0, 30);
+  addXp(12);
+  save(); emit();
+  return {...added, price: relic.price};
+}
+export function sellRelicItem(itemUid) {
+  const idx = state.relics.findIndex(r => r.uid === itemUid);
+  if (idx < 0) throw gameError('NO_ITEM', 'Collectible not found');
+  const item = state.relics[idx];
+  const relic = RELIC_MAP[item.relicId];
+  const value = relicValue(relic);
+  state.relics.splice(idx, 1);
+  state.coins += value;
+  state.stats.coinsEarned += value;
+  state.stats.relicsSold = (state.stats.relicsSold || 0) + 1;
+  state.relics = state.relics.filter(r => r.uid !== itemUid);
+  state.showroom.items = state.showroom.items.filter(d => !(d.kind === 'relic' && d.itemUid === itemUid));
+  state.relicMarket.history.unshift({
+    type:'sale', relicId: relic.id, serial: item.serial, price: value, at: Date.now(), buyer:'Market collector',
+  });
+  state.relicMarket.history = state.relicMarket.history.slice(0, 30);
+  addXp(6);
+  save(); emit();
+  return {relic, item, value};
+}
+export function relicMarketListings() {
+  ensureToday();
+  const dateSeed = parseInt(String(state.relicMarket.date || '').replace(/-/g, ''), 10) || 0;
+  const rnd = rngFrom(2119 + state.relicMarket.seed * 6151 + (dateSeed % 9973));
+  const pool = RELICS.filter(r => !r.supply || relicSupplyInfo(r).remaining > 0);
+  const out = [];
+  const used = new Set();
+  for (let i = 0; i < 6; i++) {
+    let relic;
+    for (let tries = 0; tries < 40; tries++) {
+      const cand = pool[Math.floor(rnd() * pool.length)];
+      if (cand && !used.has(cand.id) && RELIC_RARITY[cand.rarity].rank >= 1) { relic = cand; break; }
+    }
+    if (!relic) relic = pool[Math.floor(rnd() * pool.length)];
+    if (!relic) break;
+    used.add(relic.id);
+    const id = `rl${state.relicMarket.seed}_${i}`;
+    const spread = 1.05 + rnd() * .45;
+    out.push({
+      id, relic,
+      serial: relic.supply ? 1 + Math.floor(rnd() * relic.supply) : null,
+      price: Math.max(30, Math.round(relicValue(relic) * spread / 10) * 10),
+      rawPrice: relicValue(relic),
+      spread,
+      bought: state.relicMarket.bought.includes(id),
+      seller: RIVAL_COLLECTORS[Math.floor(rnd() * RIVAL_COLLECTORS.length)].alias,
+    });
+  }
+  return out;
+}
+export function buyRelicListing(listingId) {
+  ensureToday();
+  const listing = relicMarketListings().find(l => l.id === listingId);
+  if (!listing) throw gameError('NO_LISTING', 'Listing not found');
+  if (listing.bought) throw gameError('SOLD', 'Listing already sold');
+  if (state.coins < listing.price) throw gameError('NOT_ENOUGH_COINS', 'Not enough coins');
+  state.coins -= listing.price;
+  state.stats.coinsSpent += listing.price;
+  state.daily.coinsSpent += listing.price;
+  state.stats.relicsBought = (state.stats.relicsBought || 0) + 1;
+  state.relicMarket.bought.push(listing.id);
+  const added = addRelic(listing.relic.id, {source:'market', serialHint: listing.serial});
+  state.relicMarket.history.unshift({
+    type:'buy', relicId: listing.relic.id, serial: added.serial, price: listing.price, at: Date.now(), buyer: listing.seller,
+  });
+  state.relicMarket.history = state.relicMarket.history.slice(0, 30);
+  addXp(10);
+  save(); emit();
+  return {listing, ...added};
+}
+export function refreshRelicMarket() {
+  ensureToday();
+  spendCurrency('coins', 250);
+  state.relicMarket.seed++;
+  state.relicMarket.bought = [];
+  save(); emit();
+}
+
+/* ---------------- simulated memorabilia auctions ---------------- */
+export function auctionLots() {
+  ensureToday();
+  const dateSeed = parseInt(String(state.auctions.date || '').replace(/-/g, ''), 10) || 0;
+  const rnd = rngFrom(4211 + state.auctions.seed * 3571 + (dateSeed % 9973));
+  const pool = RELICS.filter(r => {
+    if (!r.supply || relicSupplyInfo(r).remaining <= 0) return false;
+    return ['legendary','iconic','museum'].includes(r.rarity) || r.signed || r.limited;
+  });
+  const lots = [];
+  const used = new Set();
+  for (let i = 0; i < 3; i++) {
+    let relic;
+    for (let tries = 0; tries < 40; tries++) {
+      const cand = pool[Math.floor(rnd() * pool.length)];
+      if (cand && !used.has(cand.id)) { relic = cand; break; }
+    }
+    if (!relic) break;
+    used.add(relic.id);
+    const id = `au${state.auctions.seed}_${i}`;
+    const start = Math.round(relicValue(relic) * (0.85 + rnd() * .3) / 10) * 10;
+    const bid = state.auctions.bids[id];
+    const bidder = bid?.bidder || RIVAL_COLLECTORS[Math.floor(rnd() * RIVAL_COLLECTORS.length)].alias;
+    const current = bid?.amount || start;
+    const increment = Math.max(50, Math.round(current * .06 / 10) * 10);
+    lots.push({
+      id, relic, start, current, increment, bidder,
+      youLeading: bid?.bidder === 'You',
+      buyNow: Math.round(start * 1.45 / 10) * 10,
+      watchers: 4 + Math.floor(rnd() * 22),
+      endsIn: 6 + Math.floor(rnd() * 18),
+      history: (state.auctions.history.filter(h => h.lotId === id)).slice(0, 5),
+    });
+  }
+  return lots;
+}
+export function placeAuctionBid(lotId, amount) {
+  ensureToday();
+  const lot = auctionLots().find(l => l.id === lotId);
+  if (!lot) throw gameError('NO_LOT', 'Auction lot not found');
+  const bid = Math.round(Number(amount) || 0);
+  if (bid < lot.current + lot.increment) throw gameError('BID_TOO_LOW', `Bid must be at least ◈ ${(lot.current + lot.increment).toLocaleString()}`);
+  if (state.coins < bid) throw gameError('NOT_ENOUGH_COINS', 'Not enough coins to place that bid');
+  if (bid >= lot.buyNow) {
+    state.coins -= bid;
+    state.stats.coinsSpent += bid;
+    const added = addRelic(lot.relic.id, {source:'auction'});
+    state.auctions.history.unshift({lotId, type:'won', relicId: lot.relic.id, amount: bid, bidder:'You', at: Date.now()});
+    state.auctions.history = state.auctions.history.slice(0, 40);
+    state.stats.auctionsWon = (state.stats.auctionsWon || 0) + 1;
+    delete state.auctions.bids[lotId];
+    addXp(30);
+    save(); emit();
+    return {won: true, ...added, amount: bid, lot};
+  }
+  state.auctions.bids[lotId] = {amount: bid, bidder: 'You'};
+  state.auctions.history.unshift({lotId, type:'bid', relicId: lot.relic.id, amount: bid, bidder:'You', at: Date.now()});
+  const rnd = rngFrom(777 + lot.id.length * 31 + bid);
+  const counter = Math.round(bid * (1.05 + rnd() * .12) / 10) * 10;
+  const rival = RIVAL_COLLECTORS[Math.floor(rnd() * RIVAL_COLLECTORS.length)].alias;
+  state.auctions.bids[lotId] = {amount: counter, bidder: rival};
+  state.auctions.history.unshift({lotId, type:'outbid', relicId: lot.relic.id, amount: counter, bidder: rival, at: Date.now()});
+  state.auctions.history = state.auctions.history.slice(0, 40);
+  save(); emit();
+  return {won:false, amount: bid, counter, bidder: rival, lot};
+}
+export function refreshAuctions() {
+  ensureToday();
+  state.auctions.seed++;
+  state.auctions.bids = {};
+  state.auctions.date = todayKey();
+  save(); emit();
+}
+
+/* ============================================================
+   PERSONAL SHOWROOM / COLLECTOR'S MUSEUM
+   ============================================================ */
+export function showroomPrestige(s = state) {
+  const RARITY_PTS = {common:1, rare:3, epic:8, legendary:20, iconic:50};
+  let points = 0;
+  for (const item of s.items) {
+    const card = CARD_MAP[item.cardId];
+    if (!card) continue;
+    points += RARITY_PTS[card.rarity] || 1;
+    if (card.exclusive) points += 40;
+    if (card.autograph) points += 55;
+    if (item.serial != null) points += 25;
+    if (item.grading) points += 5;
+  }
+  const RELIC_PTS = {standard:3, rare:8, epic:20, legendary:50, iconic:120, museum:300};
+  for (const entry of ownedRelics()) {
+    points += RELIC_PTS[entry.relic.rarity] || 3;
+    if (entry.relic.signed) points += 60;
+    if (entry.relic.dualSigned) points += 80;
+    if (entry.relic.limited) points += 30;
+    if (entry.item.serial != null) points += 20;
+  }
+  points += ALBUMS.filter(a => albumProgress(a, s).complete).length * 100;
+  points += RELIC_ALBUMS.filter(a => relicAlbumProgress(a, s).complete).length * 150;
+  points += s.showroom.rooms.length * 18;
+  points += s.showroom.items.length * 4;
+  points += s.showroom.custom.decorations.length * 12;
+  let level = 1;
+  for (const p of PRESTIGE) if (points >= p.points) level = p.level;
+  const current = PRESTIGE[level - 1];
+  const next = PRESTIGE[level] || null;
+  return {
+    points, level, name: current.name, icon: current.icon,
+    next, progress: next ? Math.min(100, Math.round((points - current.points) / Math.max(1, next.points - current.points) * 100)) : 100,
+  };
+}
+function requirementMet(room, s = state) {
+  const req = room.req;
+  if (!req) return true;
+  const cards = s.items.map(i => CARD_MAP[i.cardId]).filter(Boolean);
+  switch (req.type) {
+    case 'f1Cards': return new Set(cards.filter(c => c.sport === 'f1').map(c => c.id)).size >= req.value;
+    case 'mgpCards': return new Set(cards.filter(c => c.sport === 'motogp').map(c => c.id)).size >= req.value;
+    case 'relics': return s.relics.length >= req.value;
+    case 'signed': return ownedRelics().filter(e => e.relic.signed).length >= req.value;
+    case 'miniatures': return ownedRelics().filter(e => e.relic.category === 'miniatures').length >= req.value;
+    case 'trophy': return ownedRelics().some(e => ['trophy','medal'].includes(e.relic.model));
+    case 'prestige': return showroomPrestige(s).level >= req.value;
+    case 'fullSize': {
+      const f1 = ALBUMS.some(a => a.sport === 'f1' && albumProgress(a, s).complete);
+      const mgp = ALBUMS.some(a => a.sport === 'motogp' && albumProgress(a, s).complete);
+      return f1 && mgp;
+    }
+    default: return false;
+  }
+}
+export function roomStatus(roomId, s = state) {
+  const room = ROOM_MAP[roomId];
+  if (!room) return null;
+  const unlocked = s.showroom.rooms.includes(roomId);
+  return {
+    room, unlocked,
+    reqMet: requirementMet(room, s),
+    canAfford: s.coins >= room.cost && s.gems >= room.gems,
+  };
+}
+export function unlockRoom(roomId) {
+  const status = roomStatus(roomId);
+  if (!status) throw gameError('NO_ROOM', 'Unknown room');
+  if (status.unlocked) throw gameError('ALREADY_UNLOCKED', 'This room is already open');
+  if (!status.reqMet) throw gameError('REQUIREMENT', 'Complete this room’s collection requirement first');
+  if (!status.canAfford) throw gameError('NOT_ENOUGH_COINS', 'Not enough currency to build this room');
+  spendCurrency('coins', status.room.cost);
+  if (status.room.gems) spendCurrency('gems', status.room.gems);
+  state.showroom.rooms.push(roomId);
+  state.stats.roomsUnlocked = (state.stats.roomsUnlocked || 0) + 1;
+  addXp(80);
+  save(); emit();
+  return status.room;
+}
+export function setShowroomCustom(key, value) {
+  if (!(key in state.showroom.custom)) throw gameError('NO_OPTION', 'Unknown customisation option');
+  if (key === 'decorations') return;
+  state.showroom.custom[key] = value;
+  save(); emit();
+}
+export function unlockDecoration(id) {
+  if (!state.showroom.custom.decorations.includes(id)) {
+    state.showroom.custom.decorations.push(id);
+    save(); emit();
+  }
+}
+export function showroomDisplays(roomId) {
+  return state.showroom.displays.filter(d => d.room === roomId);
+}
+export function showroomContents(roomId) {
+  const displays = showroomDisplays(roomId);
+  return displays.map(display => ({
+    display,
+    items: state.showroom.items.filter(entry => entry.displayUid === display.uid).map(entry => ({
+      ...entry, meta: displayItemMeta(entry),
+    })),
+  }));
+}
+export function displayItemMeta(entry) {
+  if (entry.kind === 'card') {
+    const item = state.items.find(i => i.uid === entry.itemUid);
+    const card = item && CARD_MAP[item.cardId];
+    if (!card) return null;
+    return {name: card.name, rarity: card.rarity, colors: card.colors, serial: item.serial, finish: item.finish, signed: !!card.autograph, edition: card.edition || finishNameSafe(item.finish), sport: card.sport};
+  }
+  const item = state.relics.find(i => i.uid === entry.itemUid);
+  const relic = item && RELIC_MAP[item.relicId];
+  if (!relic) return null;
+  return {name: relic.name, rarity: relic.rarity, colors: relic.colors, serial: item.serial, finish: relic.rarity, signed: !!relic.signed, edition: relic.rarityMeta?.label || '', sport: relic.sport, model: relic.model};
+}
+function finishNameSafe(finish) { return finish ? finish.replace(/^./, c => c.toUpperCase()) : 'Base'; }
+export function placeShowroomItem(itemUid, kind, roomId, displayType) {
+  if (!state.showroom.rooms.includes(roomId)) throw gameError('ROOM_LOCKED', 'Unlock this room first');
+  const display = DISPLAY_MAP[displayType];
+  if (!display) throw gameError('NO_DISPLAY', 'Unknown display fixture');
+  const exists = kind === 'card' ? state.items.some(i => i.uid === itemUid) : state.relics.some(i => i.uid === itemUid);
+  if (!exists) throw gameError('NO_ITEM', 'That collectible is no longer in your vault');
+  if (state.showroom.items.some(d => d.itemUid === itemUid)) throw gameError('ALREADY_PLACED', 'This item is already on display');
+  const meta = displayItemMeta({itemUid, kind});
+  if (display.accepts.types?.length && !display.accepts.types.includes(kind)) {
+    throw gameError('WRONG_DISPLAY', `${display.name} only accepts ${display.accepts.types.join(' or ')} items`);
+  }
+  if (display.accepts.models?.length && (!meta?.model || !display.accepts.models.includes(meta.model))) {
+    throw gameError('WRONG_DISPLAY', `${display.name} is not suitable for this item`);
+  }
+  let fixture = state.showroom.displays.find(d => d.room === roomId && d.type === displayType &&
+    state.showroom.items.filter(e => e.displayUid === d.uid).length < display.capacity);
+  if (!fixture) {
+    const slots = ROOM_MAP[roomId].slots;
+    const usedSlots = new Set(state.showroom.displays.filter(d => d.room === roomId).map(d => d.slot));
+    let slot = -1;
+    for (let i = 0; i < slots; i++) if (!usedSlots.has(i)) { slot = i; break; }
+    if (slot < 0) throw gameError('ROOM_FULL', 'This room has no free display space');
+    fixture = {uid: 'd' + uid(), room: roomId, type: displayType, slot};
+    state.showroom.displays.push(fixture);
+  }
+  const pos = state.showroom.items.filter(e => e.displayUid === fixture.uid).length;
+  state.showroom.items.push({uid: 'p' + uid(), kind, itemUid, room: roomId, displayUid: fixture.uid, pos, visible: true});
+  state.stats.showroomItems = state.showroom.items.length;
+  addXp(6);
+  save(); emit();
+  return {fixture, meta};
+}
+export function removeShowroomItem(placementUid) {
+  const before = state.showroom.items.length;
+  state.showroom.items = state.showroom.items.filter(d => d.uid !== placementUid);
+  if (state.showroom.items.length === before) throw gameError('NO_ITEM', 'Display not found');
+  state.stats.showroomItems = state.showroom.items.length;
+  save(); emit();
+}
+export function toggleShowroomVisible(placementUid) {
+  const entry = state.showroom.items.find(d => d.uid === placementUid);
+  if (!entry) throw gameError('NO_ITEM', 'Display not found');
+  entry.visible = !entry.visible;
+  save(); emit();
+  return entry.visible;
+}
+export function moveShowroomItem(placementUid, roomId) {
+  const entry = state.showroom.items.find(d => d.uid === placementUid);
+  if (!entry) throw gameError('NO_ITEM', 'Display not found');
+  if (!state.showroom.rooms.includes(roomId)) throw gameError('ROOM_LOCKED', 'Unlock this room first');
+  entry.room = roomId;
+  const fixture = state.showroom.displays.find(d => d.room === roomId && d.type === 'pedestal') ||
+    state.showroom.displays.find(d => d.room === roomId);
+  if (fixture) entry.displayUid = fixture.uid;
+  save(); emit();
+}
+
+/* ---------------- simulated global showroom community ---------------- */
+function communitySeed() {
+  const date = (state.showroom.visited.join('|') || '0') + String(state.showroom.liked.length);
+  let h = 2166136261;
+  for (let i = 0; i < date.length; i++) h = Math.imul(h ^ date.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+export function communityShowrooms() {
+  const rnd = rngFrom(communitySeed());
+  return RIVAL_COLLECTORS.map((c, i) => {
+    const score = 180 + Math.floor(rnd() * 1700) + (i === 0 ? 260 : 0);
+    const lvl = PRESTIGE.reduce((best, p) => score >= p.points ? p.level : best, 1);
+    const prestige = PRESTIGE[lvl - 1];
+    return {
+      ...c,
+      score,
+      prestige,
+      likes: 40 + Math.floor(rnd() * 900),
+      rating: (4.1 + rnd() * .9).toFixed(1),
+      rooms: 3 + Math.floor(rnd() * 7),
+      highlight: ['Museum Piece helmet','Signed Leathers Collection','F1 1988 shrine','Ducati garage','Championship trophy wall','Vintage programme archive'][Math.floor(rnd() * 6)],
+      liked: state.showroom.liked.includes(c.alias),
+      visited: state.showroom.visited.includes(c.alias),
+    };
+  }).sort((a, b) => b.score - a.score);
+}
+export function likeShowroom(alias) {
+  const idx = state.showroom.liked.indexOf(alias);
+  if (idx >= 0) state.showroom.liked.splice(idx, 1);
+  else state.showroom.liked.push(alias);
+  save(); emit();
+  return !state.showroom.liked.includes(alias);
+}
+export function visitShowroom(alias) {
+  if (!state.showroom.visited.includes(alias)) state.showroom.visited.push(alias);
+  state.showroom.visits++;
+  save(); emit();
+  return communityShowrooms().find(c => c.alias === alias);
+}
+export function weeklyShowrooms() { return communityShowrooms().slice(0, 5); }
+
+/* ---------------- collector vault ---------------- */
+export function vaultEditions() {
+  return AUTOGRAPH_EDITIONS.map(edition => {
+    const cards = AUTOGRAPH_SPECS
+      .filter(spec => spec.editionId === edition.id)
+      .map(spec => AUTOGRAPH_MAP[spec.id])
+      .filter(Boolean);
+    const supplies = cards.map(card => supplyInfo(card, card.finish));
+    const issued = supplies.reduce((n, info) => n + info.issued, 0);
+    const owned = state.items.filter(item => cards.some(card => card.id === item.cardId)).length;
+    const cap = edition.supply * cards.length;
+    return {
+      ...edition,
+      cards,
+      cardCount: cards.length,
+      cap,
+      issued,
+      owned,
+      remaining: Math.max(0, cap - issued),
+      purchasable: edition.tokens !== null,
+    };
+  });
+}
+export function vaultExclusives() {
+  return EXCLUSIVE_CARDS.map(card => ({card, ...supplyInfo(card, card.finish)}));
+}
+export function redeemVault(editionId) {
+  const edition = AUTOGRAPH_EDITIONS.find(e => e.id === editionId);
+  if (!edition) throw gameError('NO_EDITION', 'Unknown autograph edition');
+  if (edition.tokens === null) throw gameError('NOT_FOR_SALE', 'One-of-One cards are never sold for tokens');
+  if (state.collectorTokens < edition.tokens) throw gameError('NOT_ENOUGH_TOKENS', 'Not enough Collector Tokens');
+  const candidates = AUTOGRAPH_SPECS
+    .filter(spec => spec.editionId === editionId)
+    .map(spec => AUTOGRAPH_MAP[spec.id])
+    .filter(card => card && supplyAvailable(card, card.finish));
+  if (!candidates.length) throw gameError('SOLD_OUT', `${edition.name} is fully issued`);
+  const card = candidates[Math.floor(Math.random() * candidates.length)];
+  const item = addItem(card.id, card.finish, {source:'vault'});
+  state.collectorTokens -= edition.tokens;
+  state.vault.redeemed.unshift({cardId: card.id, editionId, serial: item.serial, at: Date.now()});
+  state.vault.redeemed = state.vault.redeemed.slice(0, 24);
+  state.vault.opened = (state.vault.opened || 0) + 1;
+  state.stats.vaultRedeems = (state.stats.vaultRedeems || 0) + 1;
+  addXp(70);
+  save(); emit();
+  return {card, item, edition, cost: edition.tokens};
 }
 
 /* ---------------- grading ---------------- */
@@ -815,9 +1559,11 @@ export function tradeOffers() {
     const bump = rnd() > .8 ? 1 : 0;
     const targetRank = Math.min(4, wantRank + bump);
     const rarities = ['common','rare','epic','legendary','iconic'];
-    let candidates = CARDS.filter(c => !owned.has(c.id) && !offeredIds.has(c.id) && RANK[c.rarity] === targetRank);
-    if (!candidates.length) candidates = CARDS.filter(c => !owned.has(c.id) && !offeredIds.has(c.id) && Math.abs(RANK[c.rarity] - wantRank) <= 1);
-    if (!candidates.length) candidates = CARDS.filter(c => !owned.has(c.id) && !offeredIds.has(c.id));
+    // Trades only ever offer standard cards — capped collectibles stay in
+    // their own pack/Vault/market channels with correct supply accounting.
+    let candidates = BASE_CARDS.filter(c => !owned.has(c.id) && !offeredIds.has(c.id) && RANK[c.rarity] === targetRank);
+    if (!candidates.length) candidates = BASE_CARDS.filter(c => !owned.has(c.id) && !offeredIds.has(c.id) && Math.abs(RANK[c.rarity] - wantRank) <= 1);
+    if (!candidates.length) candidates = BASE_CARDS.filter(c => !owned.has(c.id) && !offeredIds.has(c.id));
     if (!candidates.length) break;
     const offerCard = candidates[Math.floor(rnd() * candidates.length)];
     offeredIds.add(offerCard.id);
@@ -847,6 +1593,13 @@ export function acceptTrade(offerId) {
   const item = addItem(offer.give.id, 'base', {source:'trade'});
   state.stats.trades++;
   state.daily.trades++;
+  state.tradeHistory.unshift({
+    at: Date.now(), trader: offer.trader.alias,
+    gaveCardId: offer.want.id, gaveFinish: offer.wantFinish, gaveSerial: offer.wantItem.serial,
+    gotCardId: offer.give.id, gotFinish: item.finish, gotSerial: item.serial,
+    value: offer.giveValue,
+  });
+  state.tradeHistory = state.tradeHistory.slice(0, 24);
   addXp(25);
   state.tradeSeed++;
   save(); emit();
@@ -898,4 +1651,9 @@ export function nextMilestone() {
 }
 
 load();
-export { CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, RARITY, PACKS, RANK, FINISH_ORDER };
+export {
+  CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, RARITY, PACKS, RANK, FINISH_ORDER,
+  RELICS, RELIC_MAP, MEMORABILIA, MERCHANDISE, RELIC_RARITY,
+  MEMORABILIA_PACKS, RELIC_ALBUMS, ROOMS, ROOM_MAP, DISPLAYS, DISPLAY_MAP,
+  THEMES, THEME_MAP, PRESTIGE,
+};

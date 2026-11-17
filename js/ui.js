@@ -2,6 +2,7 @@
    APEX RUSH — shared UI: cards, packs, modals, toasts, FX
    ============================================================ */
 import { CARD_MAP, RARITY } from './data/index.js';
+import { exclusiveIdsForPack } from './data/exclusives.js';
 import { FINISHES } from './data/core.js';
 import { formatNumber, packAvailability } from './data/packs.js';
 import { cardArt, flagSVG, rgba } from './art.js';
@@ -19,7 +20,11 @@ export function esc(value) {
 }
 export function finishName(finish) { return FINISHES[finish]?.name || 'Standard'; }
 export function finishShort(finish) { return FINISHES[finish]?.short || 'BASE'; }
-export function serialMax(card) { return card.rarity === 'iconic' ? 25 : card.rarity === 'legendary' ? 50 : 99; }
+export function serialMax(card) {
+  if (card?.supply) return card.supply;
+  if (card?.serialMax) return card.serialMax;
+  return card?.rarity === 'iconic' ? 25 : card?.rarity === 'legendary' ? 50 : 99;
+}
 export function serialText(serial, card) {
   if (serial == null) return '';
   return `#${String(serial).padStart(String(serialMax(card)).length, '0')}/${serialMax(card)}`;
@@ -33,6 +38,7 @@ export function rewardHTML(reward = {}) {
   const bits = [];
   if (reward.coins) bits.push(`<span class="cur-inline coin">◈ ${fmt(reward.coins)}</span>`);
   if (reward.gems) bits.push(`<span class="cur-inline gem">◆ ${fmt(reward.gems)}</span>`);
+  if (reward.tokens) bits.push(`<span class="cur-inline token">✦ ${fmt(reward.tokens)} Tokens</span>`);
   if (reward.pack) bits.push(`<span class="cur-inline pack">▣ ${packName(reward.pack)}</span>`);
   return bits.join('');
 }
@@ -150,9 +156,11 @@ export function cardHTML(card, opts = {}) {
   const longName = card.name.length > 15 ? ' long' : '';
   const numberText = card.number != null && card.number !== '' ? `#${card.number}` : card.type === 'moment' ? String(card.year || '') : card.team || '';
   const kicker2 = card.type === 'moment' ? 'ICONIC MOMENT' : card.era;
-  const signature = finish === 'signature' && card.signature ? `<div class="card-signature">${esc(card.signature)}</div>` : '';
-  const serialHTML = finish === 'numbered' && serial != null ? `<div class="card-serial">${esc(serialText(serial, card))}</div>` : '';
-  const championship = finish === 'championship' ? `<div class="champ-ribbon">CHAMPION</div>` : '';
+  const signedFinish = card.autograph || ['signature','signedpack','vault','goldsig','platinum','champsig','dual','oneofone'].includes(finish);
+  const signature = signedFinish && card.signature ? `<div class="card-signature${card.autograph ? ' autograph' : ''}">${esc(card.signature)}</div>` : '';
+  const serialHTML = serial != null ? `<div class="card-serial${card.supply ? ' capped' : ''}">${esc(serialText(serial, card))}</div>` : '';
+  const championship = finish === 'championship' || finish === 'champ' ? `<div class="champ-ribbon">CHAMPION</div>` : '';
+  const editionRibbon = card.edition ? `<div class="edition-ribbon">${esc(card.edition)}</div>` : '';
   const countBadge = opts.count > 1 ? `<div class="count-badge">×${opts.count}</div>` : '';
   const newBadge = opts.isNew ? `<div class="new-badge">NEW</div>` : '';
   const locked = opts.locked ? ' unknown' : '';
@@ -166,7 +174,7 @@ export function cardHTML(card, opts = {}) {
       <div class="card-foil"></div>
       <div class="card-shine"></div>
       <div class="card-frame"></div>
-      ${gradeHTML}${serialHTML}${championship}${signature}
+      ${gradeHTML}${editionRibbon}${serialHTML}${championship}${signature}
       <div class="card-top">
         <div class="ovr"><b>${card.overall}</b><i>OVR</i></div>
         <div class="card-tags">
@@ -258,6 +266,9 @@ export function guaranteeList(pack) {
   for (const [rar, n] of Object.entries(pack.guarantees || {})) bits.push(`${n}× ${RARITY[rar]?.label || rar} or better`);
   if (pack.guaranteedFinish) bits.push(`1 ${FINISHES[pack.guaranteedFinish]?.name || pack.guaranteedFinish} guaranteed`);
   if (pack.choice) bits.push(`Choose ${pack.choice.picks || 1} of ${pack.choice.count || 3} ${RARITY[pack.choice.rarity]?.label || 'premium'} cards`);
+  if (exclusiveIdsForPack(pack.id).length && pack.exclusiveChance) bits.push(`${Math.round(pack.exclusiveChance * 100)}% chance of a capped exclusive`);
+  if (pack.autographs?.guaranteed) bits.push('1 authenticated autograph guaranteed');
+  else if (pack.autographs?.chance) bits.push(`${(pack.autographs.chance * 100).toFixed(1)}% authenticated autograph chance`);
   if (pack.finishBoost) bits.push('Boosted premium finish odds');
   if (pack.oncePerDay) bits.push('Once per day');
   if (!bits.length) bits.push('At least one new card');
@@ -299,6 +310,19 @@ export function openPackDetails(pack, opts = {}) {
     : `Unlocks in ${countdownText(avail.startsAt)}`;
   const flavour = pack.deal ? `<span class="chip red">FLASH · −${pack.discount}%</span>` : '';
   const choice = pack.choice ? `<div class="pd-choice"><b>Choice pack</b><span>${pack.cards} opening cards plus ${pack.choice.count} ${RARITY[pack.choice.rarity]?.label || 'premium'} options. You keep ${pack.choice.picks || 1}.</span></div>` : '';
+  const exclusiveCards = exclusiveIdsForPack(pack.id).map(id => CARD_MAP[id]).filter(Boolean);
+  const exclusiveHTML = exclusiveCards.length ? `<div class="pd-section"><h4>Exclusive editions in this pack <span>fixed supply</span></h4>
+    <div class="pd-exclusives">${exclusiveCards.slice(0, 12).map(card => `<div class="pd-exclusive" style="--ex:${card.editionMeta?.color || card.colors?.[0] || '#ff66d8'}">
+      <span class="pdex-edition">${esc(card.edition || 'Exclusive')}</span>
+      <b>${esc(card.name)}</b>
+      <span class="pdex-supply">${card.supply} copies worldwide · ${esc(card.finish || 'limited')}</span>
+    </div>`).join('')}</div>
+    ${exclusiveCards.length > 12 ? `<p class="pack-note">+ ${exclusiveCards.length - 12} more exclusive editions available.</p>` : ''}
+  </div>` : '';
+  const autographHTML = pack.autographs ? `<div class="pd-section pd-autograph-note">
+    <h4>Authenticated autograph chance <span>specialist packs only</span></h4>
+    <p>One of six illustrated autograph editions can be pulled. Each card carries a unique serial and digital certificate display. These are fictional digital collectibles — signatures are artwork, not real autographs or official authentication.</p>
+  </div>` : '';
   openModal(`<div class="pack-detail">
     <div class="pd-art">
       ${packHTML(pack)}
@@ -307,7 +331,7 @@ export function openPackDetails(pack, opts = {}) {
     </div>
     <div class="pd-info">
       <div class="di-kicker">
-        <span class="chip">${esc(pack.category === 'event' ? 'Event drop' : pack.category === 'special' ? 'Special edition' : pack.category === 'f1' ? 'Formula 1' : pack.category === 'motogp' ? 'MotoGP' : 'Featured')}</span>
+        <span class="chip">${esc(pack.category === 'event' ? 'Event drop' : pack.category === 'exclusive' ? 'Exclusive edition' : pack.category === 'vault' ? 'Collector Vault' : pack.category === 'special' ? 'Special edition' : pack.category === 'f1' ? 'Formula 1' : pack.category === 'motogp' ? 'MotoGP' : pack.category === 'core' ? 'Core tier' : 'Featured')}</span>
         ${flavour}
         <span class="chip gold">${pack.cards} CARDS</span>
       </div>
@@ -322,6 +346,8 @@ export function openPackDetails(pack, opts = {}) {
         <div class="pd-guarantees">${guarantees.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>
         ${choice}
       </div>
+      ${exclusiveHTML}
+      ${autographHTML}
       <div class="pd-section"><h4>Rarity odds <span>per card</span></h4>
         <div class="pd-odds">${odds}</div>
         <p class="pack-note">Odds are rolled per card. Guarantees are applied afterwards, so a pack can outperform the listed rates.</p>

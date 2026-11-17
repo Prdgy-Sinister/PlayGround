@@ -7,11 +7,16 @@ import {
   claimAllAvailable, buyListing, refreshMarket, acceptTrade, refreshTrades,
   dailyStatus, dailyChallenges, achievements, xpProgress, uniqueCount,
   exportSave, importSave, resetSave, toggleMuted, collectionValue,
-  gradeItem,
+  gradeItem, redeemVault,
+  openRelicPack, relicSupplyInfo, relicPackOdds, buyRelic, sellRelicItem,
+  claimRelicAlbum, buyRelicListing, refreshRelicMarket, placeAuctionBid,
+  refreshAuctions, unlockRoom, setShowroomCustom, placeShowroomItem,
+  removeShowroomItem, toggleShowroomVisible, likeShowroom, visitShowroom,
+  RELIC_MAP, RELIC_RARITY, DISPLAYS, ROOM_MAP, MEMORABILIA_PACKS,
 } from './store.js';
 import {
   homeScreen, packsScreen, collectionScreen, albumsScreen, albumDetailScreen,
-  dailyScreen, challengesScreen, marketScreen, tradeScreen, view,
+  dailyScreen, challengesScreen, marketScreen, tradeScreen, vaultScreen, view,
   clearCollectionFilters, openRewardModal, openLevelUpModal,
   openSettingsModal, openDuplicatesModal,
 } from './screens.js';
@@ -19,10 +24,16 @@ import { CARD_COUNT, CARD_MAP } from './data/index.js';
 import { PACK_MAP, getPackOfTheDay, getLiveOffers } from './data/packs.js';
 import { sfx, setMuted } from './audio.js';
 import {
-  fmt, esc, toast, openCardDetail, closeModal, confirmAction, initFx, openPackDetails,
+  fmt, esc, toast, openCardDetail, closeModal, confirmAction, initFx, openPackDetails, openModal,
   refreshLivePrices,
 } from './ui.js';
 import { showOpening, isOpening } from './opening.js';
+import {
+  memorabiliaScreen, merchandiseScreen, showroomScreen, relicAlbumScreen,
+  expansionView, relicMarketPanel, auctionPanel,
+} from './screens-expansion.js';
+import { openRelicDetail, openRelicReveal, openRelicPackDetails } from './relic-ui.js';
+import { initShowroom } from './showroom.js';
 import { GRADING_SERVICES } from './pricing.js';
 import { localDateKey, msUntilMidnight } from './data/progress.js';
 
@@ -30,6 +41,7 @@ const $ = id => document.getElementById(id);
 const main = $('main');
 let lastDay = localDateKey(new Date());
 let lastLevelUps = [];
+let showroomController = null;
 
 /* ------------------------------------------------------------
    ROUTING
@@ -37,18 +49,36 @@ let lastLevelUps = [];
 const PAGES = {
   home: homeScreen, packs: packsScreen, collection: collectionScreen,
   albums: albumsScreen, daily: dailyScreen, challenges: challengesScreen,
-  market: marketScreen, trade: tradeScreen,
+  market: marketScreen, trade: tradeScreen, vault: vaultScreen,
+  memorabilia: memorabiliaScreen, merchandise: merchandiseScreen,
+  showroom: showroomScreen, 'relic-album': relicAlbumScreen,
 };
 const TITLES = {
-  home: 'Garage', packs: 'Pack Garage', collection: 'Collection',
+  home: 'Garage', packs: 'Pack Garage', collection: 'Cards',
   albums: 'Albums', daily: 'Daily Hub', challenges: 'Challenges',
-  market: 'Marketplace', trade: 'Trade Floor',
+  market: 'Marketplace', trade: 'Trade Floor', vault: 'Collector Vault',
+  memorabilia: 'Memorabilia', merchandise: 'Merchandise', showroom: 'My Showroom',
+  'relic-album': 'Collection Album',
 };
+
+function inspectShowroomItem(entry) {
+  if (!entry) return;
+  sfx.tab();
+  if (entry.kind === 'card') {
+    const item = getState().items.find(i => i.uid === entry.itemUid);
+    if (item) openCard(item.cardId, item.uid);
+    return;
+  }
+  const item = getState().relics.find(i => i.uid === entry.itemUid);
+  const relic = item && RELIC_MAP[item.relicId];
+  if (relic) openRelicInstance(relic, item);
+}
 
 function parseRoute() {
   const raw = (location.hash || '').replace(/^#\/?/, '').trim();
   const [page, param] = raw.split('/');
   if (page === 'album' && param) return { page: 'album', param };
+  if (page === 'relic-album' && param) return { page: 'relic-album', param };
   return { page: PAGES[page] ? page : 'home', param: '' };
 }
 
@@ -58,13 +88,22 @@ function render(opts = {}) {
   let html = '';
   try {
     if (route.page === 'album') html = albumDetailScreen(route.param);
+    else if (route.page === 'relic-album') html = relicAlbumScreen(route.param);
     else html = PAGES[route.page]();
   } catch (err) {
     console.error(err);
     html = `<div class="screen"><div class="empty-state"><div class="big">⚠</div><h4>That screen hit the gravel</h4><p>${esc(err.message)}</p><button class="btn btn-primary" data-nav="home">Back to garage</button></div></div>`;
   }
   main.innerHTML = html;
-  const active = route.page === 'album' ? 'albums' : route.page;
+  if (showroomController) { showroomController.destroy(); showroomController = null; }
+  if (route.page === 'showroom') {
+    const canvas = $('showroom-canvas');
+    showroomController = initShowroom(canvas, {
+      roomId: expansionView.showroom.room,
+      onInspect: inspectShowroomItem,
+    });
+  }
+  const active = route.page === 'album' ? 'albums' : route.page === 'relic-album' ? 'memorabilia' : route.page;
   document.querySelectorAll('#nav-main [data-nav], #mobile-nav [data-nav]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.nav === active);
   });
@@ -90,9 +129,10 @@ function navigate(path) {
    HEADER / BADGES / CLOCK
    ------------------------------------------------------------ */
 function updateChrome(s = getState()) {
-  const coins = $('coin-val'), gems = $('gem-val'), lv = $('level-val'), xp = $('xp-fill');
+  const coins = $('coin-val'), gems = $('gem-val'), tokens = $('token-val'), lv = $('level-val'), xp = $('xp-fill');
   if (coins) coins.textContent = fmt(s.coins);
   if (gems) gems.textContent = fmt(s.gems);
+  if (tokens) tokens.textContent = fmt(s.collectorTokens || 0);
   if (lv) lv.textContent = s.level;
   const p = xpProgress(s);
   if (xp) xp.style.width = p.pct + '%';
@@ -261,7 +301,7 @@ function claimAll() {
       kicker: 'ALL REWARDS COLLECTED',
       title: `${res.count} reward${res.count === 1 ? '' : 's'} claimed`,
       subtitle: 'Every completed daily objective and career achievement has been banked.',
-      rewards: { coins: res.coins, gems: res.gems, pack: res.packs ? 'gold' : null },
+      rewards: { coins: res.coins, gems: res.gems, tokens: res.tokens, pack: res.packs ? 'gold' : null },
       onClose: () => queueLevels(res.levelUps),
     });
     render({ scroll: false });
@@ -290,6 +330,78 @@ function claimAlbumReward(id) {
 }
 
 /* ------------------------------------------------------------
+   MEMORABILIA / MERCHANDISE / SHOWROOM HELPERS
+   ------------------------------------------------------------ */
+function openRelicInstance(relic, item = null) {
+  const owned = item || getState().relics.find(r => r.relicId === relic.id);
+  openRelicDetail({
+    relic,
+    item: owned,
+    supply: relicSupplyInfo(relic),
+    owned: getState().relics.filter(r => r.relicId === relic.id).length,
+    showBuy: relic.kind === 'merchandise',
+    showSell: !!owned,
+    showDisplay: !!owned,
+  });
+}
+function openRelicPackFlow(packId) {
+  try {
+    const res = openRelicPack(packId);
+    sfx.buy();
+    openRelicReveal(res, { onClose: () => render({ scroll:false }) });
+  } catch (err) {
+    sfx.error();
+    toast('red', 'Pack could not open', err.code === 'NOT_ENOUGH_COINS' ? 'Not enough coins.' : err.code === 'NOT_ENOUGH_GEMS' ? 'Not enough gems.' : err.message, '!');
+  }
+}
+function openDisplayModal(itemUid, kind) {
+  const s = getState();
+  const rooms = s.showroom.rooms.map(id => ROOM_MAP[id]).filter(Boolean);
+  const item = kind === 'card' ? s.items.find(i => i.uid === itemUid) : s.relics.find(i => i.uid === itemUid);
+  const relic = item && kind === 'relic' ? RELIC_MAP[item.relicId] : null;
+  const model = relic?.model || null;
+  // Only offer fixtures that can actually hold this collectible, plus the
+  // universal pedestal. This avoids a dead "Place" button on incompatible gear.
+  const suitable = DISPLAYS.filter(d => {
+    if (d.accepts.types?.length) return d.accepts.types.includes(kind);
+    if (d.accepts.models?.length) return !!model && d.accepts.models.includes(model);
+    return true;
+  });
+  const defaultType = suitable.find(d => d.id !== 'pedestal')?.id || suitable[0]?.id || 'pedestal';
+  const defaultRoom = s.showroom.rooms.includes(expansionView.showroom.room)
+    ? expansionView.showroom.room : (rooms[0]?.id || 'main');
+  const options = suitable.map(d => `<option value="${esc(d.id)}" ${d.id === defaultType ? 'selected' : ''}>${esc(d.name)} · ${d.capacity} slot${d.capacity === 1 ? '' : 's'}</option>`).join('');
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-backdrop';
+  wrap.innerHTML = `<div class="modal small"><button class="modal-close" data-close-modal aria-label="Close">✕</button>
+    <div class="display-modal">
+      <div class="eyebrow">Showroom placement</div><h3>Choose a display</h3>
+      <p>Place this collectible in an unlocked room. Hidden items remain in your collection but are invisible to visitors.</p>
+      <label class="custom-field"><span>Room</span><select id="display-room">${rooms.map(r => `<option value="${esc(r.id)}" ${r.id === defaultRoom ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>
+      <label class="custom-field"><span>Display fixture</span><select id="display-type">${options}</select></label>
+      <button class="btn btn-primary btn-block" data-display-place="${esc(itemUid)}" data-display-kind="${esc(kind)}">Place on display</button>
+    </div></div>`;
+  document.getElementById('modal-root')?.appendChild(wrap);
+  wrap.addEventListener('click', ev => { if (ev.target === wrap || ev.target.closest('[data-close-modal]')) wrap.remove(); });
+}
+function claimRelicReward(id) {
+  try {
+    const res = claimRelicAlbum(id);
+    sfx.fanfare();
+    openRewardModal({
+      kicker:'COLLECTION COMPLETE', title: res.album.name,
+      subtitle:'Every replica in this collection has been archived.',
+      rewards: res.reward,
+      onClose: () => queueLevels(res.levelUps),
+    });
+    render({ scroll:false });
+  } catch (err) {
+    sfx.error();
+    toast('red','Reward unavailable',err.message,'!');
+  }
+}
+
+/* ------------------------------------------------------------
    CLICK DELEGATION
    ------------------------------------------------------------ */
 document.addEventListener('click', ev => {
@@ -311,6 +423,201 @@ document.addEventListener('click', ev => {
     const id = packDetails.dataset.packDetails;
     const pack = id === 'potd' ? getPackOfTheDay(new Date()) : PACK_MAP[id];
     if (pack) { sfx.tab(); openPackDetails(pack); }
+    return;
+  }
+
+  /* ---- memorabilia, merchandise, market & showroom ---- */
+  const relicPackOpen = el('[data-open-relic-pack]');
+  if (relicPackOpen) { ev.preventDefault(); closeModal(); openRelicPackFlow(relicPackOpen.dataset.openRelicPack); return; }
+
+  const relicPackInfo = el('[data-relic-pack-details]');
+  if (relicPackInfo) {
+    ev.preventDefault();
+    const pack = MEMORABILIA_PACKS.find(p => p.id === relicPackInfo.dataset.relicPackDetails);
+    if (pack) { sfx.tab(); openRelicPackDetails(pack, relicPackOdds(pack)); }
+    return;
+  }
+
+  const relicAlbum = el('[data-relic-album]');
+  if (relicAlbum) { sfx.tab(); location.hash = '#/relic-album/' + relicAlbum.dataset.relicAlbum; return; }
+
+  const claimRelic = el('[data-claim-relic-album]');
+  if (claimRelic) { claimRelicReward(claimRelic.dataset.claimRelicAlbum); return; }
+
+  const relicOpen = el('[data-open-relic]');
+  if (relicOpen) {
+    sfx.tab();
+    const relic = RELIC_MAP[relicOpen.dataset.openRelic];
+    if (relic) openRelicInstance(relic);
+    return;
+  }
+  const relicInstance = el('[data-open-relic-instance]');
+  if (relicInstance) {
+    sfx.tab();
+    const item = getState().relics.find(r => r.uid === relicInstance.dataset.openRelicInstance);
+    const relic = item && RELIC_MAP[item.relicId];
+    if (relic) openRelicInstance(relic, item);
+    return;
+  }
+
+  const buyRelicBtn = el('[data-buy-relic]');
+  if (buyRelicBtn) {
+    try {
+      const res = buyRelic(buyRelicBtn.dataset.buyRelic);
+      sfx.buy(); closeModal();
+      toast('gold','Purchased',`${res.relic.name} added to your collection.`,'◇');
+      render({ scroll:false });
+      setTimeout(() => openRelicInstance(res.relic, res.item), 40);
+    } catch (err) { sfx.error(); toast('red','Purchase failed',err.message,'!'); }
+    return;
+  }
+
+  const sellRelicBtn = el('[data-sell-relic]');
+  if (sellRelicBtn) {
+    confirmAction({
+      title:'Sell this replica?',
+      body:'The sale is final. Numbered editions keep their issued serial in the supply ledger even after sale.',
+      confirmText:'Sell collectible',
+      onConfirm: () => {
+        try {
+          const res = sellRelicItem(sellRelicBtn.dataset.sellRelic);
+          closeModal(); sfx.sell();
+          toast('gold','Sold',`${res.relic.name} · ◈ ${fmt(res.value)} returned.`,'◈');
+          render({ scroll:false });
+        } catch (err) { sfx.error(); toast('red','Sale failed',err.message,'!'); }
+      },
+    });
+    return;
+  }
+
+  const displayRelicBtn = el('[data-display-relic]');
+  if (displayRelicBtn) { closeModal(); openDisplayModal(displayRelicBtn.dataset.displayRelic, 'relic'); return; }
+
+  const placeItemBtn = el('[data-display-item]');
+  if (placeItemBtn) { openDisplayModal(placeItemBtn.dataset.displayItem, placeItemBtn.dataset.displayKind); return; }
+
+  const placeConfirm = el('[data-display-place]');
+  if (placeConfirm) {
+    try {
+      const room = $('display-room')?.value;
+      const type = $('display-type')?.value;
+      placeShowroomItem(placeConfirm.dataset.displayPlace, placeConfirm.dataset.displayKind, room, type);
+      document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
+      sfx.claim();
+      toast('green','On display','Your collectible is now in the showroom.','▣');
+      render({ scroll:false });
+    } catch (err) { sfx.error(); toast('red','Could not place item',err.message,'!'); }
+    return;
+  }
+
+  const removeDisplay = el('[data-remove-display]');
+  if (removeDisplay) {
+    try { removeShowroomItem(removeDisplay.dataset.removeDisplay); sfx.tab(); render({ scroll:false }); }
+    catch (err) { toast('red','Could not remove',err.message,'!'); }
+    return;
+  }
+  const toggleVisible = el('[data-toggle-visible]');
+  if (toggleVisible) {
+    try {
+      const shown = toggleShowroomVisible(toggleVisible.dataset.toggleVisible);
+      sfx.click(); toast('cyan', shown ? 'Visible to visitors' : 'Hidden from visitors', 'Your showroom privacy setting was updated.', '◉');
+      render({ scroll:false });
+    } catch (err) { toast('red','Could not update',err.message,'!'); }
+    return;
+  }
+
+  if (el('[data-relic-clear]')) {
+    Object.assign(expansionView.relics, { dept:'all', sport:'all', category:'all', rarity:'all', q:'', sort:'name', team:'all' });
+    sfx.tab(); render({ scroll:false }); return;
+  }
+
+  const roomBtn = el('[data-room]');
+  if (roomBtn) {
+    expansionView.showroom.room = roomBtn.dataset.room;
+    sfx.tab(); render({ scroll:false }); return;
+  }
+  const unlockBtn = el('[data-unlock-room]');
+  if (unlockBtn) {
+    try {
+      const room = unlockRoom(unlockBtn.dataset.unlockRoom);
+      sfx.fanfare(); toast('green','Room unlocked',`${room.name} is now part of your museum.`,'▣');
+      expansionView.showroom.room = room.id;
+      render({ scroll:false });
+    } catch (err) { sfx.error(); toast('red','Cannot build room',err.message,'!'); }
+    return;
+  }
+  if (el('[data-showroom-reset]')) { showroomController?.resetCamera(); sfx.click(); return; }
+
+  const likeBtn = el('[data-like-showroom]');
+  if (likeBtn) {
+    const liked = likeShowroom(likeBtn.dataset.likeShowroom);
+    sfx.click(); toast('cyan', liked ? 'Showroom liked' : 'Like removed', 'Community ratings are simulated locally.', '♥');
+    render({ scroll:false }); return;
+  }
+  const visitBtn = el('[data-visit-showroom]');
+  if (visitBtn) {
+    const visit = visitShowroom(visitBtn.dataset.visitShowroom);
+    sfx.tab();
+    if (visit) openModal(`<div class="visit-modal"><button class="modal-x" data-close-modal>×</button>
+      <div class="eyebrow">Public showroom visit</div><h2>${esc(visit.alias)}</h2>
+      <p>${esc(visit.tag)} · ${esc(visit.prestige.name)} · ${visit.rooms} rooms</p>
+      <div class="visit-highlight"><span>Rarest on display</span><b>${esc(visit.highlight)}</b></div>
+      <div class="visit-stats"><span>★ ${visit.rating} collector rating</span><span>♥ ${fmt(visit.likes)} likes</span></div>
+      <p class="tiny muted">This collector and showroom are generated locally for the simulated community.</p>
+    </div>`, {small:true});
+    render({ scroll:false }); return;
+  }
+
+  const marketTab = el('[data-market-tab]');
+  if (marketTab) { expansionView.market.tab = marketTab.dataset.marketTab; sfx.tab(); render({ scroll:false }); return; }
+
+  const buyRelicListingBtn = el('[data-buy-relic-listing]');
+  if (buyRelicListingBtn) {
+    try {
+      const res = buyRelicListing(buyRelicListingBtn.dataset.buyRelicListing);
+      sfx.buy(); toast('gold','Lot purchased',`${res.relic.name} · ◈ ${fmt(res.listing.price)}.`,'◫');
+      render({ scroll:false });
+      setTimeout(() => openRelicInstance(res.relic, res.item), 40);
+    } catch (err) { sfx.error(); toast('red','Purchase failed',err.message,'!'); }
+    return;
+  }
+  if (el('[data-refresh-relic-market]')) {
+    try { refreshRelicMarket(); sfx.coin(); toast('cyan','New lots','The collectible market has refreshed.','◫'); render({ scroll:false }); }
+    catch (err) { sfx.error(); toast('red','Cannot refresh',err.message,'!'); }
+    return;
+  }
+  const auctionBid = el('[data-auction-bid]');
+  if (auctionBid) {
+    try {
+      const res = placeAuctionBid(auctionBid.dataset.auctionBid, Number(auctionBid.dataset.amount));
+      if (res.won) {
+        sfx.fanfare(); toast('gold','Auction won',`${res.relic.name} secured for ◈ ${fmt(res.amount)}.`,'★');
+        render({ scroll:false });
+        setTimeout(() => openRelicInstance(res.relic, res.item), 40);
+      } else {
+        sfx.coin(); toast('red','Outbid',`${res.bidder} countered at ◈ ${fmt(res.counter)}. Bid again to stay in.`,'⚖');
+        render({ scroll:false });
+      }
+    } catch (err) { sfx.error(); toast('red','Bid failed',err.message,'!'); }
+    return;
+  }
+  if (el('[data-refresh-auctions]')) {
+    refreshAuctions(); sfx.tab(); toast('cyan','Fresh lots','A new auction board is live.','⚖'); render({ scroll:false }); return;
+  }
+
+  const redeemVaultBtn = el('[data-redeem-vault]');
+  if (redeemVaultBtn) {
+    ev.preventDefault();
+    try {
+      const res = redeemVault(redeemVaultBtn.dataset.redeemVault);
+      sfx.fanfare();
+      render({ scroll: false });
+      openCardDetail(res.card, itemsOfCard(res.card.id), { itemUid: res.item.uid, favorite: getState().favorite === res.card.id });
+      toast('gold', 'Autograph redeemed', `${res.card.name} · serial ${res.item.serial} · ${res.cost} tokens spent`, '✒');
+    } catch (err) {
+      sfx.error();
+      toast('red', 'Redemption failed', err.message, '!');
+    }
     return;
   }
 
@@ -547,6 +854,16 @@ document.addEventListener('click', ev => {
 /* search + selects */
 let searchTimer = 0;
 document.addEventListener('input', ev => {
+  if (ev.target.id === 'relic-search') {
+    expansionView.relics.q = ev.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      render({ scroll:false });
+      const input = $('relic-search');
+      if (input) { input.focus({ preventScroll:true }); input.setSelectionRange(input.value.length, input.value.length); }
+    }, 120);
+    return;
+  }
   if (ev.target.id !== 'coll-search') return;
   view.collection.q = ev.target.value;
   clearTimeout(searchTimer);
@@ -561,6 +878,17 @@ document.addEventListener('input', ev => {
   }, 110);
 });
 document.addEventListener('change', ev => {
+  const relicField = ev.target.closest?.('[data-relic-filter]');
+  if (relicField) {
+    expansionView.relics[relicField.dataset.relicFilter] = relicField.value;
+    sfx.tab(); render({ scroll:false }); return;
+  }
+  const customField = ev.target.closest?.('[data-custom]');
+  if (customField) {
+    try { setShowroomCustom(customField.dataset.custom, customField.value); sfx.click(); render({ scroll:false }); }
+    catch (err) { toast('red','Customisation failed',err.message,'!'); }
+    return;
+  }
   const field = ev.target.closest?.('[data-filter]');
   if (!field || field.dataset.filter === 'search') return;
   view.collection[field.dataset.filter] = field.value;

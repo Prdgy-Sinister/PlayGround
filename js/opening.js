@@ -81,9 +81,10 @@ function reveal() {
   if (op.idx >= results.length) return finishReveal();
   const r = results[op.idx];
   const rank = RARITY[r.card.rarity].rank;
-  const wantsWalkout = (rank >= 3 && !op.walked.has('legendary')) || rank >= 4;
+  const isGrail = r.card.autograph || r.card.exclusive || !!r.card.supply;
+  const wantsWalkout = isGrail || (rank >= 3 && !op.walked.has('legendary')) || rank >= 4;
   if (wantsWalkout) {
-    op.walked.add(rank >= 4 ? 'iconic' : 'legendary');
+    op.walked.add(isGrail ? 'grail' : rank >= 4 ? 'iconic' : 'legendary');
     walkout(r, () => drawReveal(r));
   } else {
     drawReveal(r);
@@ -92,20 +93,24 @@ function reveal() {
 
 function walkout(r, done) {
   const iconic = r.card.rarity === 'iconic';
+  const grail = r.card.autograph || r.card.exclusive || !!r.card.supply;
   const stage = op.el.querySelector('[data-op-stage]');
   op.phase = 'walkout';
-  stage.innerHTML = `<div class="walkout ${iconic ? 'iconic' : ''}">
+  const kicker = grail ? (r.card.autograph ? 'AUTHENTICATED AUTOGRAPH' : 'SUPPLY-CAPPED EXCLUSIVE') : iconic ? 'ICONIC CARD INCOMING' : 'LEGENDARY CARD INCOMING';
+  const big = grail ? (r.card.autograph ? 'AUTOGRAPH' : 'GRAIL') : iconic ? 'ICONIC' : 'LEGEND';
+  stage.innerHTML = `<div class="walkout ${grail ? 'grail' : ''} ${iconic ? 'iconic' : ''}" style="--grail:${r.card.editionMeta?.glow || 'rgba(255,110,220,.55)'}">
     <div class="wo-flash"></div><div class="wo-lines"></div><div class="wo-shake"></div>
     <div class="wo-speedlines"></div>
     <div class="wo-center">
-      <div class="wo-kicker">${iconic ? 'ICONIC CARD INCOMING' : 'LEGENDARY CARD INCOMING'}</div>
-      <div class="wo-big">${iconic ? 'ICONIC' : 'LEGEND'}</div>
-      <div class="wo-sub">${esc(r.card.name)} · ${esc(finishName(r.finish))}</div>
+      <div class="wo-kicker">${kicker}</div>
+      <div class="wo-big">${big}</div>
+      <div class="wo-sub">${esc(r.card.name)} · ${esc(r.card.edition || finishName(r.finish))}</div>
+      ${grail ? `<div class="wo-cert">${esc(r.card.edition || 'Limited Edition')} · ${r.card.supply} copies worldwide · illustrated digital collectible</div>` : ''}
     </div>
-    <div class="wo-silhouette" aria-hidden="true">${iconic ? '◆' : '★'}</div>
+    <div class="wo-silhouette" aria-hidden="true">${grail ? '✒' : iconic ? '◆' : '★'}</div>
   </div>`;
   sfx.walkout(r.card.rarity);
-  if (iconic) rareBurst('iconic');
+  if (grail || iconic) rareBurst('iconic');
   else rareBurst('legendary');
   const cont = () => {
     if (!op || op.phase !== 'walkout') return;
@@ -113,7 +118,7 @@ function walkout(r, done) {
     done();
   };
   stage.querySelector('.walkout').addEventListener('click', cont);
-  later(cont, iconic ? 2500 : 2100);
+  later(cont, grail ? 3000 : iconic ? 2500 : 2100);
 }
 
 function drawReveal(r) {
@@ -130,7 +135,8 @@ function drawReveal(r) {
     <div class="reveal-card-holder">${cardHTML(r.card, { finish: r.finish, serial: r.serial, isNew: r.isNew, cardIdAttr: false })}</div>
     <div class="reveal-meta">
       <b>${esc(r.card.name)}</b>
-      <span>${esc(r.card.sport === 'motogp' ? 'MotoGP' : r.card.sport === 'crossover' ? 'Crossover' : 'Formula 1')} · ${esc(r.card.typeLabel)} · ${esc(finishName(r.finish))}${r.finish === 'numbered' && r.serial != null ? ' · ' + esc(serialText(r.serial, r.card)) : ''}</span>
+      <span>${esc(r.card.sport === 'motogp' ? 'MotoGP' : r.card.sport === 'crossover' ? 'Crossover' : 'Formula 1')} · ${esc(r.card.typeLabel)} · ${esc(r.card.edition || finishName(r.finish))}${r.serial != null ? ' · ' + esc(serialText(r.serial, r.card)) : ''}</span>
+      ${r.card.autograph ? `<span class="reveal-cert"> DIGITAL CERTIFICATE · fictional autograph artwork, not an officially signed item</span>` : r.card.exclusive ? `<span class="reveal-cert"> SUPPLY ${r.card.supply} · permanently capped run</span>` : ''}
       ${r.isNew ? `<span class="new-pill">NEW TO VAULT</span>` : `<span class="dupe-pill">DUPLICATE · ◈ ${fmt(r.value ?? marketValue(r.card, r.finish))}</span>`}
     </div>
     <div class="reveal-actions">
