@@ -1,125 +1,371 @@
 /* ============================================================
    PACKS + ODDS + ECONOMY
+   Every pack has its own pool, guarantees, presentation and
+   economy. Categories: featured / f1 / motogp / event / special.
    ============================================================ */
-import { CARD_MAP } from './index.js';
 
 const P = (cfg) => ({
   cards: 5,
   category: 'featured',
   currency: 'coins',
+  theme: 'grid',
+  guaranteeNew: 0,
   ...cfg,
   odds: {common:0, rare:0, epic:0, legendary:0, iconic:0, ...cfg.odds},
 });
 
+/* Availability windows are deterministic so events rotate forever without
+   a backend. `cycle` days, available while (dayIndex % cycle) is in [from,to). */
+const window = (from, to, cycle = 10) => ({cycle, from, to});
+
+export const PACK_CATEGORIES = [
+  {id:'all', label:'All packs'},
+  {id:'featured', label:'Featured'},
+  {id:'f1', label:'Formula 1'},
+  {id:'motogp', label:'MotoGP'},
+  {id:'event', label:'Event drops'},
+  {id:'special', label:'Special editions'},
+];
+
 export const PACKS = [
+  /* ---------------------------------------------------------- FEATURED */
+  P({
+    id:'rookie', name:'Rookie Rush', short:'ROOK', tagline:'Your first laps in the collector’s paddock.',
+    desc:'4 cards with a friendly price. A cheap way to grow a brand-new vault.',
+    cost:420, cards:4, scope:'all', category:'featured', guaranteeNew:1, theme:'rookie',
+    odds:{common:70, rare:23, epic:5.4, legendary:1.4, iconic:.2},
+    bullets:['4 cards · 1 new guaranteed','Best value per card','High chance of Rare+'],
+    art:{p1:'#3f6dff',p2:'#0b1230',p3:'rgba(120,170,255,.8)',kicker:'ROOKIE SERIES',title:'ROOKIE',title2:'RUSH',emblem:'04×',meta:'4 CARDS',meta2:'1 NEW GUARANTEED',cls:'pack-f1'},
+  }),
   P({
     id:'standard', name:'Grid Pack', short:'GRID', tagline:'The perfect place to start your vault.',
     desc:'5 cards from Formula 1 and MotoGP. One new card guaranteed.',
-    cost:650, cards:5, scope:'all', category:'featured', guaranteeNew:1,
+    cost:650, cards:5, scope:'all', category:'featured', guaranteeNew:1, featured:true, theme:'grid',
     odds:{common:60, rare:27, epic:9.5, legendary:2.8, iconic:.7},
+    bullets:['5 cards · 1 new guaranteed','Both sports, all eras','Every card from the full pool'],
     art:{p1:'#ff3b3f',p2:'#3a070b',p3:'rgba(255,90,90,.8)',kicker:'FORMULA 1 × MOTOGP',title:'GRID',title2:'PACK',emblem:'05×',meta:'5 CARDS',meta2:'1 NEW GUARANTEED',cls:'pack-f1'},
   }),
   P({
-    id:'f1-standard', name:'F1 Booster', short:'F1', tagline:'Pure Formula 1. Every card from the grid.',
-    desc:'5 Formula 1 cards. Build your F1 album faster.',
-    cost:600, cards:5, scope:'f1', category:'f1', guaranteeNew:1,
-    odds:{common:61, rare:27, epic:9, legendary:2.4, iconic:.6},
-    art:{p1:'#e11d2e',p2:'#34040a',p3:'rgba(255,80,80,.8)',kicker:'FORMULA 1',title:'F1',title2:'BOOSTER',emblem:'F1',meta:'5 CARDS',meta2:'F1 ONLY',cls:'pack-f1'},
-  }),
-  P({
-    id:'motogp-standard', name:'MotoGP Booster', short:'MGP', tagline:'Two wheels, zero compromise.',
-    desc:'5 MotoGP cards. Build your premier-class album faster.',
-    cost:600, cards:5, scope:'motogp', category:'motogp', guaranteeNew:1,
-    odds:{common:61, rare:27, epic:9, legendary:2.4, iconic:.6},
-    art:{p1:'#12c4dd',p2:'#032e36',p3:'rgba(90,240,255,.8)',kicker:'MOTOGP',title:'MOTO',title2:'BOOSTER',emblem:'GP',meta:'5 CARDS',meta2:'MOTOGP ONLY',cls:'pack-motogp'},
+    id:'scavenger', name:'Paddock Scavenger', short:'SCAV', tagline:'Built for set builders. Duplicates stay out of your way.',
+    desc:'6 cards with three duplicate-protected slots. Fill the gaps in your albums.',
+    cost:950, cards:6, scope:'all', category:'featured', guaranteeNew:1, protectDupes:3, theme:'scavenger',
+    odds:{common:45, rare:35, epic:14, legendary:5, iconic:1},
+    bullets:['6 cards · 3 duplicate-protected','1 new card guaranteed','Boosted Rare+ rate'],
+    art:{p1:'#19b486',p2:'#052c23',p3:'rgba(90,255,200,.7)',kicker:'SET BUILDER SERIES',title:'PADDOCK',title2:'SCAVENGER',emblem:'3×',meta:'6 CARDS',meta2:'3 DUPES PROTECTED',cls:'pack-motogp'},
   }),
   P({
     id:'premium', name:'Premium Pack', short:'PREM', tagline:'Higher ceilings. Bigger pulls.',
     desc:'6 cards with boosted Epic and Legendary rates. Ideal for collectors.',
-    cost:1400, cards:6, scope:'all', category:'featured', guaranteeNew:1, guarantees:{rare:1},
+    cost:1400, cards:6, scope:'all', category:'featured', guaranteeNew:1, guarantees:{rare:1}, featured:true, theme:'premium',
     odds:{common:30, rare:38, epic:21, legendary:8, iconic:3},
+    bullets:['6 cards · Rare or better guaranteed','Boosted Epic and Legendary odds','1 new card guaranteed'],
     art:{p1:'#8b5cf6',p2:'#140a2b',p3:'rgba(170,120,255,.75)',kicker:'PREMIUM SERIES',title:'PREMIUM',title2:'PACK',emblem:'06×',meta:'6 CARDS',meta2:'RARE+ GUARANTEED',cls:'pack-legendary'},
+  }),
+  P({
+    id:'elite', name:'Elite Series', short:'ELITE', tagline:'The paddock’s private reserve.',
+    desc:'7 cards with an Epic guaranteed, three new cards and premium finish odds.',
+    cost:2800, cards:7, scope:'all', category:'featured', guaranteeNew:3, guarantees:{rare:7, epic:1}, finishBoost:{holo:2, gold:2, signature:1.4}, theme:'elite',
+    odds:{common:18, rare:34, epic:28, legendary:14, iconic:6},
+    bullets:['7 cards · Epic or better guaranteed','3 new cards guaranteed','Every card Rare or better'],
+    art:{p1:'#f0b25c',p2:'#2a1405',p3:'rgba(255,210,130,.8)',kicker:'ELITE COLLECTOR SERIES',title:'ELITE',title2:'SERIES',emblem:'07×',meta:'7 CARDS',meta2:'EPIC+ & 3 NEW',cls:'pack-gold'},
+  }),
+
+  /* ---------------------------------------------------------- FORMULA 1 */
+  P({
+    id:'f1-standard', name:'F1 Booster', short:'F1', tagline:'Pure Formula 1. Every card from the grid.',
+    desc:'5 Formula 1 cards. Build your F1 album faster.',
+    cost:600, cards:5, scope:'f1', category:'f1', guaranteeNew:1, theme:'f1',
+    odds:{common:61, rare:27, epic:9, legendary:2.4, iconic:.6},
+    bullets:['Formula 1 cards only','5 cards · 1 new guaranteed','Covers every F1 era'],
+    art:{p1:'#e11d2e',p2:'#34040a',p3:'rgba(255,80,80,.8)',kicker:'FORMULA 1',title:'F1',title2:'BOOSTER',emblem:'F1',meta:'5 CARDS',meta2:'F1 ONLY',cls:'pack-f1'},
+  }),
+  P({
+    id:'f1-quali', name:'F1 Qualifying Pack', short:'QUALI', tagline:'One lap. One shot. Maximum shine.',
+    desc:'4 Formula 1 cards with a guaranteed Rare and doubled Holographic odds.',
+    cost:480, cards:4, scope:'f1', category:'f1', guaranteeNew:1, guarantees:{rare:1}, finishBoost:{holo:2.2}, theme:'f1',
+    odds:{common:62, rare:27, epic:8.4, legendary:2.1, iconic:.5},
+    bullets:['4 cards · Rare or better guaranteed','Double Holo finish chance','F1-only pool'],
+    art:{p1:'#ff2740',p2:'#2b0509',p3:'rgba(255,90,110,.85)',kicker:'QUALIFYING SERIES',title:'QUALI',title2:'PACK',emblem:'Q3',meta:'4 CARDS',meta2:'RARE+ GUARANTEED',cls:'pack-f1'},
   }),
   P({
     id:'f1-premium', name:'F1 Premium', short:'F1+', tagline:'The paddock’s finest, all in red.',
     desc:'6 Formula 1 cards with a guaranteed Rare or better.',
-    cost:1300, cards:6, scope:'f1', category:'f1', guaranteeNew:1, guarantees:{rare:1},
+    cost:1300, cards:6, scope:'f1', category:'f1', guaranteeNew:1, guarantees:{rare:1}, theme:'f1',
     odds:{common:31, rare:38, epic:21, legendary:7, iconic:3},
+    bullets:['6 cards · Rare or better guaranteed','Boosted Epic and Legendary odds','F1-only pool'],
     art:{p1:'#ff5a36',p2:'#2b0709',p3:'rgba(255,140,80,.75)',kicker:'FORMULA 1 PREMIUM',title:'F1',title2:'PREMIUM',emblem:'F1',meta:'6 CARDS',meta2:'RARE+ GUARANTEED',cls:'pack-f1'},
   }),
   P({
-    id:'motogp-premium', name:'MotoGP Premium', short:'GP+', tagline:'Premier-class speed, elevated.',
-    desc:'6 MotoGP cards with a guaranteed Rare or better.',
-    cost:1300, cards:6, scope:'motogp', category:'motogp', guaranteeNew:1, guarantees:{rare:1},
-    odds:{common:31, rare:38, epic:21, legendary:7, iconic:3},
-    art:{p1:'#20d3ee',p2:'#04262e',p3:'rgba(80,240,255,.75)',kicker:'MOTOGP PREMIUM',title:'MOTO',title2:'PREMIUM',emblem:'GP',meta:'6 CARDS',meta2:'RARE+ GUARANTEED',cls:'pack-motogp'},
+    id:'f1-podium', name:'F1 Podium Pack', short:'POD', tagline:'Champagne odds. Championship finishes.',
+    desc:'6 Formula 1 cards with an Epic guaranteed and boosted Championship editions.',
+    cost:1800, cards:6, scope:'f1', category:'f1', guaranteeNew:1, guarantees:{rare:6, epic:1}, finishBoost:{championship:4, anniversary:2, gold:1.6}, theme:'elite',
+    odds:{common:22, rare:38, epic:25, legendary:11, iconic:4},
+    bullets:['6 cards · Epic or better guaranteed','Championship finish odds ×4','Every card Rare or better'],
+    art:{p1:'#f2b24a',p2:'#2c1204',p3:'rgba(255,205,120,.8)',kicker:'PODIUM SERIES',title:'PODIUM',title2:'PACK',emblem:'P1',meta:'6 CARDS',meta2:'EPIC+ GUARANTEED',cls:'pack-gold'},
   }),
   P({
-    id:'gold', name:'Gold Pack', short:'GOLD', tagline:'Foil finish. Gold-standard pulls.',
-    desc:'5 cards, all Rare or better. Boosted Gold Foil finish chance.',
-    cost:35, currency:'gems', cards:5, scope:'all', category:'special', guaranteeNew:1, guarantees:{rare:5}, finishBoost:{gold:4, holo:2},
-    odds:{common:0, rare:36, epic:35, legendary:22, iconic:7},
-    art:{p1:'#f9d976',p2:'#6b4708',p3:'rgba(255,235,160,.9)',kicker:'24K COLLECTOR SERIES',title:'GOLD',title2:'PACK',emblem:'24K',meta:'5 CARDS',meta2:'ALL RARE OR BETTER',cls:'pack-gold'},
+    id:'f1-constructors', name:'Constructors Pack', short:'TEAM', tagline:'The garages, the geniuses, the machines.',
+    desc:'5 cards drawn only from F1 constructors and cars, with a Rare guaranteed.',
+    cost:1150, cards:5, scope:'f1', category:'f1', guaranteeNew:1, guarantees:{rare:1}, pool:{types:['team','car']}, theme:'f1',
+    odds:{common:34, rare:36, epic:20, legendary:7.5, iconic:2.5},
+    bullets:['Constructors and cars only','5 cards · Rare or better guaranteed','Build the F1 Machines album'],
+    art:{p1:'#2f61ff',p2:'#07122e',p3:'rgba(110,160,255,.75)',kicker:'CONSTRUCTORS SERIES',title:'TEAMS',title2:'& MACHINES',emblem:'⬢',meta:'5 CARDS',meta2:'TEAMS + CARS ONLY',cls:'pack-f1'},
   }),
   P({
     id:'f1-gold', name:'F1 Gold Pack', short:'F1G', tagline:'Formula 1, dipped in gold.',
     desc:'5 Formula 1 cards, all Rare or better, with gold finish odds.',
-    cost:38, currency:'gems', cards:5, scope:'f1', category:'f1', guaranteeNew:1, guarantees:{rare:5}, finishBoost:{gold:4, holo:2},
+    cost:38, currency:'gems', cards:5, scope:'f1', category:'f1', guaranteeNew:1, guarantees:{rare:5}, finishBoost:{gold:4, holo:2}, theme:'gold',
     odds:{common:0, rare:36, epic:35, legendary:22, iconic:7},
+    bullets:['5 cards · all Rare or better','Gold Foil odds ×4','F1-only pool'],
     art:{p1:'#f9d976',p2:'#5a2d09',p3:'rgba(255,225,140,.9)',kicker:'F1 GOLD SERIES',title:'F1',title2:'GOLD',emblem:'24K',meta:'5 CARDS',meta2:'RARE+ ONLY',cls:'pack-gold'},
+  }),
+  P({
+    id:'f1-legend', name:'F1 Legend Vault', short:'F1★', tagline:'Only the names that changed the sport.',
+    desc:'3 Formula 1 cards, all Legendary or better. Iconic odds boosted.',
+    cost:160, currency:'gems', cards:3, scope:'f1', category:'f1', guaranteeNew:2, guarantees:{legendary:3}, finishBoost:{signature:2.4, numbered:1.8, gold:1.8}, theme:'legend',
+    odds:{common:0, rare:0, epic:0, legendary:62, iconic:38},
+    bullets:['3 cards · Legendary or better','Iconic odds boosted','2 new cards guaranteed'],
+    art:{p1:'#2a1040',p2:'#05050a',p3:'rgba(255,170,90,.6)',kicker:'F1 LEGEND VAULT',title:'F1',title2:'LEGEND',emblem:'★',meta:'3 CARDS',meta2:'LEGENDARY+ ONLY',cls:'pack-legendary'},
+  }),
+
+  /* ---------------------------------------------------------- MOTOGP */
+  P({
+    id:'motogp-standard', name:'MotoGP Booster', short:'MGP', tagline:'Two wheels, zero compromise.',
+    desc:'5 MotoGP cards. Build your premier-class album faster.',
+    cost:600, cards:5, scope:'motogp', category:'motogp', guaranteeNew:1, theme:'motogp',
+    odds:{common:61, rare:27, epic:9, legendary:2.4, iconic:.6},
+    bullets:['MotoGP cards only','5 cards · 1 new guaranteed','Covers every GP era'],
+    art:{p1:'#12c4dd',p2:'#032e36',p3:'rgba(90,240,255,.8)',kicker:'MOTOGP',title:'MOTO',title2:'BOOSTER',emblem:'GP',meta:'5 CARDS',meta2:'MOTOGP ONLY',cls:'pack-motogp'},
+  }),
+  P({
+    id:'motogp-poles', name:'MotoGP Pole Pack', short:'POLE', tagline:'The fastest lap is the one that counts.',
+    desc:'4 MotoGP cards with a guaranteed Rare and doubled Signature odds.',
+    cost:480, cards:4, scope:'motogp', category:'motogp', guaranteeNew:1, guarantees:{rare:1}, finishBoost:{signature:3, holo:2}, theme:'motogp',
+    odds:{common:62, rare:27, epic:8.4, legendary:2.1, iconic:.5},
+    bullets:['4 cards · Rare or better guaranteed','Triple Signature finish chance','MotoGP-only pool'],
+    art:{p1:'#19d3ee',p2:'#03252d',p3:'rgba(110,245,255,.85)',kicker:'POLE POSITION SERIES',title:'POLE',title2:'PACK',emblem:'P1',meta:'4 CARDS',meta2:'SIGNATURE ODDS',cls:'pack-motogp'},
+  }),
+  P({
+    id:'motogp-premium', name:'MotoGP Premium', short:'GP+', tagline:'Premier-class speed, elevated.',
+    desc:'6 MotoGP cards with a guaranteed Rare or better.',
+    cost:1300, cards:6, scope:'motogp', category:'motogp', guaranteeNew:1, guarantees:{rare:1}, theme:'motogp',
+    odds:{common:31, rare:38, epic:21, legendary:7, iconic:3},
+    bullets:['6 cards · Rare or better guaranteed','Boosted Epic and Legendary odds','MotoGP-only pool'],
+    art:{p1:'#20d3ee',p2:'#04262e',p3:'rgba(80,240,255,.75)',kicker:'MOTOGP PREMIUM',title:'MOTO',title2:'PREMIUM',emblem:'GP',meta:'6 CARDS',meta2:'RARE+ GUARANTEED',cls:'pack-motogp'},
+  }),
+  P({
+    id:'motogp-podium', name:'MotoGP Podium Pack', short:'POD', tagline:'Elbows out. Champagne in.',
+    desc:'6 MotoGP cards with an Epic guaranteed and boosted Championship editions.',
+    cost:1800, cards:6, scope:'motogp', category:'motogp', guaranteeNew:1, guarantees:{rare:6, epic:1}, finishBoost:{championship:4, anniversary:2, gold:1.6}, theme:'elite',
+    odds:{common:22, rare:38, epic:25, legendary:11, iconic:4},
+    bullets:['6 cards · Epic or better guaranteed','Championship finish odds ×4','Every card Rare or better'],
+    art:{p1:'#22d3ee',p2:'#042832',p3:'rgba(120,250,255,.85)',kicker:'PODIUM SERIES',title:'MOTO',title2:'PODIUM',emblem:'P1',meta:'6 CARDS',meta2:'EPIC+ GUARANTEED',cls:'pack-motogp'},
+  }),
+  P({
+    id:'motogp-machines', name:'Prototype Pack', short:'PROTO', tagline:'Bikes, factories and engineering war.',
+    desc:'5 cards drawn only from MotoGP teams and prototype bikes, with a Rare guaranteed.',
+    cost:1150, cards:5, scope:'motogp', category:'motogp', guaranteeNew:1, guarantees:{rare:1}, pool:{types:['team','bike']}, theme:'motogp',
+    odds:{common:34, rare:36, epic:20, legendary:7.5, iconic:2.5},
+    bullets:['Teams and prototypes only','5 cards · Rare or better guaranteed','Build the MotoGP Machines album'],
+    art:{p1:'#1d78ff',p2:'#071a33',p3:'rgba(100,180,255,.75)',kicker:'PROTOTYPE SERIES',title:'PROTO',title2:'PACK',emblem:'◮',meta:'5 CARDS',meta2:'BIKES + TEAMS ONLY',cls:'pack-motogp'},
   }),
   P({
     id:'motogp-gold', name:'MotoGP Gold Pack', short:'GPG', tagline:'Premier-class gold rush.',
     desc:'5 MotoGP cards, all Rare or better, with gold finish odds.',
-    cost:38, currency:'gems', cards:5, scope:'motogp', category:'motogp', guaranteeNew:1, guarantees:{rare:5}, finishBoost:{gold:4, holo:2},
+    cost:38, currency:'gems', cards:5, scope:'motogp', category:'motogp', guaranteeNew:1, guarantees:{rare:5}, finishBoost:{gold:4, holo:2}, theme:'gold',
     odds:{common:0, rare:36, epic:35, legendary:22, iconic:7},
+    bullets:['5 cards · all Rare or better','Gold Foil odds ×4','MotoGP-only pool'],
     art:{p1:'#ffd77a',p2:'#5e4310',p3:'rgba(255,235,170,.9)',kicker:'MOTOGP GOLD SERIES',title:'MOTO',title2:'GOLD',emblem:'GP',meta:'5 CARDS',meta2:'RARE+ ONLY',cls:'pack-gold'},
+  }),
+  P({
+    id:'motogp-legend', name:'MotoGP Legend Vault', short:'GP★', tagline:'The greatest riders ever to lean it in.',
+    desc:'3 MotoGP cards, all Legendary or better. Iconic odds boosted.',
+    cost:160, currency:'gems', cards:3, scope:'motogp', category:'motogp', guaranteeNew:2, guarantees:{legendary:3}, finishBoost:{signature:2.6, numbered:1.8, gold:1.8}, theme:'legend',
+    odds:{common:0, rare:0, epic:0, legendary:62, iconic:38},
+    bullets:['3 cards · Legendary or better','Iconic odds boosted','2 new cards guaranteed'],
+    art:{p1:'#162a4a',p2:'#05070d',p3:'rgba(120,230,255,.55)',kicker:'MOTOGP LEGEND VAULT',title:'MOTO',title2:'LEGEND',emblem:'★',meta:'3 CARDS',meta2:'LEGENDARY+ ONLY',cls:'pack-legendary'},
+  }),
+
+  /* ---------------------------------------------------------- EVENT DROPS */
+  P({
+    id:'event-opener', name:'Season Opener', short:'R1', tagline:'Lights out on a brand-new season.',
+    desc:'5 cards from both paddocks, with boosted Epic odds while the season gets underway.',
+    cost:750, cards:5, scope:'all', category:'event', guaranteeNew:2, theme:'event', event:window(0,5),
+    odds:{common:45, rare:33, epic:15, legendary:5.5, iconic:1.5},
+    bullets:['5 cards · 2 new guaranteed','Boosted Epic odds','Limited-time event pack'],
+    art:{p1:'#ff3b3f',p2:'#1b0608',p3:'rgba(255,140,90,.8)',kicker:'EVENT · SEASON OPENER',title:'SEASON',title2:'OPENER',emblem:'R1',meta:'5 CARDS',meta2:'2 NEW GUARANTEED',cls:'pack-f1'},
+  }),
+  P({
+    id:'event-monaco', name:'Monaco Grand Prix', short:'MON', tagline:'The crown jewel. The harbour. The history.',
+    desc:'5 Formula 1 cards with an Epic guaranteed and Monaco-grade finish odds.',
+    cost:55, currency:'gems', cards:5, scope:'f1', category:'event', guaranteeNew:2, guarantees:{rare:5, epic:1}, finishBoost:{gold:2.4, championship:2, holo:1.8}, theme:'event', event:window(2,7),
+    odds:{common:20, rare:38, epic:27, legendary:11, iconic:4},
+    bullets:['5 cards · Epic or better guaranteed','Gold and Championship odds boosted','Limited-time Monaco event'],
+    art:{p1:'#f6c453',p2:'#1d1405',p3:'rgba(255,230,160,.85)',kicker:'EVENT · MONACO GP',title:'MONACO',title2:'GRAND PRIX',emblem:'MC',meta:'5 CARDS',meta2:'EPIC+ GUARANTEED',cls:'pack-gold'},
+  }),
+  P({
+    id:'event-mugello', name:'Mugello GP', short:'MUG', tagline:'Italy’s cathedral of speed.',
+    desc:'5 MotoGP cards with an Epic guaranteed and boosted Signature odds.',
+    cost:55, currency:'gems', cards:5, scope:'motogp', category:'event', guaranteeNew:2, guarantees:{rare:5, epic:1}, finishBoost:{signature:2.6, gold:2, holo:1.8}, theme:'event', event:window(4,9),
+    odds:{common:20, rare:38, epic:27, legendary:11, iconic:4},
+    bullets:['5 cards · Epic or better guaranteed','Signature odds boosted','Limited-time Mugello event'],
+    art:{p1:'#22d3ee',p2:'#04242c',p3:'rgba(130,250,255,.85)',kicker:'EVENT · MUGELLO GP',title:'MUGELLO',title2:'GRAND PRIX',emblem:'IT',meta:'5 CARDS',meta2:'EPIC+ GUARANTEED',cls:'pack-motogp'},
+  }),
+  P({
+    id:'event-nightrace', name:'Night Race', short:'NIGHT', tagline:'Floodlights, sparks and blackout finishes.',
+    desc:'6 cards with boosted Blackout editions and a guaranteed Rare or better.',
+    cost:1600, cards:6, scope:'all', category:'event', guaranteeNew:2, guarantees:{rare:1}, finishBoost:{shadow:5, holo:2.2, numbered:1.8}, theme:'night', event:window(6,10),
+    odds:{common:28, rare:36, epic:23, legendary:9.5, iconic:3.5},
+    bullets:['6 cards · Rare or better guaranteed','Blackout edition odds ×5','Limited-time night event'],
+    art:{p1:'#5a6cff',p2:'#05061a',p3:'rgba(140,160,255,.7)',kicker:'EVENT · NIGHT RACE',title:'NIGHT',title2:'RACE',emblem:'Nº',meta:'6 CARDS',meta2:'BLACKOUT ODDS',cls:'pack-iconic'},
+  }),
+  P({
+    id:'event-finale', name:'Championship Finale', short:'FIN', tagline:'One race. Every title on the line.',
+    desc:'6 cards, all Epic or better, with a guaranteed Legendary and Championship finishes.',
+    cost:220, currency:'gems', cards:6, scope:'all', category:'event', guaranteeNew:3, guarantees:{epic:6, legendary:1}, finishBoost:{championship:6, anniversary:2.4, numbered:1.5}, theme:'legend', event:window(8,3),
+    odds:{common:0, rare:0, epic:46, legendary:38, iconic:16},
+    bullets:['6 cards · Legendary guaranteed','All cards Epic or better','Championship finish odds ×6'],
+    art:{p1:'#f6c453',p2:'#160e03',p3:'rgba(255,220,120,.85)',kicker:'EVENT · FINALE',title:'CHAMPION',title2:'FINALE',emblem:'#1',meta:'6 CARDS',meta2:'LEGENDARY GUARANTEED',cls:'pack-gold'},
+  }),
+  P({
+    id:'event-heritage', name:'Heritage Weekend', short:'HIST', tagline:'Where the legends were forged.',
+    desc:'5 cards from the 1960s to the 1990s, with a guaranteed Rare or better.',
+    cost:45, currency:'gems', cards:5, scope:'all', category:'event', guaranteeNew:2, guarantees:{rare:5}, pool:{eras:['1960s','1970s','1980s','1990s']}, theme:'heritage', event:window(1,6),
+    odds:{common:35, rare:38, epic:19, legendary:6.5, iconic:1.5},
+    bullets:['1960s–1990s cards only','5 cards · Rare or better guaranteed','Limited-time heritage event'],
+    art:{p1:'#b47a3c',p2:'#1a0f05',p3:'rgba(240,190,120,.75)',kicker:'EVENT · HERITAGE',title:'HERITAGE',title2:'WEEKEND',emblem:'H',meta:'5 CARDS',meta2:'CLASSIC ERA ONLY',cls:'pack-gold'},
+  }),
+
+  /* ---------------------------------------------------------- SPECIAL */
+  P({
+    id:'gold', name:'Gold Pack', short:'GOLD', tagline:'Foil finish. Gold-standard pulls.',
+    desc:'5 cards, all Rare or better. Boosted Gold Foil finish chance.',
+    cost:35, currency:'gems', cards:5, scope:'all', category:'special', guaranteeNew:1, guarantees:{rare:5}, finishBoost:{gold:4, holo:2}, theme:'gold',
+    odds:{common:0, rare:36, epic:35, legendary:22, iconic:7},
+    bullets:['5 cards · all Rare or better','Gold Foil odds ×4','1 new card guaranteed'],
+    art:{p1:'#f9d976',p2:'#6b4708',p3:'rgba(255,235,160,.9)',kicker:'24K COLLECTOR SERIES',title:'GOLD',title2:'PACK',emblem:'24K',meta:'5 CARDS',meta2:'ALL RARE OR BETTER',cls:'pack-gold'},
   }),
   P({
     id:'legendary', name:'Legendary Pack', short:'LEG', tagline:'Where icons are made.',
     desc:'5 cards, all Epic or better. Legendary pulls are common here.',
-    cost:90, currency:'gems', cards:5, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:5}, finishBoost:{holo:2, gold:2, signature:1.4, numbered:1.5},
+    cost:90, currency:'gems', cards:5, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:5}, finishBoost:{holo:2, gold:2, signature:1.4, numbered:1.5}, theme:'legend',
     odds:{common:0, rare:0, epic:53, legendary:36, iconic:11},
+    bullets:['5 cards · all Epic or better','2 new cards guaranteed','Legendary finish odds boosted'],
     art:{p1:'#3b2254',p2:'#080510',p3:'rgba(255,200,90,.65)',kicker:'LEGENDARY SERIES',title:'LEGEND',title2:'PACK',emblem:'★',meta:'5 CARDS',meta2:'EPIC+ ONLY',cls:'pack-legendary'},
   }),
   P({
     id:'championship', name:'Championship Pack', short:'CHAMP', tagline:'Built for titles. Sealed in history.',
     desc:'6 cards, Epic or better. Championship editions and 2 new cards guaranteed.',
-    cost:120, currency:'gems', cards:6, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:6, legendary:1}, finishBoost:{championship:6, anniversary:2, holo:1.5},
+    cost:120, currency:'gems', cards:6, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:6, legendary:1}, finishBoost:{championship:6, anniversary:2, holo:1.5}, theme:'gold',
     odds:{common:0, rare:0, epic:48, legendary:38, iconic:14},
+    bullets:['6 cards · Legendary guaranteed','Championship finish odds ×6','2 new cards guaranteed'],
     art:{p1:'#b8862f',p2:'#1a0f03',p3:'rgba(255,210,120,.8)',kicker:'CHAMPIONSHIP SERIES',title:'CHAMP',title2:'PACK',emblem:'#1',meta:'6 CARDS',meta2:'CHAMPION EDITION ODDS',cls:'pack-gold'},
   }),
   P({
     id:'limited', name:'Limited Edition', short:'LTD', tagline:'Numbered. Serialised. Forever rare.',
     desc:'4 cards, Epic or better. One guaranteed numbered edition.',
-    cost:175, currency:'gems', cards:4, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:4, legendary:1}, guaranteedFinish:'numbered', finishBoost:{numbered:2, signature:2, holo:1.5},
+    cost:175, currency:'gems', cards:4, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:4, legendary:1}, guaranteedFinish:'numbered', finishBoost:{numbered:2, signature:2, holo:1.5}, theme:'limited',
     odds:{common:0, rare:0, epic:42, legendary:38, iconic:20},
+    bullets:['4 cards · Legendary guaranteed','1 serialised Limited edition','2 new cards guaranteed'],
     art:{p1:'#6f7bff',p2:'#0a0a2a',p3:'rgba(150,170,255,.7)',kicker:'LIMITED COLLECTOR SERIES',title:'LIMITED',title2:'EDITION',emblem:'/99',meta:'4 CARDS',meta2:'1 NUMBERED GUARANTEED',cls:'pack-iconic'},
   }),
   P({
     id:'iconic', name:'Iconic Vault', short:'ICON', tagline:'The rarest cards in motorsport.',
     desc:'3 cards, Legendary or better. Every pull is a grail.',
-    cost:320, currency:'gems', cards:3, scope:'all', category:'special', guaranteeNew:2, guarantees:{legendary:3}, finishBoost:{signature:3, numbered:2, holo:2, gold:2},
+    cost:320, currency:'gems', cards:3, scope:'all', category:'special', guaranteeNew:2, guarantees:{legendary:3}, finishBoost:{signature:3, numbered:2, holo:2, gold:2}, theme:'iconic',
     odds:{common:0, rare:0, epic:0, legendary:62, iconic:38},
+    bullets:['3 cards · Legendary or better','Every slot a grail','2 new cards guaranteed'],
     art:{p1:'#2a1040',p2:'#05050a',p3:'rgba(255,110,220,.6)',kicker:'THE VAULT',title:'ICONIC',title2:'VAULT',emblem:'∞',meta:'3 CARDS',meta2:'LEGENDARY+ ONLY',cls:'pack-iconic'},
   }),
   P({
     id:'crossover', name:'Crossover Pack', short:'X', tagline:'Two worlds. One pack.',
     desc:'6 cards from both sports, including a guaranteed Crossover legend.',
-    cost:900, cards:6, scope:'crossover', category:'special', guaranteeNew:2, guarantees:{rare:1},
+    cost:900, cards:6, scope:'crossover', category:'special', guaranteeNew:2, guarantees:{rare:1}, theme:'crossover',
     odds:{common:32, rare:36, epic:21, legendary:8, iconic:3},
+    bullets:['6 cards · 1 Crossover legend','2 new cards guaranteed','Both paddocks in one pack'],
     art:{p1:'#2d3442',p2:'#08090e',p3:'rgba(255,120,80,.55)',kicker:'FORMULA 1 × MOTOGP',title:'CROSS',title2:'OVER',emblem:'X',meta:'6 CARDS',meta2:'1 CROSSOVER LEGEND',cls:'pack-crossover'},
   }),
   P({
+    id:'heritage', name:'Heritage Pack', short:'HIST', tagline:'Seven decades of speed, sealed in one pack.',
+    desc:'5 cards drawn only from the 1960s to the 1990s. Guaranteed Rare or better.',
+    cost:55, currency:'gems', cards:5, scope:'all', category:'special', guaranteeNew:2, guarantees:{rare:5}, pool:{eras:['1960s','1970s','1980s','1990s']}, finishBoost:{anniversary:3, holo:1.8}, theme:'heritage',
+    odds:{common:25, rare:42, epic:24, legendary:7.5, iconic:1.5},
+    bullets:['Classic-era cards only','5 cards · Rare or better guaranteed','Anniversary finish odds ×3'],
+    art:{p1:'#b47a3c',p2:'#180e05',p3:'rgba(240,190,120,.75)',kicker:'HERITAGE SERIES',title:'HERITAGE',title2:'PACK',emblem:'H',meta:'5 CARDS',meta2:'CLASSIC ERA ONLY',cls:'pack-gold'},
+  }),
+  P({
+    id:'signatures', name:'Signature Series', short:'SIGN', tagline:'Ink from the greats.',
+    desc:'3 cards from signed drivers and riders, with one Signature finish guaranteed.',
+    cost:110, currency:'gems', cards:3, scope:'all', category:'special', guaranteeNew:2, guarantees:{rare:3}, guaranteedFinish:'signature', pool:{signatures:true}, finishBoost:{signature:4, numbered:1.5}, theme:'signature',
+    odds:{common:0, rare:30, epic:45, legendary:19, iconic:6},
+    bullets:['Signed legends only','1 Signature finish guaranteed','3 cards · Rare or better'],
+    art:{p1:'#d9c7a4',p2:'#1b160d',p3:'rgba(255,240,200,.7)',kicker:'SIGNATURE SERIES',title:'SIGNATURE',title2:'SERIES',emblem:'✒',meta:'3 CARDS',meta2:'SIGNED CARD INSIDE',cls:'pack-gold'},
+  }),
+  P({
+    id:'blackout', name:'Blackout Pack', short:'BLACK', tagline:'Lights off. Contrast on.',
+    desc:'4 cards, all Epic or better, with one Blackout edition guaranteed.',
+    cost:70, currency:'gems', cards:4, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:4}, guaranteedFinish:'shadow', finishBoost:{shadow:5, numbered:1.6}, theme:'night',
+    odds:{common:0, rare:0, epic:47, legendary:37, iconic:16},
+    bullets:['4 cards · all Epic or better','1 Blackout edition guaranteed','2 new cards guaranteed'],
+    art:{p1:'#3b4252',p2:'#05060a',p3:'rgba(160,180,220,.4)',kicker:'BLACKOUT SERIES',title:'BLACK',title2:'OUT',emblem:'◐',meta:'4 CARDS',meta2:'BLACKOUT GUARANTEED',cls:'pack-iconic'},
+  }),
+  P({
+    id:'choice', name:'Collector’s Choice', short:'PICK', tagline:'Three legends. You choose the one.',
+    desc:'3 Epic+ cards plus a choice of 3 Legendary cards — keep the one you want.',
+    cost:140, currency:'gems', cards:3, scope:'all', category:'special', guaranteeNew:2, guarantees:{epic:3}, choice:{count:3, rarity:'legendary', picks:1}, theme:'choice',
+    odds:{common:0, rare:0, epic:45, legendary:40, iconic:15},
+    bullets:['Pick 1 of 3 Legendary cards','3 Epic+ cards included','2 new cards guaranteed'],
+    art:{p1:'#b25cff',p2:'#12081f',p3:'rgba(210,150,255,.7)',kicker:'CHOICE SERIES',title:'PICK',title2:'ONE',emblem:'1/3',meta:'3 + CHOICE',meta2:'YOU CHOOSE THE LEGEND',cls:'pack-legendary'},
+  }),
+  P({
+    id:'constructors', name:'Constructors Icons', short:'ICON⬢', tagline:'The garages that built the sport.',
+    desc:'4 constructor cards, all Rare or better, with 2 Epics guaranteed.',
+    cost:100, currency:'gems', cards:4, scope:'all', category:'special', guaranteeNew:2, guarantees:{rare:4, epic:2}, pool:{types:['team']}, finishBoost:{gold:2, championship:2}, theme:'elite',
+    odds:{common:0, rare:38, epic:38, legendary:18, iconic:6},
+    bullets:['Constructor cards only','4 cards · 2 Epics guaranteed','Team silverware chase'],
+    art:{p1:'#f6c453',p2:'#1a1203',p3:'rgba(255,220,130,.75)',kicker:'CONSTRUCTOR ICONS',title:'TEAM',title2:'ICONS',emblem:'⬢',meta:'4 CARDS',meta2:'2 EPICS GUARANTEED',cls:'pack-gold'},
+  }),
+
+  /* ---------------------------------------------------------- DAILY */
+  P({
     id:'daily', name:'Daily Pack', short:'FREE', tagline:'A fresh hit of motorsport every day.',
     desc:'3 free cards. Claim once every 24 hours.',
-    cost:0, cards:3, scope:'all', category:'daily', guaranteeNew:1, oncePerDay:true,
+    cost:0, cards:3, scope:'all', category:'daily', guaranteeNew:1, oncePerDay:true, theme:'daily',
     odds:{common:66, rare:24, epic:7.5, legendary:2, iconic:.5},
+    bullets:['3 cards · completely free','1 new card guaranteed','Resets at midnight'],
     art:{p1:'#1f2937',p2:'#090c12',p3:'rgba(100,240,200,.5)',kicker:'DAILY DROP',title:'DAILY',title2:'PACK',emblem:'24H',meta:'3 CARDS',meta2:'FREE EVERY DAY',cls:'pack-motogp'},
   }),
 ];
 
 export const PACK_MAP = Object.fromEntries(PACKS.map(p => [p.id, p]));
+export const SHOP_PACKS = PACKS.filter(p => p.category !== 'daily');
+
+/* ----- availability / countdowns ----- */
+export function dayIndex(date = new Date()) {
+  const start = new Date(date.getFullYear(), 0, 0);
+  const diff = date - start;
+  return Math.floor(diff / 86400000);
+}
+export function midnightAfter(date = new Date(), days = 0) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() + days + 1);
+  return d.getTime();
+}
+export function packAvailability(pack, date = new Date()) {
+  if (!pack?.event) return {available:true, endsAt:null, startsAt:null, label:'Always available'};
+  const {cycle, from, to} = pack.event;
+  const idx = dayIndex(date);
+  const mod = ((idx % cycle) + cycle) % cycle;
+  const active = from < to ? (mod >= from && mod < to) : (mod >= from || mod < to);
+  if (active) {
+    const left = from < to ? (to - mod) : (mod >= from ? (cycle - mod + to) : (to - mod));
+    return {available:true, endsAt: midnightAfter(date, Math.max(0, left - 1)), startsAt:null, label:left <= 1 ? 'Final hours' : `${left} days left`};
+  }
+  const until = from < to ? (((from - mod + cycle) % cycle) || cycle) : (from - mod);
+  return {available:false, endsAt:null, startsAt: midnightAfter(date, Math.max(0, until - 1)), label:`Starts in ${until}d`};
+}
+export function getEventPacks(date = new Date()) {
+  return PACKS.filter(p => p.category === 'event').map(pack => ({pack, ...packAvailability(pack, date)}));
+}
 
 /* ----- Pack of the Day (deterministic per date) ----- */
 const POTD_TEMPLATES = [
@@ -130,13 +376,9 @@ const POTD_TEMPLATES = [
   {base:'crossover', name:'Worlds Collide', extra:'Two guaranteed new cards', bumps:1, discount:.25},
   {base:'f1-premium', name:'F1 Power Hour', extra:'F1-only, boosted Epics', bumps:1, discount:.35},
   {base:'motogp-premium', name:'MotoGP Power Hour', extra:'MotoGP-only, boosted Epics', bumps:1, discount:.35},
+  {base:'scavenger', name:'Paddock Sweep', extra:'Four duplicate-protected slots', bumps:1, discount:.3},
+  {base:'elite', name:'Elite After Hours', extra:'Epic guarantee and three new cards', bumps:1, discount:.28},
 ];
-
-export function dayIndex(date = new Date()) {
-  const start = new Date(date.getFullYear(), 0, 0);
-  const diff = date - start;
-  return Math.floor(diff / 86400000);
-}
 
 export function getPackOfTheDay(date = new Date()) {
   const idx = dayIndex(date);
@@ -152,6 +394,7 @@ export function getPackOfTheDay(date = new Date()) {
   return {
     ...base,
     id:'potd',
+    baseId: base.id,
     name: tpl.name,
     desc: `${base.desc} Rotates daily.`,
     cost,
@@ -159,10 +402,52 @@ export function getPackOfTheDay(date = new Date()) {
     discount: Math.round(tpl.discount * 100),
     extra: tpl.extra,
     guaranteeNew: Math.min(3, (base.guaranteeNew || 1) + 1),
+    protectDupes: Math.min(4, (base.protectDupes || 0) + 1),
     odds,
     potd: true,
+    endsAt: midnightAfter(date),
     art:{...base.art, kicker:'PACK OF THE DAY', meta2: tpl.extra.toUpperCase(), cls: base.art.cls},
   };
+}
+
+/* ----- rotating flash offers (deterministic per hour) ----- */
+const OFFER_BASES = ['standard','premium','elite','f1-premium','f1-podium','motogp-premium','motogp-podium','gold','legendary','championship','heritage','scavenger'];
+const OFFER_EXTRAS = [
+  'Bonus Rare+ card added to every opening',
+  'Double Holographic odds for one hour',
+  'Two extra new-card guarantees',
+  'Free upgrade to the next pack tier',
+  'Championship finish odds boosted',
+  'Gold Foil odds doubled',
+];
+export function getLiveOffers(date = new Date()) {
+  const hour = Math.floor(date.getTime() / 3600000);
+  const endsAt = (hour + 1) * 3600000;
+  const out = [];
+  for (let i = 0; i < 3; i++) {
+    const seed = Math.abs((hour * 131 + i * 977) % 100000);
+    const base = PACK_MAP[OFFER_BASES[(seed + i * 3) % OFFER_BASES.length]];
+    const discount = [.15, .2, .25, .3, .35, .4][(seed + i) % 6];
+    const tokenFree = (seed + i) % 5 === 0;
+    out.push({
+      id:`offer-${hour}-${i}`,
+      baseId: base.id,
+      pack: base,
+      name: i === 0 ? `Flash: ${base.name}` : base.name,
+      tag: i === 0 ? 'FLASH OFFER' : i === 1 ? 'LIMITED DEAL' : 'COLLECTOR DEAL',
+      discount: Math.round(discount * 100),
+      baseCost: base.cost,
+      cost: Math.max(base.cost > 1 ? 1 : base.cost, Math.round(base.cost * (1 - discount))),
+      currency: base.currency,
+      extra: OFFER_EXTRAS[(seed + i * 2) % OFFER_EXTRAS.length],
+      bonusCards: tokenFree ? 1 : 0,
+      endsAt,
+    });
+  }
+  return out;
+}
+export function liveOfferFor(baseId, date = new Date()) {
+  return getLiveOffers(date).find(o => o.baseId === baseId) || null;
 }
 
 /* ----- Finish roll tables ----- */
@@ -195,5 +480,3 @@ export function formatNumber(n) {
   if (n >= 10000) return (n / 1000).toFixed(1).replace('.0','') + 'k';
   return n.toLocaleString('en-US');
 }
-
-export { CARD_MAP };

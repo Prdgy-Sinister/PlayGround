@@ -34,6 +34,11 @@ export const COUNTRIES = {
   MYS:{name:'Malaysia', short:'MAS'},
   IDN:{name:'Indonesia', short:'INA'},
   TUR:{name:'Turkey', short:'TUR'},
+  CZE:{name:'Czech Republic', short:'CZE'},
+  HUN:{name:'Hungary', short:'HUN'},
+  ARE:{name:'United Arab Emirates', short:'UAE'},
+  RUS:{name:'Russia', short:'RUS'},
+  IND:{name:'India', short:'IND'},
 };
 
 /* Primary / secondary / accent used by the procedural artwork */
@@ -88,6 +93,19 @@ export const TEAM_KITS = {
   'Cagiva':['#b01425','#111','#f2f2f2'],
   'Surtees':['#1a63c9','#0a1220','#f7f7f7'],
   'Hailwood':['#b01425','#12100f','#e8d9a8'],
+  'Cooper':['#0a6b45','#07160f','#f0e6c8'],
+  'BRM':['#22432a','#0a140c','#d8c27a'],
+  'Vanwall':['#1c6b3a','#08140d','#f0f0e8'],
+  'Eagle':['#1d3f9e','#0a1024','#f2f2f2'],
+  'March':['#e01b2f','#15100f','#ffffff'],
+  'Wolf':['#15171c','#050608','#f6c453'],
+  'Toleman':['#1f4fa8','#0a1024','#f5f5f5'],
+  'Minardi':['#17191f','#050608','#ffd400'],
+  'Stewart':['#0b5c3a','#071410','#f2f2f2'],
+  'Prost':['#1e4fbf','#0a1024','#f5f5f5'],
+  'Cadillac':['#111318','#050608','#c9a24a'],
+  'Racing Bulls':['#e9edf4','#161b23','#3b6cff'],
+  'Harley-Davidson':['#f26b00','#12100e','#f2f2f2'],
 };
 
 export const RARITY = {
@@ -127,7 +145,7 @@ export const ATTR_LABELS = {
   moment:['Drama','Skill','Legacy','Impact'],
 };
 
-export const ERA_ORDER = ['1970s','1980s','1990s','2000s','2010s','2020s'];
+export const ERA_ORDER = ['1960s','1970s','1980s','1990s','2000s','2010s','2020s'];
 export const SPORTS = {
   f1:{name:'Formula 1', short:'F1', color:'#ff2f38', glow:'rgba(255,47,56,.35)', css:'f1'},
   motogp:{name:'MotoGP', short:'MotoGP', color:'#22d3ee', glow:'rgba(34,211,238,.32)', css:'motogp'},

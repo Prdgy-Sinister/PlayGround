@@ -13,7 +13,7 @@ import {
   CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, FEATURED_CARDS, RARITY, cardValue,
   albumSetSections, CARD_COUNT,
 } from './data/index.js';
-import { PACKS, PACK_MAP, getPackOfTheDay } from './data/packs.js';
+import { PACKS, PACK_MAP, PACK_CATEGORIES, getPackOfTheDay, getEventPacks, getLiveOffers, packAvailability } from './data/packs.js';
 import { DAILY_REWARDS, levelNeeded, levelTitle } from './data/progress.js';
 import { FINISHES, TYPE_META } from './data/core.js';
 import { setMuted } from './audio.js';
@@ -22,7 +22,7 @@ import {
   guaranteeList, finishName, finishShort, serialText, sportClass, sportShort,
   rewardHTML, coinHTML, gemHTML, toast, openModal, closeModal, confirmAction,
   openCardDetail, statBox, emptyState, levelRingHTML, FINISH_ORDER, bestFinishFor,
-  packName,
+  packName, packPoolLabel, countdownText,
 } from './ui.js';
 
 export const view = {
@@ -198,36 +198,46 @@ function nextUniqueMilestone() {
    ------------------------------------------------------------ */
 export function packsScreen() {
   const s = getState();
-  const tabs = [['all', 'All packs'], ['featured', 'Featured'], ['f1', 'Formula 1'], ['motogp', 'MotoGP'], ['special', 'Special']];
-  const list = PACKS.filter(p => p.category !== 'daily' && (view.packs.tab === 'all' || p.category === view.packs.tab));
-  const featuredId = view.packs.tab === 'f1' ? 'f1-premium' : view.packs.tab === 'motogp' ? 'motogp-premium' : view.packs.tab === 'special' ? 'championship' : 'premium';
-  const feature = PACK_MAP[featuredId] || list[0] || PACK_MAP.premium;
+  const tabs = PACK_CATEGORIES;
+  const tab = view.packs.tab;
+  const list = PACKS.filter(p => p.category !== 'daily' && (tab === 'all' || p.category === tab));
+  const featureByTab = {
+    all: 'premium', featured: 'premium', f1: 'f1-premium',
+    motogp: 'motogp-premium', event: 'event-monaco', special: 'championship',
+  };
+  const events = getEventPacks();
+  let feature = PACK_MAP[featureByTab[tab]] || list[0] || PACK_MAP.premium;
+  if (tab === 'event') feature = events.find(e => e.available)?.pack || feature;
+  const featureAvail = packAvailability(feature);
   const rest = list.filter(p => p.id !== feature.id);
+  const offers = getLiveOffers().filter(o => tab === 'all' || o.pack.category === tab || (tab === 'featured' && o.pack.category === 'featured'));
   const potd = getPackOfTheDay(new Date());
   const potdLeft = potdPurchasesLeft();
+  const liveEvents = events.filter(e => e.available).length;
 
   return `<div class="screen" data-screen="packs">
     <div class="page-head">
       <div>
         <div class="eyebrow">Sealed product · factory fresh</div>
         <h1 class="page-title">Pack <em>garage</em></h1>
-        <p class="page-sub">Every pack is sealed with a guarantee. Chase rare finishes, complete albums, and pull the icons that define two-wheel and four-wheel history.</p>
+        <p class="page-sub">Every pack is sealed with a published guarantee and published odds. Chase rare finishes, fill the new 1960s albums, and pull the icons that define two-wheel and four-wheel history.</p>
       </div>
       <div class="page-head-actions">
+        <span class="chip gold">${liveEvents} event${liveEvents === 1 ? '' : 's'} live</span>
         <span class="chip">${s.tokens.length} token${s.tokens.length === 1 ? '' : 's'} ready</span>
         <button class="btn btn-sm" data-nav="collection">Vault <span class="ico">→</span></button>
       </div>
     </div>
 
     <div class="tabs" style="margin-bottom:16px">
-      ${tabs.map(([id, label]) => `<button class="${view.packs.tab === id ? 'active' : ''}" data-pack-tab="${id}">${esc(label)}</button>`).join('')}
+      ${tabs.map(({id, label}) => `<button class="${tab === id ? 'active' : ''}" data-pack-tab="${id}">${esc(label)}</button>`).join('')}
     </div>
 
     <div class="packs-feature">
-      <div class="feature-pack">
+      <div class="feature-pack" style="--fp-accent:${feature.art?.p1 || '#ff2f38'}">
         <div class="fp-pack">${packHTML(feature)}</div>
         <div class="fp-copy">
-          <div class="eyebrow">${feature.potd ? 'Daily rotation' : 'Featured series'}</div>
+          <div class="eyebrow">${feature.category === 'event' ? 'Limited event drop' : feature.category === 'special' ? 'Special edition' : 'Featured series'} · ${esc(packPoolLabel(feature))}</div>
           <h2>${esc(feature.name)}</h2>
           <p>${esc(feature.tagline)} ${esc(feature.desc)}</p>
           <div class="fp-odds">
@@ -235,9 +245,11 @@ export function packsScreen() {
             <div><b>${feature.cards}</b><span>Cards</span></div>
             <div><b>${feature.guaranteeNew || 0}</b><span>New cards</span></div>
           </div>
+          <div class="fp-guarantees">${guaranteeList(feature).slice(0, 3).map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>
           <div class="fp-buy">
-            <button class="btn btn-primary btn-lg" data-open-pack="${feature.id}">${packTokenCount(feature.id) ? 'Open with token' : `Open for ${feature.currency === 'gems' ? '◆' : '◈'} ${fmt(feature.cost)}`}</button>
-            <span class="pack-price-note">${guaranteeList(feature)[0]}</span>
+            <button class="btn btn-primary btn-lg" data-open-pack="${feature.id}" ${featureAvail.available ? '' : 'disabled'}>${!featureAvail.available ? esc(featureAvail.label) : packTokenCount(feature.id) ? 'Open with token' : `Open for ${feature.currency === 'gems' ? '◆' : '◈'} ${fmt(feature.cost)}`}</button>
+            <button class="btn" data-pack-details="${feature.id}">Odds & contents</button>
+            <span class="pack-price-note">${featureAvail.available ? (featureAvail.endsAt ? `Ends in ${countdownText(featureAvail.endsAt)}` : 'Always available') : featureAvail.label}</span>
           </div>
         </div>
       </div>
@@ -250,13 +262,24 @@ export function packsScreen() {
             <p>${esc(potd.extra || '')}</p>
             <div class="between tiny muted" style="margin-top:8px"><span>${potdLeft} of 3 left today</span><span>${potd.cards} cards</span></div>
             <button class="btn btn-sm btn-gold btn-block" data-open-pack="potd" ${potdLeft <= 0 ? 'disabled' : ''} style="margin-top:9px">${potdLeft <= 0 ? 'Limit reached' : `Open · ${potd.currency === 'gems' ? '◆' : '◈'} ${fmt(potd.cost)}`}</button>
+            <button class="btn btn-sm btn-block" data-pack-details="potd" style="margin-top:6px">See today’s odds</button>
           </div>
         </div>
       </div>
     </div>
 
+    ${(tab === 'all' || tab === 'event') ? `<div class="section event-section">
+      <div class="section-head"><div><h2>Event drops <span>/ ${events.length}</span></h2><div class="sub">Rotating limited-time packs. Countdowns reset on the daily clock, so a drop always returns.</div></div><span class="chip">${liveEvents} live now</span></div>
+      <div class="event-grid">${events.map(eventCard).join('')}</div>
+    </div>` : ''}
+
+    ${offers.length ? `<div class="section offer-section">
+      <div class="section-head"><div><h2>Rotating offers <span>/ ${offers.length}</span></h2><div class="sub">Prices rotate every hour. The timer is live and the discount is applied at checkout.</div></div><span class="chip red">Resets hourly</span></div>
+      <div class="offer-grid">${offers.map(offerCard).join('')}</div>
+    </div>` : ''}
+
     <div class="section">
-      <div class="section-head"><div><h2>All packs <span>/ ${rest.length + 1}</span></h2><div class="sub">Every sealed pack includes at least one new card unless your collection is complete in that scope.</div></div></div>
+      <div class="section-head"><div><h2>${tab === 'all' ? 'All packs' : esc(tabs.find(t => t.id === tab)?.label || 'Packs')} <span>/ ${rest.length + 1}</span></h2><div class="sub">Full odds and contents are published before any purchase. Open a pack’s detail card to inspect every guarantee and pool.</div></div></div>
       <div class="pack-grid">
         ${[feature, ...rest].map(packTile).join('')}
       </div>
@@ -279,24 +302,82 @@ export function packsScreen() {
   </div>`;
 }
 
+function packTag(pack) {
+  const tags = {
+    premium: 'MOST POPULAR', elite: 'TOP TIER', scavenger: 'DUPES PROTECTED',
+    gold: 'GOLD SERIES', legendary: 'EPIC+ ONLY', championship: 'TITLE CHASE',
+    limited: 'NUMBERED', iconic: 'THE VAULT', crossover: 'TWO WORLDS',
+    choice: 'CHOOSE 1 OF 3', signatures: 'SIGNED', blackout: 'BLACKOUT',
+    constructors: 'TEAMS ONLY', 'f1-legend': 'LEGENDS ONLY', 'motogp-legend': 'LEGENDS ONLY',
+    heritage: 'CLASSIC ERA', 'event-monaco': 'EVENT', 'event-mugello': 'EVENT',
+    'event-nightrace': 'EVENT', 'event-finale': 'EVENT', 'event-heritage': 'EVENT',
+    'event-opener': 'EVENT', daily: 'FREE DAILY',
+  };
+  if (tags[pack.id]) return tags[pack.id];
+  if (pack.category === 'event') return 'LIMITED TIME';
+  if (pack.category === 'f1') return 'F1 ONLY';
+  if (pack.category === 'motogp') return 'MOTOGP ONLY';
+  return '';
+}
+
+function eventCard(ev) {
+  const pack = ev.pack;
+  const tokens = packTokenCount(pack.id);
+  return `<div class="event-card ${ev.available ? 'live' : 'locked'}" style="--ev:${pack.art?.p1 || '#ff2f38'}">
+    <div class="ec-art">${packHTML(pack)}</div>
+    <div class="ec-body">
+      <div class="ec-kicker">${ev.available ? 'LIVE EVENT' : 'UPCOMING'} · <b>${esc(ev.label)}</b></div>
+      <h3>${esc(pack.name)}</h3>
+      <p>${esc(pack.tagline)}</p>
+      <div class="ec-odds">
+        ${['iconic', 'legendary', 'epic'].map(r => `<span><b style="color:${RARITY[r].color}">${pack.odds[r] < 1 ? pack.odds[r].toFixed(1) : Math.round(pack.odds[r])}%</b> ${RARITY[r].label}</span>`).join('')}
+      </div>
+      <div class="ec-guarantees">${guaranteeList(pack).slice(0, 2).map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>
+      <div class="ec-foot">
+        <span class="ec-price">${tokens ? `▣ TOKEN ×${tokens}` : pack.cost === 0 ? 'FREE' : `${pack.currency === 'gems' ? '◆' : '◈'} ${fmt(pack.cost)}`}</span>
+        <button class="btn btn-sm ${ev.available ? 'btn-primary' : ''}" data-open-pack="${pack.id}" ${ev.available ? '' : 'disabled'}>${ev.available ? 'Open now' : 'Locked'}</button>
+        <button class="btn btn-sm" data-pack-details="${pack.id}">Details</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function offerCard(offer) {
+  const { pack } = offer;
+  return `<button class="offer-card" data-open-offer="${offer.baseId}" aria-label="Open ${esc(offer.name)} offer">
+    <div class="oc-art">${packHTML(pack)}</div>
+    <div class="oc-body">
+      <span class="oc-tag">${esc(offer.tag)} · ${esc(countdownText(offer.endsAt))} left</span>
+      <b>${esc(offer.name)}</b>
+      <span class="oc-extra">${esc(offer.extra)}</span>
+      <span class="oc-price"><s>${offer.currency === 'gems' ? '◆' : '◈'} ${fmt(offer.baseCost)}</s> <b>${offer.currency === 'gems' ? '◆' : '◈'} ${fmt(offer.cost)}</b> <em>−${offer.discount}%</em></span>
+    </div>
+  </button>`;
+}
+
 function packTile(pack) {
   const s = getState();
   const tokens = packTokenCount(pack.id);
   const cur = pack.currency === 'gems' ? s.gems : s.coins;
-  const affordable = tokens > 0 || pack.cost === 0 || cur >= pack.cost;
-  const tag = pack.id === 'gold' || pack.id === 'f1-gold' || pack.id === 'motogp-gold' ? 'GOLD SERIES' : pack.id === 'iconic' ? 'VAULT' : pack.id === 'limited' ? 'NUMBERED' : pack.id === 'championship' ? 'TITLE CHASE' : pack.id === 'crossover' ? 'TWO WORLDS' : pack.id === 'premium' ? 'MOST POPULAR' : '';
-  return `<div class="pack-tile${affordable ? '' : ' no-funds'}">
-    <div class="pack-wrap" data-open-pack="${pack.id}" role="button" tabindex="0" aria-label="Open ${esc(pack.name)}">
+  const avail = packAvailability(pack);
+  const affordable = avail.available && (tokens > 0 || pack.cost === 0 || cur >= pack.cost);
+  const tag = packTag(pack);
+  const guarantees = guaranteeList(pack).slice(0, 2);
+  return `<div class="pack-tile${affordable ? '' : ' no-funds'}${avail.available ? '' : ' locked'}">
+    <div class="pack-wrap" data-pack-details="${pack.id}" role="button" tabindex="0" aria-label="View ${esc(pack.name)} contents and odds">
       ${tag ? `<span class="pack-tier ${tag === 'MOST POPULAR' ? 'hot' : ''}">${tag}</span>` : ''}
       ${packHTML(pack)}
+      ${avail.available ? '' : `<span class="pack-lock">${esc(avail.label)}</span>`}
     </div>
     <div class="pack-info">
       <div class="nm"><span>${esc(pack.name)}</span><span class="tiny muted">${pack.cards} CARDS</span></div>
       <div class="ds">${esc(pack.tagline)}</div>
+      <div class="pack-guarantees">${guarantees.map(g => `<span>${esc(g)}</span>`).join('')}</div>
       <div class="buy">
         <div class="price">${packPriceHTML(pack, tokens)}</div>
-        <button class="btn btn-sm ${affordable ? 'btn-primary' : ''}" data-open-pack="${pack.id}">${tokens ? 'Open' : pack.cost === 0 ? 'Claim' : 'Buy'}</button>
+        <button class="btn btn-sm ${affordable ? 'btn-primary' : ''}" data-open-pack="${pack.id}" ${avail.available ? '' : 'disabled'}>${!avail.available ? 'Locked' : tokens ? 'Open' : pack.cost === 0 ? 'Claim' : 'Buy'}</button>
       </div>
+      <button class="pack-details-link" data-pack-details="${pack.id}">Full odds & contents →</button>
     </div>
   </div>`;
 }
@@ -429,7 +510,7 @@ export function albumsScreen() {
       <div>
         <div class="eyebrow">Set building · ${complete} / ${ALBUMS.length} complete</div>
         <h1 class="page-title">The <em>albums</em></h1>
-        <p class="page-sub">Seventeen albums. Six decades. Two disciplines. Collect every card in a set to unlock its reward and stamp your name on motorsport history.</p>
+        <p class="page-sub">${ALBUMS.length} albums. Seven decades. Two disciplines. Collect every card in a set to unlock its reward and stamp your name on motorsport history.</p>
       </div>
       <div class="page-head-actions">
         <span class="chip gold">${claimable} reward${claimable === 1 ? '' : 's'} ready</span>

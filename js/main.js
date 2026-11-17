@@ -15,9 +15,10 @@ import {
   openSettingsModal, openDuplicatesModal,
 } from './screens.js';
 import { CARD_COUNT, CARD_MAP } from './data/index.js';
+import { PACK_MAP, getPackOfTheDay, getLiveOffers } from './data/packs.js';
 import { sfx, setMuted } from './audio.js';
 import {
-  fmt, esc, toast, openCardDetail, closeModal, confirmAction, initFx,
+  fmt, esc, toast, openCardDetail, closeModal, confirmAction, initFx, openPackDetails,
 } from './ui.js';
 import { showOpening, isOpening } from './opening.js';
 import { localDateKey, msUntilMidnight } from './data/progress.js';
@@ -138,11 +139,11 @@ function clock() {
 /* ------------------------------------------------------------
    PACK OPENING
    ------------------------------------------------------------ */
-function openPackFlow(packId) {
+function openPackFlow(packId, deal = null) {
   if (isOpening()) return;
   let res;
   try {
-    res = openPack(packId);
+    res = openPack(packId, deal ? { deal } : {});
     sfx.buy();
     if (res.usedToken) toast('cyan', 'Token redeemed', 'A sealed pack token was used from your inventory.', '▣');
     showOpening(res, { onClose: () => { render({ scroll: false }); queueLevels(res.levelUps); } });
@@ -153,6 +154,7 @@ function openPackFlow(packId) {
       NOT_ENOUGH_GEMS: 'You need more gems. Complete albums and objectives to earn them.',
       DAILY_USED: 'The free daily pack is already claimed. It returns at midnight.',
       POTD_LIMIT: 'You have opened all three Pack of the Day pulls. Back tomorrow.',
+      PACK_LOCKED: 'That event pack is not live right now. Check its countdown in the garage.',
       NO_PACK: 'That pack is not available.',
     };
     toast('red', 'Could not open pack', messages[err.code] || err.message, '!');
@@ -277,7 +279,26 @@ document.addEventListener('click', ev => {
   if (el('[data-close-modal]')) { closeModal(); return; }
 
   const packTrigger = el('[data-open-pack]');
-  if (packTrigger) { ev.preventDefault(); openPackFlow(packTrigger.dataset.openPack); return; }
+  if (packTrigger) { ev.preventDefault(); closeModal(); openPackFlow(packTrigger.dataset.openPack); return; }
+
+  const packDetails = el('[data-pack-details]');
+  if (packDetails) {
+    ev.preventDefault();
+    const id = packDetails.dataset.packDetails;
+    const pack = id === 'potd' ? getPackOfTheDay(new Date()) : PACK_MAP[id];
+    if (pack) { sfx.tab(); openPackDetails(pack); }
+    return;
+  }
+
+  const offerTrigger = el('[data-open-offer]');
+  if (offerTrigger) {
+    ev.preventDefault();
+    const baseId = offerTrigger.dataset.openOffer;
+    const deal = getLiveOffers().find(o => o.baseId === baseId) || null;
+    closeModal();
+    openPackFlow(baseId, deal);
+    return;
+  }
 
   const mode = el('[data-collection-mode]');
   if (mode) { view.collection.mode = mode.dataset.collectionMode; sfx.tab(); render(); return; }
@@ -497,7 +518,7 @@ document.addEventListener('change', ev => {
 /* keyboard access for role=button tiles */
 document.addEventListener('keydown', ev => {
   if (ev.key !== 'Enter' && ev.key !== ' ') return;
-  const tile = ev.target.closest?.('[role="button"][data-open-pack], [role="button"][data-open-album]');
+  const tile = ev.target.closest?.('[role="button"][data-open-pack], [role="button"][data-pack-details], [role="button"][data-open-album]');
   if (!tile) return;
   ev.preventDefault();
   tile.click();

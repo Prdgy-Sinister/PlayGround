@@ -4,6 +4,12 @@
 import { F1_DRIVERS, F1_TEAMS, F1_CARS, F1_MOMENTS } from './f1.js';
 import { MOTOGP_RIDERS, MOTOGP_TEAMS, MOTOGP_BIKES, MOTOGP_MOMENTS } from './motogp.js';
 import { CROSSOVER_CARDS } from './extras.js';
+import { F1_EXTRA_DRIVERS } from './legends-f1.js';
+import { MOTOGP_EXTRA_RIDERS } from './legends-motogp.js';
+import {
+  F1_EXTRA_TEAMS, F1_EXTRA_CARS, F1_EXTRA_MOMENTS,
+  MOTOGP_EXTRA_TEAMS, MOTOGP_EXTRA_BIKES, MOTOGP_EXTRA_MOMENTS,
+} from './legends-machines.js';
 import { kitFor, RARITY, COUNTRIES, ERA_ORDER, SPORTS, TYPE_META, ATTR_LABELS } from './core.js';
 
 let uid = 0;
@@ -73,13 +79,21 @@ function normalise(raw, sport, type) {
 
 export const CARDS = [
   ...F1_DRIVERS.map(r => normalise(r, 'f1', 'driver')),
+  ...F1_EXTRA_DRIVERS.map(r => normalise(r, 'f1', 'driver')),
   ...F1_TEAMS.map(r => normalise(r, 'f1', 'team')),
+  ...F1_EXTRA_TEAMS.map(r => normalise(r, 'f1', 'team')),
   ...F1_CARS.map(r => normalise(r, 'f1', 'car')),
+  ...F1_EXTRA_CARS.map(r => normalise(r, 'f1', 'car')),
   ...F1_MOMENTS.map(r => normalise(r, 'f1', 'moment')),
+  ...F1_EXTRA_MOMENTS.map(r => normalise(r, 'f1', 'moment')),
   ...MOTOGP_RIDERS.map(r => normalise(r, 'motogp', 'rider')),
+  ...MOTOGP_EXTRA_RIDERS.map(r => normalise(r, 'motogp', 'rider')),
   ...MOTOGP_TEAMS.map(r => normalise(r, 'motogp', 'team')),
+  ...MOTOGP_EXTRA_TEAMS.map(r => normalise(r, 'motogp', 'team')),
   ...MOTOGP_BIKES.map(r => normalise(r, 'motogp', 'bike')),
+  ...MOTOGP_EXTRA_BIKES.map(r => normalise(r, 'motogp', 'bike')),
   ...MOTOGP_MOMENTS.map(r => normalise(r, 'motogp', 'moment')),
+  ...MOTOGP_EXTRA_MOMENTS.map(r => normalise(r, 'motogp', 'moment')),
   ...CROSSOVER_CARDS.map(r => normalise(r, 'crossover', r.type || 'moment')),
 ];
 
@@ -95,6 +109,7 @@ function chartRarity() {
 }
 
 export const ERA_META = {
+  '1960s':{label:'1960s', sub:'The Pioneer Age', accent:'#d9b46a', accent2:'#3c2a0f', years:'1960 — 1969'},
   '1970s':{label:'1970s', sub:'The Golden Era', accent:'#f4b35c', accent2:'#7a3f12', years:'1970 — 1979'},
   '1980s':{label:'1980s', sub:'Turbo & Two-Stroke', accent:'#ff5f6d', accent2:'#4b0d14', years:'1980 — 1989'},
   '1990s':{label:'1990s', sub:'The Golden Age', accent:'#8b9bff', accent2:'#161c4d', years:'1990 — 1999'},
@@ -104,6 +119,7 @@ export const ERA_META = {
 };
 
 const ALBUM_DEFS = [
+  {id:'f1-60s', name:'F1 Pioneer Era', sport:'f1', era:'1960s', desc:'Rear engines, British garages and the first true global superstars of Formula 1.'},
   {id:'f1-70s', name:'F1 Golden Era', sport:'f1', era:'1970s', desc:'Ground-effect pioneers, gladiators and the birth of the modern grand prix.'},
   {id:'f1-80s', name:'F1 Turbo Age', sport:'f1', era:'1980s', desc:'1,000 horsepower, qualifying specials and the arrival of Senna and Prost.'},
   {id:'f1-90s', name:'F1 Golden Age', sport:'f1', era:'1990s', desc:'Electronic wizardry, legendary duels and the sport’s most iconic machines.'},
@@ -112,6 +128,7 @@ const ALBUM_DEFS = [
   {id:'f1-20s', name:'F1 Ground Effect', sport:'f1', era:'2020s', desc:'Verstappen’s reign, McLaren’s revival and the most intense grid in years.'},
   {id:'f1-machines', name:'F1 Machines', sport:'f1', types:['car'], desc:'The cars and constructors that shaped Formula 1 history.'},
   {id:'f1-moments', name:'F1 Defining Moments', sport:'f1', types:['moment'], desc:'The races, laps and rivalries that made Formula 1 immortal.'},
+  {id:'mgp-60s', name:'MotoGP Grand Prix Dawn', sport:'motogp', era:'1960s', desc:'Hailwood, Honda and the dawn of the modern grand prix motorcycle world.'},
   {id:'mgp-70s', name:'MotoGP Two-Stroke Dawn', sport:'motogp', era:'1970s', desc:'Agostini’s kingdom, Sheene’s showmanship and the first global stars.'},
   {id:'mgp-80s', name:'MotoGP American Wave', sport:'motogp', era:'1980s', desc:'Roberts, Spencer and Lawson bring dirt-track daring to Europe.'},
   {id:'mgp-90s', name:'MotoGP 500cc Golden Age', sport:'motogp', era:'1990s', desc:'Rainey vs Schwantz, Doohan’s dynasty and the NSR500 monster.'},
