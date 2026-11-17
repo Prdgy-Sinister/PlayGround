@@ -3,7 +3,7 @@
    ============================================================ */
 import { CARD_MAP, RARITY, cardValue } from './data/index.js';
 import { FINISHES } from './data/core.js';
-import { formatNumber } from './data/packs.js';
+import { formatNumber, packAvailability } from './data/packs.js';
 import { cardArt, flagSVG, rgba } from './art.js';
 import { sfx } from './audio.js';
 
@@ -155,12 +155,91 @@ export function oddsRows(pack) {
 export function guaranteeList(pack) {
   const bits = [];
   if (pack.guaranteeNew) bits.push(`${pack.guaranteeNew} new card${pack.guaranteeNew > 1 ? 's' : ''} guaranteed`);
+  if (pack.protectDupes) bits.push(`${pack.protectDupes} duplicate-protected slots`);
   for (const [rar, n] of Object.entries(pack.guarantees || {})) bits.push(`${n}× ${RARITY[rar]?.label || rar} or better`);
   if (pack.guaranteedFinish) bits.push(`1 ${FINISHES[pack.guaranteedFinish]?.name || pack.guaranteedFinish} guaranteed`);
+  if (pack.choice) bits.push(`Choose ${pack.choice.picks || 1} of ${pack.choice.count || 3} ${RARITY[pack.choice.rarity]?.label || 'premium'} cards`);
+  if (pack.finishBoost) bits.push('Boosted premium finish odds');
   if (pack.oncePerDay) bits.push('Once per day');
   if (!bits.length) bits.push('At least one new card');
   return bits;
 }
+
+export function packPoolLabel(pack) {
+  const f = pack.pool || {};
+  if (f.ids) return `${f.ids.length} hand-picked cards`;
+  if (f.signatures) return 'Signed drivers and riders only';
+  if (f.types) {
+    const names = { team:'constructors', car:'F1 cars', bike:'prototypes', driver:'drivers', rider:'riders', moment:'historic moments' };
+    return f.types.map(t => names[t] || t).join(' + ') + ' only';
+  }
+  if (f.eras) return `${f.eras[0]}–${f.eras[f.eras.length - 1]} cards only`;
+  if (pack.scope === 'f1') return 'Formula 1 only · every F1 era';
+  if (pack.scope === 'motogp') return 'MotoGP only · every GP era';
+  if (pack.scope === 'crossover') return 'Both paddocks + Crossover legends';
+  return 'Formula 1 × MotoGP · all eras';
+}
+
+function countdownText(ts) {
+  if (!ts) return '';
+  const ms = Math.max(0, ts - Date.now());
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+  return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+export function openPackDetails(pack, opts = {}) {
+  const avail = packAvailability(pack);
+  const bullets = pack.bullets?.length ? pack.bullets : [pack.desc];
+  const guarantees = guaranteeList(pack);
+  const odds = oddsRows(pack);
+  const price = pack.cost === 0 ? 'FREE' : `${pack.currency === 'gems' ? '◆' : '◈'} ${fmt(pack.cost)}`;
+  const timer = avail.available
+    ? (avail.endsAt ? `Ends in ${countdownText(avail.endsAt)}` : 'Always available')
+    : `Unlocks in ${countdownText(avail.startsAt)}`;
+  const flavour = pack.deal ? `<span class="chip red">FLASH · −${pack.discount}%</span>` : '';
+  const choice = pack.choice ? `<div class="pd-choice"><b>Choice pack</b><span>${pack.cards} opening cards plus ${pack.choice.count} ${RARITY[pack.choice.rarity]?.label || 'premium'} options. You keep ${pack.choice.picks || 1}.</span></div>` : '';
+  openModal(`<div class="pack-detail">
+    <div class="pd-art">
+      ${packHTML(pack)}
+      <div class="pd-price">${price}</div>
+      <div class="pd-timer ${avail.available ? '' : 'locked'}">${esc(timer)}</div>
+    </div>
+    <div class="pd-info">
+      <div class="di-kicker">
+        <span class="chip">${esc(pack.category === 'event' ? 'Event drop' : pack.category === 'special' ? 'Special edition' : pack.category === 'f1' ? 'Formula 1' : pack.category === 'motogp' ? 'MotoGP' : 'Featured')}</span>
+        ${flavour}
+        <span class="chip gold">${pack.cards} CARDS</span>
+      </div>
+      <h2>${esc(pack.name)}</h2>
+      <p class="pd-tag">${esc(pack.tagline)}</p>
+      <p class="pd-desc">${esc(pack.desc)}</p>
+      <div class="pd-section"><h4>Inside this pack</h4>
+        <ul class="pd-bullets">${bullets.map(b => `<li>${esc(b)}</li>`).join('')}</ul>
+        <div class="pd-pool">Pool · <b>${esc(packPoolLabel(pack))}</b></div>
+      </div>
+      <div class="pd-section"><h4>Guaranteed before you buy</h4>
+        <div class="pd-guarantees">${guarantees.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>
+        ${choice}
+      </div>
+      <div class="pd-section"><h4>Rarity odds <span>per card</span></h4>
+        <div class="pd-odds">${odds}</div>
+        <p class="pack-note">Odds are rolled per card. Guarantees are applied afterwards, so a pack can outperform the listed rates.</p>
+      </div>
+      <div class="pd-actions">
+        <button class="btn btn-primary btn-lg" data-open-pack="${esc(pack.id)}" ${avail.available ? '' : 'disabled'}>
+          ${avail.available ? `Open for ${price}` : 'Not live right now'}
+        </button>
+        <button class="btn" data-close-modal>Keep browsing</button>
+      </div>
+    </div>
+  </div>`, { wide: true, onMount: el => {
+    if (opts.onOpen) el.querySelector('[data-open-pack]')?.addEventListener('click', opts.onOpen);
+  } });
+}
+
+export { countdownText };
 
 /* ------------------------------------------------------------
    TOASTS

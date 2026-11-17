@@ -1,12 +1,12 @@
 /* ============================================================
    APEX RUSH — cinematic pack opening
    ============================================================ */
-import { openPack, potdPurchasesLeft } from './store.js';
+import { openPack, potdPurchasesLeft, choosePackCard } from './store.js';
 import { RARITY, cardValue } from './data/index.js';
-import { getPackOfTheDay } from './data/packs.js';
+import { getPackOfTheDay, packAvailability } from './data/packs.js';
 import {
   cardHTML, packHTML, esc, fmt, finishName, finishShort, serialText, toast,
-  rareBurst, sfx,
+  rareBurst, sfx, guaranteeList,
 } from './ui.js';
 
 let op = null;
@@ -17,7 +17,11 @@ export function showOpening(result, opts = {}) {
   const root = document.getElementById('screen-root');
   if (!root) return;
   const el = document.createElement('div');
-  el.className = 'opening';
+  const theme = pack.theme || (pack.category === 'motogp' ? 'motogp' : pack.category === 'event' ? 'event' : 'grid');
+  el.className = `opening theme-${theme}${pack.category === 'event' ? ' op-event' : ''}${pack.choice ? ' op-choice' : ''}`;
+  el.style.setProperty('--op1', pack.art?.p1 || '#ff2f38');
+  el.style.setProperty('--op2', pack.art?.p2 || '#080a0f');
+  el.style.setProperty('--op3', pack.art?.p3 || 'rgba(255,80,80,.5)');
   el.innerHTML = `<div class="op-head">
     <div class="op-brandline"><b>APEX RUSH</b><span>${esc(pack.name)}</span></div>
     <div class="op-progress-dots" data-op-dots>${result.results.map((_, i) => `<span class="op-dot${i === 0 ? ' now' : ''}" data-dot="${i}"></span>`).join('')}</div>
@@ -36,13 +40,17 @@ export function showOpening(result, opts = {}) {
 
 function renderPackStage() {
   const { pack } = op.result;
+  const avail = packAvailability(pack);
+  const specs = (pack.bullets || guaranteeList(pack)).slice(0, 3);
   const stage = op.el.querySelector('[data-op-stage]');
   stage.innerHTML = `<div class="op-pack-wrap">
+    ${avail.endsAt ? `<div class="op-event-ribbon"><i></i>${esc(avail.label)} · ${esc(pack.name)}</div>` : ''}
     <div class="op-pack-glow" style="--p3:${pack.art?.p3 || 'rgba(255,80,80,.5)'}"></div>
     <div class="op-pack-aura"></div>
     ${packHTML(pack)}
-    <div class="op-tear-hint"><b>Tap to tear</b><span>${pack.cards} cards sealed inside · ${pack.guaranteeNew || 1} new guaranteed</span><div class="chev">↓</div></div>
+    <div class="op-tear-hint"><b>Tap to tear</b><span>${pack.cards} cards sealed inside · ${pack.guaranteeNew ? `${pack.guaranteeNew} new guaranteed` : esc(guaranteeList(pack)[0])}</span><div class="chev">↓</div></div>
     <div class="op-pack-nameplate"><b>${esc(pack.name)}</b><span>·</span>${pack.cards} cards<span>·</span>${esc(pack.currency === 'gems' ? `◆ ${fmt(pack.cost)}` : pack.cost === 0 ? 'FREE' : `◈ ${fmt(pack.cost)}`)}</div>
+    <div class="op-pack-specs">${specs.map(s => `<span>${esc(s)}</span>`).join('')}</div>
   </div>
   <div class="tear-flash"></div><div class="tear-line"></div>`;
   const go = () => tear();
@@ -69,7 +77,7 @@ function tear() {
 function reveal() {
   if (!op) return;
   const { results } = op.result;
-  if (op.idx >= results.length) return summary();
+  if (op.idx >= results.length) return finishReveal();
   const r = results[op.idx];
   const rank = RARITY[r.card.rarity].rank;
   const wantsWalkout = (rank >= 3 && !op.walked.has('legendary')) || rank >= 4;
@@ -145,24 +153,27 @@ function next() {
 function summary() {
   if (!op) return;
   op.phase = 'summary';
-  const { pack, results, xpGain } = op.result;
-  const newCount = results.filter(r => r.isNew).length;
-  const total = results.reduce((n, r) => n + (r.value ?? cardValue(r.card, r.finish)), 0);
+  const { pack, results, xpGain, choice } = op.result;
+  const chosen = choice?.chosen;
+  const chosenRow = chosen ? [{ card: chosen.card, finish: chosen.finish, serial: chosen.serial, isNew: chosen.isNew, value: chosen.value, item: chosen.item }] : [];
+  const all = [...results, ...chosenRow];
+  const newCount = all.filter(r => r.isNew).length;
+  const total = all.reduce((n, r) => n + (r.value ?? cardValue(r.card, r.finish)), 0);
   const stage = op.el.querySelector('[data-op-stage]');
   stage.innerHTML = `<div class="op-summary">
     <div class="summary-head">
       <div class="sh-kicker">PACK COMPLETE · ${esc(pack.name)}</div>
       <h2>${newCount ? `${newCount} new card${newCount === 1 ? '' : 's'}` : 'Your pulls are in the vault'}</h2>
-      <p>${results.length} cards · ◈ ${fmt(total)} collector value · +${xpGain} XP</p>
+      <p>${all.length} cards · ◈ ${fmt(total)} collector value · +${xpGain + (chosen ? 18 : 0)} XP</p>
     </div>
     <div class="summary-grid">
-      ${results.map((r, i) => `<div style="--i:${i};width:100%">${cardHTML(r.card, { finish: r.finish, serial: r.serial, isNew: r.isNew, itemUid: r.item?.uid })}</div>`).join('')}
+      ${all.map((r, i) => `<div style="--i:${i};width:100%">${cardHTML(r.card, { finish: r.finish, serial: r.serial, isNew: r.isNew, itemUid: r.item?.uid })}</div>`).join('')}
     </div>
     <div class="summary-totals">
       <div class="new"><span>NEW</span><b>${newCount}</b></div>
-      <div class="dupe"><span>DUPLICATES</span><b>${results.length - newCount}</b></div>
+      <div class="dupe"><span>DUPLICATES</span><b>${all.length - newCount}</b></div>
       <div><span>VALUE</span><b>◈ ${fmt(total)}</b></div>
-      <div><span>XP</span><b>+${xpGain}</b></div>
+      <div><span>XP</span><b>+${xpGain + (chosen ? 18 : 0)}</b></div>
     </div>
     <div class="summary-actions">
       <button class="btn btn-primary" data-op-again>Open another</button>
@@ -183,6 +194,59 @@ function summary() {
     location.hash = '#/collection';
   });
   stage.querySelector('[data-op-done]').addEventListener('click', () => closeOpening());
+}
+
+function finishReveal() {
+  if (!op) return;
+  const { choice } = op.result;
+  if (choice && choice.chosenCount < choice.picks) return choiceStage();
+  summary();
+}
+
+function choiceStage() {
+  if (!op) return;
+  op.phase = 'choice';
+  const { pack, choice } = op.result;
+  const stage = op.el.querySelector('[data-op-stage]');
+  const remaining = choice.picks - choice.chosenCount;
+  const opts = choice.options;
+  stage.innerHTML = `<div class="choice-stage">
+    <div class="choice-head">
+      <div class="ch-kicker">COLLECTOR'S CHOICE · ${esc(pack.name)}</div>
+      <h2>Pick your legend</h2>
+      <p>${remaining} card${remaining === 1 ? '' : 's'} to claim. ${opts.length} ${RARITY[pack.choice.rarity]?.label || 'premium'} options, each sealed with a premium finish. The one you leave behind goes back to the vault.</p>
+    </div>
+    <div class="choice-grid">
+      ${opts.map((o, i) => `<button class="choice-opt${o.taken ? ' taken' : ''}" data-choice-id="${esc(o.card.id)}" ${o.taken ? 'disabled' : ''} style="--i:${i}">
+        <div class="choice-card">${cardHTML(o.card, { finish: o.finish, serial: o.serial, isNew: o.isNew })}</div>
+        <div class="choice-meta">
+          <b>${esc(o.card.name)}</b>
+          <span>${esc(o.card.sport === 'motogp' ? 'MotoGP' : o.card.sport === 'crossover' ? 'Crossover' : 'Formula 1')} · ${esc(o.card.typeLabel)} · ${esc(finishName(o.finish))}</span>
+          ${o.isNew ? '<span class="new-pill">NEW TO VAULT</span>' : '<span class="dupe-pill">DUPLICATE · ◈ ' + fmt(cardValue(o.card, o.finish)) + '</span>'}
+        </div>
+      </button>`).join('')}
+    </div>
+    <div class="choice-note">${remaining} of ${choice.picks} picks remaining · ${opts.filter(o => !o.taken).length} option${opts.filter(o => !o.taken).length === 1 ? '' : 's'} left</div>
+  </div>`;
+  stage.querySelectorAll('[data-choice-id]').forEach(btn => {
+    if (btn.disabled) return;
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.choiceId;
+      try {
+        const res = choosePackCard(op.result, id);
+        sfx.claim();
+        if (res?.option) {
+          op.result.choice.chosen = { card: res.option.card, finish: res.option.finish, serial: res.option.serial, isNew: res.option.isNew, value: res.value, item: res.item };
+          op.result.choice.chosenCount = op.result.choice.chosenCount;
+        }
+        if (op.result.choice.chosenCount < op.result.choice.picks) choiceStage();
+        else finishReveal();
+      } catch (err) {
+        sfx.error();
+        toast('red', 'Cannot claim that card', err.message, '!');
+      }
+    });
+  });
 }
 
 function againOpen() {
@@ -228,7 +292,7 @@ function bind() {
       clearTimers();
       reveal();
     } else if (op.phase === 'reveal') {
-      summary();
+      finishReveal();
     }
   });
   op.keyHandler = ev => {

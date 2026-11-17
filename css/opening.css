@@ -182,3 +182,41 @@
 @keyframes woSpeed{0%{opacity:0;background-position:0 0,0 22%,30% 38%,10% 62%,0 78%,45% 92%;transform:scaleX(1.3)}30%{opacity:.8}100%{opacity:0;transform:scaleX(.7)}}
 @keyframes summaryCardIn{from{opacity:0;transform:translateY(18px) scale(.94)}to{opacity:1;transform:none}}
 @keyframes rewardPop{from{opacity:0;transform:scale(.7) translateY(10px)}to{opacity:1;transform:none}}
+
+/* ---- per-pack themes (driven by --op1/2/3) ---- */
+.opening::after{background:radial-gradient(ellipse 45% 45% at 50% 46%, var(--op3,rgba(255,80,80,.06)), transparent 70%)}
+.opening.theme-f1::before{background:repeating-linear-gradient(90deg, rgba(255,47,56,.03) 0 1px, transparent 1px 90px), repeating-linear-gradient(0deg, rgba(255,255,255,.02) 0 1px, transparent 1px 90px);mask-image:radial-gradient(ellipse 70% 65% at 50% 50%, #000 20%, transparent 75%)}
+.opening.theme-motogp::after{background:radial-gradient(ellipse 45% 45% at 50% 46%, rgba(34,211,238,.09), transparent 70%)}
+.opening.theme-gold::after{background:radial-gradient(ellipse 45% 45% at 50% 46%, rgba(246,196,83,.12), transparent 70%)}
+.opening.theme-legend::after{background:radial-gradient(ellipse 45% 45% at 50% 46%, rgba(178,92,255,.12), transparent 70%)}
+.opening.theme-night{background:radial-gradient(ellipse 60% 55% at 50% 45%, #0a0c1a 0%, #05060a 60%, #02030a 100%)}
+.opening.theme-night::after{background:radial-gradient(ellipse 45% 45% at 50% 46%, rgba(90,110,255,.12), transparent 70%)}
+.opening.theme-heritage::after{background:radial-gradient(ellipse 45% 45% at 50% 46%, rgba(180,122,60,.14), transparent 70%)}
+.opening.theme-event::after{background:radial-gradient(ellipse 45% 45% at 50% 46%, rgba(255,90,90,.1), transparent 70%)}
+.opening.op-event .op-pack-wrap .pack{filter:saturate(1.1)}
+.op-event-ribbon{position:absolute;top:-10px;left:50%;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:linear-gradient(90deg,#ff2f38,#ff6a3d);color:#fff;font-family:var(--font-tech);font-size:9px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;box-shadow:0 0 24px rgba(255,47,56,.45);white-space:nowrap}
+.op-event-ribbon i{width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 0 8px #fff}
+.op-pack-specs{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:360px}
+.op-pack-specs span{padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid var(--line);font-family:var(--font-tech);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* ---- choice stage ---- */
+.choice-stage{width:100%;max-width:1180px;display:flex;flex-direction:column;align-items:center;gap:20px;animation:fadeIn .4s both;padding:0 4px;overflow:auto;max-height:100%}
+.choice-head{text-align:center;max-width:720px}
+.choice-head .ch-kicker{font-family:var(--font-tech);font-weight:700;font-size:9px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);margin-bottom:8px}
+.choice-head h2{font-family:var(--font-display);font-weight:800;font-size:34px;line-height:.95;text-transform:uppercase;letter-spacing:.03em;margin:0 0 8px}
+.choice-head p{font-size:12px;color:var(--muted);line-height:1.6}
+.choice-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;width:100%;justify-items:center;max-width:980px}
+.choice-opt{display:flex;flex-direction:column;gap:12px;align-items:center;padding:16px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#131722,#0a0d13);cursor:pointer;transition:.22s;width:100%;max-width:300px}
+.choice-opt:hover{transform:translateY(-4px);border-color:rgba(255,196,83,.35);box-shadow:0 24px 50px -20px #000,0 0 30px -10px rgba(255,196,83,.25)}
+.choice-opt.taken{opacity:.4;pointer-events:none}
+.choice-opt .choice-card{width:100%;display:flex;justify-content:center}
+.choice-opt .choice-card .card{width:100%;max-width:200px}
+.choice-meta{display:flex;flex-direction:column;gap:4px;align-items:center;text-align:center}
+.choice-meta b{font-family:var(--font-display);font-weight:800;font-size:18px;letter-spacing:.03em;text-transform:uppercase}
+.choice-meta span{font-family:var(--font-tech);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.choice-note{font-family:var(--font-tech);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+
+@media (max-width:720px){
+  .choice-head h2{font-size:26px}
+  .choice-grid{grid-template-columns:1fr}
+}

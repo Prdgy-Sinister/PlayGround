@@ -2,7 +2,7 @@
    APEX RUSH — game state, economy, packs, market, trading
    ============================================================ */
 import { CARDS, CARD_MAP, ALBUMS, ALBUM_MAP, RARITY, cardValue } from './data/index.js';
-import { PACKS, PACK_MAP, getPackOfTheDay, finishWeights } from './data/packs.js';
+import { PACKS, PACK_MAP, getPackOfTheDay, finishWeights, packAvailability } from './data/packs.js';
 import {
   DAILY_REWARDS, DAILY_CHALLENGE_POOL, ACHIEVEMENTS, levelNeeded,
   localDateKey, challengeForToday,
@@ -46,7 +46,7 @@ function freshState() {
       packsOpened: 0, cardsPulled: 0, cardsSold: 0, cardsBought: 0, trades: 0,
       epicPulls: 0, legendaryPulls: 0, iconicPulls: 0, goldPacks: 0, dailyPacks: 0,
       coinsSpent: 0, coinsEarned: 0, maxUnique: 0, albumsCompleted: 0, bestStreak: 0,
-      marketRefresh: 0, xpEarned: 0,
+      marketRefresh: 0, xpEarned: 0, eventPacks: 0, offerPacks: 0,
     },
     daily: {
       date: now, packsOpened: 0, newCards: 0, epicPulls: 0, legendaryPulls: 0,
@@ -289,10 +289,21 @@ function weighted(entries, rnd = Math.random) {
   return entries[entries.length-1][0];
 }
 function packPool(pack) {
-  if (pack.scope === 'f1') return CARDS.filter(c => c.sport === 'f1');
-  if (pack.scope === 'motogp') return CARDS.filter(c => c.sport === 'motogp');
-  if (pack.scope === 'crossover') return CARDS;
-  return CARDS.filter(c => c.sport !== 'crossover');
+  let pool = CARDS;
+  if (pack.scope === 'f1') pool = pool.filter(c => c.sport === 'f1');
+  else if (pack.scope === 'motogp') pool = pool.filter(c => c.sport === 'motogp');
+  else if (pack.scope === 'crossover') pool = pool;
+  else pool = pool.filter(c => c.sport !== 'crossover');
+  const f = pack.pool || {};
+  if (f.sport) pool = pool.filter(c => c.sport === f.sport);
+  if (f.types) pool = pool.filter(c => f.types.includes(c.type));
+  if (f.eras) pool = pool.filter(c => f.eras.includes(c.era));
+  if (f.countries) pool = pool.filter(c => f.countries.includes(c.country));
+  if (f.teams) pool = pool.filter(c => f.teams.includes(c.team));
+  if (f.ids) { const set = new Set(f.ids); pool = pool.filter(c => set.has(c.id)); }
+  if (f.signatures) pool = pool.filter(c => !!c.signature);
+  if (f.query) pool = pool.filter(c => c.searchable.includes(f.query));
+  return pool.length ? pool : CARDS;
 }
 function rollRarity(pack, rnd) {
   return weighted(Object.entries(pack.odds).map(([k,v]) => [k, v]), rnd);
@@ -330,11 +341,13 @@ function generatePull(pack, forcedFinish = null) {
   const picks = [];
   const used = new Set();
   const floors = pack.guarantees || {};
-  const allFloor = Object.entries(floors).reduce((best, [rar, n]) => (n >= pack.cards && RANK[rar] > RANK[best] ? rar : best), 'common');
+  const cardCount = pack.cards;
+  const protectedNew = Math.max(pack.guaranteeNew || 0, pack.protectDupes || 0);
+  const allFloor = Object.entries(floors).reduce((best, [rar, n]) => (n >= cardCount && RANK[rar] > RANK[best] ? rar : best), 'common');
 
-  for (let slot = 0; slot < pack.cards; slot++) {
+  for (let slot = 0; slot < cardCount; slot++) {
     let rarity;
-    if (slot < (pack.guaranteeNew || 0) && owned.size < 300) {
+    if (slot < protectedNew && owned.size < 420) {
       rarity = rollRarity(pack, rnd);
       let card = cardOfRarity(pool, rarity, used, true, owned, rnd);
       if (!card) card = cardOfRarity(pool, rarity, used, false, owned, rnd);
@@ -371,9 +384,9 @@ function generatePull(pack, forcedFinish = null) {
     }
   }
 
-  // guarantee new cards remaining
+  // guarantee new cards / duplicate protection remaining
   let newCount = picks.filter(p => p.new).length;
-  for (let i = 0; i < picks.length && newCount < (pack.guaranteeNew || 0); i++) {
+  for (let i = 0; i < picks.length && newCount < protectedNew; i++) {
     if (picks[i].new) continue;
     const exclude = new Set(picks.map(p => p.card.id));
     let card = cardOfRarity(pool, picks[i].card.rarity, exclude, true, owned, rnd);
@@ -408,7 +421,7 @@ function generatePull(pack, forcedFinish = null) {
   return result;
 }
 
-export function openPack(packId) {
+export function openPack(packId, opts = {}) {
   ensureToday();
   const today = todayKey();
   let pack;
@@ -419,6 +432,25 @@ export function openPack(packId) {
     pack = PACK_MAP[packId];
   }
   if (!pack) throw gameError('NO_PACK', 'Unknown pack');
+
+  let deal = null;
+  if (opts.deal && opts.deal.baseId === (pack.baseId || pack.id) && opts.deal.endsAt > Date.now()) {
+    deal = opts.deal;
+    pack = {
+      ...pack,
+      name: deal.name || pack.name,
+      cost: deal.cost,
+      baseCost: deal.baseCost,
+      discount: deal.discount,
+      deal: true,
+      extra: deal.extra,
+      bonusCards: deal.bonusCards || 0,
+      endsAt: deal.endsAt,
+    };
+  }
+
+  const availability = packAvailability(pack);
+  if (!availability.available) throw gameError('PACK_LOCKED', `${pack.name} is not live right now`);
   if (pack.oncePerDay && state.dailyPackDate === today) throw gameError('DAILY_USED', 'Daily Pack already claimed today');
   if (packId === 'potd' && state.coins < pack.cost && !state.tokens.includes('potd')) {
     throw gameError('NOT_ENOUGH_COINS', 'Not enough coins');
@@ -426,7 +458,7 @@ export function openPack(packId) {
 
   let usedToken = false;
   const tokenIdx = state.tokens.indexOf(packId);
-  if (tokenIdx >= 0 && packId !== 'potd') {
+  if (tokenIdx >= 0 && packId !== 'potd' && !deal) {
     state.tokens.splice(tokenIdx, 1);
     usedToken = true;
     state.tokensUsed++;
@@ -434,7 +466,8 @@ export function openPack(packId) {
     spendCurrency(pack.currency, pack.cost);
   }
 
-  const pulls = generatePull(pack);
+  const pullPack = pack.bonusCards ? {...pack, cards: pack.cards + pack.bonusCards} : pack;
+  const pulls = generatePull(pullPack);
   const results = [];
   for (const p of pulls) {
     const item = addItem(p.card.id, p.finish, {serial: p.serial, source: packId});
@@ -454,12 +487,64 @@ export function openPack(packId) {
   if (pack.oncePerDay) state.dailyPackDate = today;
   if (packId === 'daily') { state.stats.dailyPacks++; state.daily.dailyPacks++; }
   if (packId === 'gold' || packId === 'f1-gold' || packId === 'motogp-gold') { state.stats.goldPacks++; state.daily.goldPacks++; }
+  if (pack.category === 'event') state.stats.eventPacks = (state.stats.eventPacks || 0) + 1;
+  if (deal) state.stats.offerPacks = (state.stats.offerPacks || 0) + 1;
   if (packId === 'potd') state.potd.purchases++;
+
+  /* Choice packs: build the option table after the normal pulls land. */
+  let choice = null;
+  if (pack.choice) {
+    const cfg = pack.choice;
+    const pool = packPool(pack);
+    const ownedNow = new Set(state.items.map(i => i.cardId));
+    const used = new Set(results.map(r => r.card.id));
+    const options = [];
+    for (let i = 0; i < (cfg.count || 3); i++) {
+      const rarity = cfg.rarity || 'legendary';
+      let card = cardOfRarity(pool, rarity, used, true, ownedNow, Math.random)
+        || cardOfRarity(pool, rarity, used, false, ownedNow, Math.random);
+      if (!card) card = pool.find(c => !used.has(c.id)) || pool[i % pool.length];
+      let finish = rollFinish(pack, card, Math.random);
+      if (finish === 'base' && cfg.finish) finish = cfg.finish;
+      options.push({card, finish, serial: null, isNew: !ownedNow.has(card.id)});
+      used.add(card.id);
+    }
+    for (const o of options) if (o.finish === 'numbered') o.serial = serialFor(o.card);
+    choice = {options, picks: cfg.picks || 1, chosenCount: 0, chosen: null};
+  }
+
   const xpGain = 30 + results.reduce((s, r) => s + (r.isNew ? 12 : 2) + ({common:0,rare:2,epic:8,legendary:18,iconic:45}[r.card.rarity] || 0), 0);
   const levelUps = addXp(xpGain);
   if (state.stats.maxUnique < uniqueCount()) state.stats.maxUnique = uniqueCount();
   save(); emit();
-  return {pack, results, usedToken, currency: pack.currency, amount: pack.cost, levelUps, xpGain};
+  return {pack, results, choice, usedToken, currency: pack.currency, amount: pack.cost, levelUps, xpGain, deal};
+}
+
+export function choosePackCard(result, cardId) {
+  const choice = result?.choice;
+  if (!choice) throw gameError('NO_CHOICE', 'This pack has no choice to make');
+  if (choice.chosenCount >= choice.picks) throw gameError('CHOICE_DONE', 'You have already made your pick');
+  const option = choice.options.find(o => o.card.id === cardId && !o.taken);
+  if (!option) throw gameError('NO_OPTION', 'That card is not one of the choices');
+  const item = addItem(option.card.id, option.finish, {serial: option.serial, source:'choice'});
+  const value = cardValue(option.card, option.finish);
+  option.taken = true;
+  option.item = item;
+  option.value = value;
+  choice.chosenCount++;
+  if (choice.chosenCount >= choice.picks) choice.chosen = option;
+
+  state.stats.cardsPulled++;
+  state.daily.newCards += option.isNew ? 1 : 0;
+  if (RANK[option.card.rarity] >= 2) { state.stats.epicPulls++; state.daily.epicPulls++; }
+  if (RANK[option.card.rarity] >= 3) { state.stats.legendaryPulls++; state.daily.legendaryPulls++; }
+  if (RANK[option.card.rarity] >= 4) state.stats.iconicPulls++;
+  state.recentPulls.unshift({cardId: option.card.id, finish: option.finish, serial: option.serial, isNew: option.isNew, at: Date.now(), uid: item.uid});
+  state.recentPulls = state.recentPulls.slice(0, 24);
+  addXp(18);
+  if (state.stats.maxUnique < uniqueCount()) state.stats.maxUnique = uniqueCount();
+  save(); emit();
+  return {option, item, value};
 }
 
 /* ---------------- albums ---------------- */

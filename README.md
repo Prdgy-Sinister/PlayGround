@@ -15,12 +15,13 @@ All progress is saved locally in the browser. Use **Settings & Save** to export 
 
 ## Features
 
-- **254 cards** across five rarity tiers — Common, Rare, Epic, Legendary and Iconic.
+- **454 cards** across five rarity tiers — Common, Rare, Epic, Legendary and Iconic.
 - **Eight card finishes**, including Holo, Gold, Championship, Anniversary, Signature, Shadow and numbered Limited editions.
-- **14 sealed packs** for F1, MotoGP, crossover and premium specials, plus a daily free pack and a rotating discounted Pack of the Day.
-- **Cinematic reveals** with tear, walkout and rare-pull celebration sequences.
-- **Set building** across 17 era and discipline albums with claimable rewards.
-- **Collector economy** — marketplace singles, duplicate selling, trade offers, daily rewards, rotating objectives, achievements and level progression.
+- **37 sealed packs** for F1, MotoGP, crossover and premium specials, including duplicate-protected, choice, event and rotating-offer packs, plus a daily free pack and a rotating discounted Pack of the Day.
+- **Cinematic reveals** with tear, walkout, rare-pull celebration and choice-pack sequences.
+- **19 era and discipline albums** with claimable rewards, now including 1960s Pioneer Era sets.
+- **Collector economy** — marketplace singles, duplicate selling, trade offers, daily rewards, rotating objectives, achievements, challenge-earned pack tokens, level progression, live countdowns and rotating flash offers.
+- **Disclosed pack odds** — every pack publishes its pool, guarantees and per-card rarity odds before purchase.
 - **Statistics and career records** on every driver, rider, constructor, car, bike and historic moment.
 - **Procedural artwork and audio**, so the game runs with no external asset or network dependencies.
 
