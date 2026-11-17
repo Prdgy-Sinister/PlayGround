@@ -9,8 +9,8 @@ import { EXCLUSIVE_SPECS, AUTOGRAPH_SPECS, exclusiveIdsForPack } from './data/ex
 import { NUMBERED_CAPS, AUTOGRAPH_EDITIONS } from './data/core.js';
 import { PACKS, PACK_MAP, getPackOfTheDay, finishWeights, packAvailability } from './data/packs.js';
 import {
-  marketValue, itemMarketValue, rollGrade, gradingFromScore,
-  GRADING_SERVICES, gradeService, gradeMultiplier,
+  marketValue, itemMarketValue, rollGrade, gradingFromScore, normalizeGrading,
+  gradedValue, GRADING_SERVICES, gradeService, gradeMultiplier, gradingProfile,
   priceInfo, marketIndicators, topGainers, topLosers, priceSeries, marketIndex, marketEvents,
 } from './pricing.js';
 import {
@@ -25,6 +25,7 @@ import {
 } from './data/relics.js';
 import { ROOMS, ROOM_MAP, DISPLAYS, DISPLAY_MAP, THEMES, THEME_MAP, PRESTIGE, RIVAL_COLLECTORS } from './data/showroom.js';
 import { SEASON_ALBUMS, SEASON_MAP, ALL_SEASON_MAP, SEASON_CARD_IDS, ALL_SEASONS } from './data/seasons.js';
+import { AUCTION_LOCATIONS, AUCTION_LOCATION_MAP, auctionLocation } from './data/auctions.js';
 import {
   HISTORICAL_CHALLENGES, HISTORICAL_CHALLENGE_MAP,
   CHAMPION_CARD_IDS, COLLECTOR_TITLES,
@@ -81,7 +82,7 @@ function freshState() {
     relicClaims: [],
     relicPackOpened: 0,
     relicMarket: {seed: 0, date: now, bought: [], history: []},
-    auctions: {seed: 0, date: now, bids: {}, history: []},
+    auctions: {seed: 0, date: now, location: 'london', bids: {}, history: []},
     showroom: {
       rooms: ['main'],
       displays: [],
@@ -102,7 +103,7 @@ function freshState() {
       marketRefresh: 0, xpEarned: 0, eventPacks: 0, offerPacks: 0, graded: 0, gradingSpend: 0,
       exclusivesPulled: 0, autographsPulled: 0, tokensEarned: 0, vaultRedeems: 0,
       relicsCollected: 0, relicPacksOpened: 0, relicsSold: 0, relicsBought: 0,
-      auctionsWon: 0, roomsUnlocked: 0, showroomItems: 0,
+      auctionsWon: 0, auctionSpent: 0, auctionLocations: 0, roomsUnlocked: 0, showroomItems: 0,
     },
     daily: {
       date: now, packsOpened: 0, newCards: 0, epicPulls: 0, legendaryPulls: 0,
@@ -145,6 +146,9 @@ function hydrate(raw) {
   s.collectorTokens = Math.max(0, Number(raw.collectorTokens) || 0);
   s.items = Array.isArray(raw.items) ? raw.items.filter(it => it && CARD_MAP[it.cardId]) : [];
   s.relics = Array.isArray(raw.relics) ? raw.relics.filter(it => it && RELIC_MAP[it.relicId]) : [];
+  // Upgrade legacy numeric/subgrade-only reports into full condition reports.
+  for (const item of s.items) item.grading = normalizeGrading(item.grading, CARD_MAP[item.cardId], 'card', item.uid);
+  for (const item of s.relics) item.grading = normalizeGrading(item.grading, RELIC_MAP[item.relicId], RELIC_MAP[item.relicId]?.kind || 'memorabilia', item.uid);
   s.issuedRelics = raw.issuedRelics && typeof raw.issuedRelics === 'object' && !Array.isArray(raw.issuedRelics) ? {...raw.issuedRelics} : {};
   for (const item of s.relics) {
     if (item.serial == null) continue;
@@ -181,6 +185,7 @@ function hydrate(raw) {
   s.auctions = {...base.auctions, ...(raw.auctions || {})};
   s.auctions.bids = raw.auctions?.bids && typeof raw.auctions.bids === 'object' ? {...raw.auctions.bids} : {};
   s.auctions.history = Array.isArray(s.auctions?.history) ? s.auctions.history : [];
+  if (!AUCTION_LOCATION_MAP[s.auctions.location]) s.auctions.location = base.auctions.location;
   s.showroom = {...base.showroom, ...(raw.showroom || {})};
   s.showroom.rooms = Array.isArray(s.showroom.rooms) ? s.showroom.rooms.filter(id => ROOM_MAP[id]) : ['main'];
   if (!s.showroom.rooms.includes('main')) s.showroom.rooms.unshift('main');
@@ -1204,16 +1209,19 @@ export function addRelic(relicId, opts = {}) {
   const relic = RELIC_MAP[relicId];
   if (!relic) throw gameError('NO_RELIC', 'Unknown collectible');
   const serial = issueRelicSerial(relic);
-  const item = {uid: 'r' + uid(), relicId, serial, at: Date.now(), source: opts.source || 'pack'};
+  const item = {
+    uid: 'r' + uid(), relicId, serial, at: Date.now(), source: opts.source || 'pack',
+    grading: opts.grading ? normalizeGrading(opts.grading, relic, relic.kind === 'merchandise' ? 'merchandise' : 'memorabilia', serial || uid()) : null,
+  };
   state.relics.push(item);
   state.stats.relicsCollected = (state.stats.relicsCollected || 0) + 1;
   if (relic.kind === 'memorabilia') state.stats.maxUnique = Math.max(state.stats.maxUnique, uniqueCount());
-  return {item, relic, serial, value: relicValue(relic)};
+  return {item, relic, serial, value: gradedValue(relicValue(relic), item.grading)};
 }
 export function ownedRelics() {
   return state.relics.map(item => {
     const relic = RELIC_MAP[item.relicId];
-    return relic ? {item, relic, value: relicValue(relic)} : null;
+    return relic ? {item, relic, value: gradedValue(relicValue(relic), item.grading)} : null;
   }).filter(Boolean);
 }
 export function uniqueRelicCount() { return new Set(state.relics.map(r => r.relicId)).size; }
@@ -1301,7 +1309,7 @@ export function sellRelicItem(itemUid) {
   if (idx < 0) throw gameError('NO_ITEM', 'Collectible not found');
   const item = state.relics[idx];
   const relic = RELIC_MAP[item.relicId];
-  const value = relicValue(relic);
+  const value = gradedValue(relicValue(relic), item.grading);
   state.relics.splice(idx, 1);
   state.coins += value;
   state.stats.coinsEarned += value;
@@ -1334,11 +1342,15 @@ export function relicMarketListings() {
     used.add(relic.id);
     const id = `rl${state.relicMarket.seed}_${i}`;
     const spread = 1.05 + rnd() * .45;
+    const grading = i < 2 && rnd() > .3
+      ? gradingFromScore(relic, 7 + Math.floor(rnd() * 4), 'market', state.relicMarket.seed * 19 + i, relic.kind)
+      : null;
+    const raw = relicValue(relic);
     out.push({
-      id, relic,
+      id, relic, grading,
       serial: relic.supply ? 1 + Math.floor(rnd() * relic.supply) : null,
-      price: Math.max(30, Math.round(relicValue(relic) * spread / 10) * 10),
-      rawPrice: relicValue(relic),
+      price: Math.max(30, Math.round(gradedValue(raw * spread, grading) / 10) * 10),
+      rawPrice: raw,
       spread,
       bought: state.relicMarket.bought.includes(id),
       seller: RIVAL_COLLECTORS[Math.floor(rnd() * RIVAL_COLLECTORS.length)].alias,
@@ -1357,7 +1369,7 @@ export function buyRelicListing(listingId) {
   state.daily.coinsSpent += listing.price;
   state.stats.relicsBought = (state.stats.relicsBought || 0) + 1;
   state.relicMarket.bought.push(listing.id);
-  const added = addRelic(listing.relic.id, {source:'market', serialHint: listing.serial});
+  const added = addRelic(listing.relic.id, {source:'market', serialHint: listing.serial, grading: listing.grading});
   state.relicMarket.history.unshift({
     type:'buy', relicId: listing.relic.id, serial: added.serial, price: listing.price, at: Date.now(), buyer: listing.seller,
   });
@@ -1374,71 +1386,128 @@ export function refreshRelicMarket() {
   save(); emit();
 }
 
-/* ---------------- simulated memorabilia auctions ---------------- */
-export function auctionLots() {
-  ensureToday();
+/* ---------------- global auction circuit ----------------
+   A shared sale board with twelve salerooms. Lot ids carry the location and
+   sale seed, so bids stay attached to the right city when you travel.
+   ------------------------------------------------ */
+const locationSeed = id => [...String(id)].reduce((n, ch) => (n * 31 + ch.charCodeAt(0)) | 0, 7) >>> 0;
+
+function buildAuctionLots(loc) {
   const dateSeed = parseInt(String(state.auctions.date || '').replace(/-/g, ''), 10) || 0;
-  const rnd = rngFrom(4211 + state.auctions.seed * 3571 + (dateSeed % 9973));
-  const pool = RELICS.filter(r => {
-    if (!r.supply || relicSupplyInfo(r).remaining <= 0) return false;
-    return ['legendary','iconic','museum'].includes(r.rarity) || r.signed || r.limited;
-  });
+  const rnd = rngFrom(locationSeed(loc.id) + state.auctions.seed * 3571 + (dateSeed % 9973));
+  const eligible = RELICS.filter(r => (!r.supply || relicSupplyInfo(r).remaining > 0)
+    && (['legendary','iconic','museum'].includes(r.rarity) || r.signed || r.limited));
+  const weighted = eligible.map(relic => ({
+    relic,
+    weight: 1 + (RELIC_RARITY[relic.rarity]?.rank || 0) * 2 + (loc.categories.includes(relic.category) ? 4 : 0),
+  }));
+  const pick = () => {
+    const total = weighted.reduce((n, w) => n + w.weight, 0);
+    if (!total) return null;
+    let roll = rnd() * total;
+    for (const w of weighted) { roll -= w.weight; if (roll <= 0) return w.relic; }
+    return weighted[weighted.length - 1].relic;
+  };
   const lots = [];
   const used = new Set();
   for (let i = 0; i < 3; i++) {
-    let relic;
-    for (let tries = 0; tries < 40; tries++) {
-      const cand = pool[Math.floor(rnd() * pool.length)];
+    let relic = null;
+    for (let tries = 0; tries < 50; tries++) {
+      const cand = pick();
       if (cand && !used.has(cand.id)) { relic = cand; break; }
     }
     if (!relic) break;
     used.add(relic.id);
-    const id = `au${state.auctions.seed}_${i}`;
-    const start = Math.round(relicValue(relic) * (0.85 + rnd() * .3) / 10) * 10;
+    const id = `au-${loc.id}-${state.auctions.seed}-${i}`;
+    const grading = rnd() > .58
+      ? gradingFromScore(relic, 7 + Math.floor(rnd() * 4), 'market', state.auctions.seed * 31 + i + locationSeed(loc.id), relic.kind)
+      : null;
+    const estimate = gradedValue(relicValue(relic), grading);
+    const start = Math.max(50, Math.round(estimate * loc.start * (.82 + rnd() * .28) / 10) * 10);
     const bid = state.auctions.bids[id];
-    const bidder = bid?.bidder || RIVAL_COLLECTORS[Math.floor(rnd() * RIVAL_COLLECTORS.length)].alias;
+    const bidder = bid?.bidder || loc.bidders[Math.floor(rnd() * loc.bidders.length)] || RIVAL_COLLECTORS[0].alias;
     const current = bid?.amount || start;
-    const increment = Math.max(50, Math.round(current * .06 / 10) * 10);
+    const increment = Math.max(25, Math.round(current * .06 / 10) * 10);
     lots.push({
-      id, relic, start, current, increment, bidder,
+      id, relic, grading, location: loc, start, current, increment, bidder,
       youLeading: bid?.bidder === 'You',
-      buyNow: Math.round(start * 1.45 / 10) * 10,
-      watchers: 4 + Math.floor(rnd() * 22),
-      endsIn: 6 + Math.floor(rnd() * 18),
-      history: (state.auctions.history.filter(h => h.lotId === id)).slice(0, 5),
+      buyNow: Math.max(start + increment * 2, Math.round(estimate * (1.18 + loc.premium + rnd() * .2) / 10) * 10),
+      watchers: 3 + Math.floor(rnd() * 26),
+      endsIn: 4 + Math.floor(rnd() * 18),
+      history: state.auctions.history.filter(h => h.lotId === id).slice(0, 5),
     });
   }
   return lots;
 }
+
+export function auctionLots(locationId = state.auctions.location) {
+  ensureToday();
+  const loc = auctionLocation(locationId);
+  return buildAuctionLots(loc);
+}
+export function allAuctionLots() {
+  ensureToday();
+  return AUCTION_LOCATIONS.flatMap(loc => buildAuctionLots(loc));
+}
+export function setAuctionLocation(locationId) {
+  if (!AUCTION_LOCATION_MAP[locationId]) throw gameError('NO_LOCATION', 'Unknown auction location');
+  state.auctions.location = locationId;
+  save(); emit();
+  return auctionLocation(locationId);
+}
+export function auctionCircuitStats() {
+  ensureToday();
+  const wins = state.auctions.history.filter(h => h.type === 'won');
+  return AUCTION_LOCATIONS.map(loc => {
+    const locationWins = wins.filter(h => h.locationId === loc.id);
+    return {
+      ...loc,
+      wins: locationWins.length,
+      spent: locationWins.reduce((n, h) => n + (h.amount || 0), 0),
+      active: loc.id === state.auctions.location,
+    };
+  });
+}
 export function placeAuctionBid(lotId, amount) {
   ensureToday();
-  const lot = auctionLots().find(l => l.id === lotId);
+  const lot = allAuctionLots().find(l => l.id === lotId);
   if (!lot) throw gameError('NO_LOT', 'Auction lot not found');
   const bid = Math.round(Number(amount) || 0);
   if (bid < lot.current + lot.increment) throw gameError('BID_TOO_LOW', `Bid must be at least ◈ ${(lot.current + lot.increment).toLocaleString()}`);
   if (state.coins < bid) throw gameError('NOT_ENOUGH_COINS', 'Not enough coins to place that bid');
+  const loc = lot.location;
   if (bid >= lot.buyNow) {
     state.coins -= bid;
     state.stats.coinsSpent += bid;
-    const added = addRelic(lot.relic.id, {source:'auction'});
-    state.auctions.history.unshift({lotId, type:'won', relicId: lot.relic.id, amount: bid, bidder:'You', at: Date.now()});
-    state.auctions.history = state.auctions.history.slice(0, 40);
+    state.stats.auctionSpent = (state.stats.auctionSpent || 0) + bid;
+    const added = addRelic(lot.relic.id, {source:'auction', grading: lot.grading});
+    state.auctions.history.unshift({
+      lotId, type:'won', relicId: lot.relic.id, amount: bid, bidder:'You',
+      locationId: loc.id, city: loc.city, at: Date.now(),
+    });
+    state.auctions.history = state.auctions.history.slice(0, 60);
     state.stats.auctionsWon = (state.stats.auctionsWon || 0) + 1;
+    state.stats.auctionLocations = new Set(state.auctions.history.filter(h => h.type === 'won' && h.locationId).map(h => h.locationId)).size;
     delete state.auctions.bids[lotId];
     addXp(30);
     save(); emit();
-    return {won: true, ...added, amount: bid, lot};
+    return {won: true, ...added, amount: bid, lot, location: loc};
   }
   state.auctions.bids[lotId] = {amount: bid, bidder: 'You'};
-  state.auctions.history.unshift({lotId, type:'bid', relicId: lot.relic.id, amount: bid, bidder:'You', at: Date.now()});
-  const rnd = rngFrom(777 + lot.id.length * 31 + bid);
+  state.auctions.history.unshift({
+    lotId, type:'bid', relicId: lot.relic.id, amount: bid, bidder:'You', locationId: loc.id, city: loc.city, at: Date.now(),
+  });
+  const rnd = rngFrom(locationSeed(lot.id) + bid);
   const counter = Math.round(bid * (1.05 + rnd() * .12) / 10) * 10;
-  const rival = RIVAL_COLLECTORS[Math.floor(rnd() * RIVAL_COLLECTORS.length)].alias;
+  const rival = loc.bidders[Math.floor(rnd() * loc.bidders.length)] || RIVAL_COLLECTORS[0].alias;
   state.auctions.bids[lotId] = {amount: counter, bidder: rival};
-  state.auctions.history.unshift({lotId, type:'outbid', relicId: lot.relic.id, amount: counter, bidder: rival, at: Date.now()});
-  state.auctions.history = state.auctions.history.slice(0, 40);
+  state.auctions.history.unshift({
+    lotId, type:'outbid', relicId: lot.relic.id, amount: counter, bidder: rival,
+    locationId: loc.id, city: loc.city, at: Date.now(),
+  });
+  state.auctions.history = state.auctions.history.slice(0, 60);
   save(); emit();
-  return {won:false, amount: bid, counter, bidder: rival, lot};
+  return {won:false, amount: bid, counter, bidder: rival, lot, location: loc};
 }
 export function refreshAuctions() {
   ensureToday();
@@ -1470,6 +1539,7 @@ export function showroomPrestige(s = state) {
     if (entry.relic.dualSigned) points += 80;
     if (entry.relic.limited) points += 30;
     if (entry.item.serial != null) points += 20;
+    if (entry.item.grading) points += 8;
   }
   points += ALBUMS.filter(a => albumProgress(a, s).complete).length * 100;
   points += RELIC_ALBUMS.filter(a => relicAlbumProgress(a, s).complete).length * 150;
@@ -1712,23 +1782,41 @@ export function redeemVault(editionId) {
   return {card, item, edition, cost: edition.tokens};
 }
 
-/* ---------------- grading ---------------- */
-export function gradeItem(itemUid, serviceId = 'standard') {
+/* ---------------- grading ----------------
+   One lab handles every collectible: cards are sealed in slabs, relics and
+   merchandise are sealed in display cases, both with a written condition
+   report explaining the number.
+   ------------------------------------------------ */
+function gradingTarget(itemUid, kindHint = null) {
+  if (kindHint !== 'relic') {
+    const item = state.items.find(i => i.uid === itemUid);
+    if (item && CARD_MAP[item.cardId]) return {item, subject: CARD_MAP[item.cardId], kind: 'card'};
+  }
+  if (kindHint !== 'card') {
+    const item = state.relics.find(i => i.uid === itemUid);
+    if (item && RELIC_MAP[item.relicId]) {
+      const relic = RELIC_MAP[item.relicId];
+      return {item, subject: relic, kind: relic.kind === 'merchandise' ? 'merchandise' : 'memorabilia'};
+    }
+  }
+  return null;
+}
+
+export function gradeItem(itemUid, serviceId = 'standard', kindHint = null) {
   ensureToday();
-  const item = state.items.find(i => i.uid === itemUid);
-  if (!item) throw gameError('NO_ITEM', 'Card not found');
-  if (item.grading) throw gameError('ALREADY_GRADED', 'This card is already sealed in a slab');
-  const card = CARD_MAP[item.cardId];
-  if (!card) throw gameError('NO_CARD', 'Unknown card');
+  const target = gradingTarget(itemUid, kindHint);
+  if (!target) throw gameError('NO_ITEM', 'Collectible not found');
+  const {item, subject, kind} = target;
+  if (item.grading) throw gameError('ALREADY_GRADED', `This item is already sealed in its ${gradingProfile(kind).case}`);
   const svc = gradeService(serviceId);
   if (!svc || !GRADING_SERVICES.some(s => s.id === svc.id)) throw gameError('NO_SERVICE', 'Unknown grading service');
   spendCurrency(svc.currency, svc.cost);
-  item.grading = rollGrade(card, svc.id);
+  item.grading = rollGrade(subject, svc.id, kind);
   state.stats.graded = (state.stats.graded || 0) + 1;
   state.stats.gradingSpend = (state.stats.gradingSpend || 0) + svc.cost;
   addXp(18);
   save(); emit();
-  return {item, card, grading: item.grading, service: svc};
+  return {item, subject, kind, grading: item.grading, service: svc};
 }
 export function ungradedItems(minValue = 0) {
   return state.items
@@ -1737,7 +1825,15 @@ export function ungradedItems(minValue = 0) {
     .filter(r => r.card && r.value >= minValue)
     .sort((a, b) => b.value - a.value);
 }
+export function ungradedRelics() {
+  return state.relics
+    .filter(i => !i.grading)
+    .map(i => ({item: i, relic: RELIC_MAP[i.relicId], value: relicValue(RELIC_MAP[i.relicId])}))
+    .filter(r => r.relic)
+    .sort((a, b) => b.value - a.value);
+}
 export function gradedCount() { return state.items.filter(i => i.grading).length; }
+export function gradedRelicCount() { return state.relics.filter(i => i.grading).length; }
 
 
 /* ---------------- trading ---------------- */

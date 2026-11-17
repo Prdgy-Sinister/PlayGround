@@ -175,13 +175,48 @@ export function priceInfo(card, finish = 'base', now = Date.now()) {
   };
 }
 
-/* ---------------- grading ---------------- */
+/* ---------------- grading ----------------
+   Every slab and every display case carries a full condition report. The
+   numeric grade is the weighted average of four category scores, and the
+   written reason is generated from the categories that actually dragged it
+   down — so a bent corner or a dented plaque is visible in the report.
+   ------------------------------------------------ */
 export const GRADE_LABELS = {
   10: 'Gem Mint', 9: 'Mint', 8: 'Near Mint-Mint', 7: 'Near Mint',
   6: 'Excellent-Mint', 5: 'Excellent', 4: 'Very Good', 3: 'Good',
   2: 'Fair', 1: 'Poor',
 };
 const GRADE_MULT = { 1: .32, 2: .4, 3: .5, 4: .61, 5: .73, 6: .89, 7: 1.09, 8: 1.46, 9: 2.36, 10: 4.8 };
+
+export const GRADING_PROFILES = {
+  card: {
+    label: 'Trading card', case: 'slab', caseLabel: 'APEX SLAB',
+    categories: [
+      {key:'centering', label:'Centering', defects:['off-centre artwork','tilted print registration','wider border on one edge']},
+      {key:'corners', label:'Corners', defects:['softened corner tip','dented lower corner','bent corner fibres']},
+      {key:'edges', label:'Edges', defects:['edge wear along the right border','bent top edge','chipped white edge']},
+      {key:'surface', label:'Surface', defects:['surface scuff near the portrait','print line across the foil','small crease in the card stock']},
+    ],
+  },
+  memorabilia: {
+    label: 'Memorabilia', case: 'case', caseLabel: 'APEX DISPLAY CASE',
+    categories: [
+      {key:'structure', label:'Structure', defects:['slight bend in the mounting plate','small dent on the plaque','shallow crease in the frame']},
+      {key:'surface', label:'Surface', defects:['scuffed display surface','fine scratch across the print','faded colour on one panel']},
+      {key:'finish', label:'Finish & edges', defects:['edge wear on the outer rim','chipped lacquer spot','torn display tag']},
+      {key:'presentation', label:'Presentation', defects:['loose wall mount','clouding inside the acrylic','off-centre display cut']},
+    ],
+  },
+  merchandise: {
+    label: 'Merchandise', case: 'case', caseLabel: 'APEX DISPLAY CASE',
+    categories: [
+      {key:'structure', label:'Structure', defects:['bent visor edge','small dent in the shell','crease across the fabric']},
+      {key:'surface', label:'Surface', defects:['scuff on the printed panel','pilling on the sleeve','faint mark on the finish']},
+      {key:'finish', label:'Stitching & trim', defects:['loose stitching on the hem','frayed seam','chipped button edge']},
+      {key:'presentation', label:'Presentation', defects:['creased hang tag','clouding inside the display case','slightly crushed box corner']},
+    ],
+  },
+};
 
 export const GRADING_SERVICES = [
   {
@@ -213,28 +248,83 @@ export function gradeTone(score) {
   return '#ff6b52';
 }
 export function gradeService(id) { return GRADING_SERVICES.find(s => s.id === id) || GRADING_SERVICES[0]; }
+export function gradingProfile(kind = 'card') { return GRADING_PROFILES[kind] || GRADING_PROFILES.card; }
 
 function roundHalf(v) { return Math.round(v * 2) / 2; }
+function severityFor(score) {
+  if (score >= 9) return 'Faint';
+  if (score >= 8) return 'Light';
+  if (score >= 7) return 'Noticeable';
+  if (score >= 6) return 'Visible';
+  return 'Pronounced';
+}
+function sentence(text) { return text.charAt(0).toUpperCase() + text.slice(1); }
+function joinPhrases(parts) {
+  if (parts.length <= 1) return parts[0] || '';
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+}
 
-export function rollGrade(card, serviceId = 'standard') {
+/* Turn low category scores into the actual language printed on the label. */
+export function gradeNotes(score, subgrades = {}, kind = 'card', seed = 0) {
+  const profile = gradingProfile(kind);
+  const issues = profile.categories
+    .map(cat => ({cat, value: Number(subgrades[cat.key])}))
+    .filter(x => Number.isFinite(x.value) && x.value < Math.min(9, score + 1))
+    .sort((a, b) => a.value - b.value);
+  const picked = (score >= 10 ? [] : issues).slice(0, score >= 7 ? 2 : 3);
+  if (!picked.length) return {
+    notes: [],
+    reason: score === 10
+      ? 'No visible flaws under a 10× loupe — centering, edges and surface are all effectively perfect.'
+      : 'All four categories grade cleanly; only microscopic print variance keeps it from a perfect 10.',
+  };
+  const notes = picked.map(({cat, value}, i) => {
+    const pool = cat.defects;
+    const text = pool[hash32(`${cat.key}|${i}|${seed}|${score}`) % pool.length];
+    return {category: cat.key, label: cat.label, score: value, text: `${severityFor(value)} ${text}`};
+  });
+  const phrase = joinPhrases(notes.map(n => n.text.charAt(0).toLowerCase() + n.text.slice(1)));
+  return {
+    notes,
+    reason: `${sentence(phrase)} ${notes.length > 1 ? 'are' : 'is'} the main factor${notes.length > 1 ? 's' : ''} keeping this from a higher grade.`,
+  };
+}
+
+export function gradeSummary(notes = []) {
+  if (!notes.length) return 'Clean report';
+  return joinPhrases(notes.slice(0, 2).map(n => n.text));
+}
+
+export function rollGrade(subject, serviceId = 'standard', kind = 'card') {
   const svc = gradeService(serviceId);
-  const era = parseInt(card.era) || 2020;
+  const profile = gradingProfile(kind);
+  const era = parseInt(subject?.era) || 2020;
   const eraShift = era < 1970 ? -.55 : era < 1990 ? -.3 : era < 2005 ? -.1 : era < 2015 ? .05 : .2;
-  const rarityShift = card.rarity === 'iconic' ? -.22 : card.rarity === 'legendary' ? -.08 : 0;
+  const rarityShift = kind === 'card'
+    ? (subject?.rarity === 'iconic' ? -.22 : subject?.rarity === 'legendary' ? -.08 : 0)
+    : ({standard:.18, rare:.1, epic:0, legendary:-.08, iconic:-.17, museum:-.25}[subject?.rarity] || 0);
   const center = 7.55 + svc.shift + eraShift + rarityShift;
   const rollSub = () => clamp(roundHalf(center + (Math.random() + Math.random() + Math.random() + Math.random() - 2) * 1.22), 1, 10);
-  const subgrades = {
-    centering: rollSub(), corners: rollSub(), edges: rollSub(), surface: rollSub(),
-  };
-  const avg = subgrades.centering * .27 + subgrades.corners * .27 + subgrades.edges * .22 + subgrades.surface * .24;
+  const subgrades = {};
+  for (const cat of profile.categories) subgrades[cat.key] = rollSub();
+  const avg = profile.categories.reduce((sum, cat) => sum + subgrades[cat.key], 0) / profile.categories.length;
   let score = Math.round(avg);
   if (svc.min) score = Math.max(svc.min, score);
   score = clamp(score, 1, 10);
+  const cert = makeCert(subject?.id || subject?.cardId || kind, score, serviceId);
+  const report = gradeNotes(score, subgrades, kind, cert);
   return {
     score,
     label: gradeLabel(score),
     subgrades,
-    cert: makeCert(card.id, score, serviceId),
+    notes: report.notes,
+    reason: report.reason,
+    summary: gradeSummary(report.notes),
+    kind,
+    case: profile.case,
+    caseLabel: profile.caseLabel,
+    cert,
     service: svc.id,
     company: svc.company,
     at: Date.now(),
@@ -246,21 +336,62 @@ export function makeCert(cardId, score, service = 'standard') {
   return 'APX-' + n.toString(36).toUpperCase().padStart(6, '0').slice(0, 7);
 }
 
-export function gradingFromScore(card, score, service = 'market', seed = 0) {
+/* Legacy saves only stored subgrades, so rebuild written reports on hydrate. */
+export function normalizeGrading(grading, subject, kind = 'card', seed = 0) {
+  if (!grading) return null;
+  const obj = typeof grading === 'number' ? {score: grading, service: 'legacy', company: 'APEX'} : {...grading};
+  const score = clamp(Math.round(Number(obj.score) || 0), 1, 10);
+  if (!score) return null;
+  const profile = gradingProfile(obj.kind || kind);
+  const subgrades = {};
+  profile.categories.forEach((cat, i) => {
+    const legacyKeys = ['centering','corners','edges','surface'];
+    const raw = obj.subgrades?.[cat.key] ?? obj.subgrades?.[legacyKeys[i]] ?? score - (i % 2);
+    subgrades[cat.key] = clamp(roundHalf(Number(raw) || score), 1, 10);
+  });
+  const report = Array.isArray(obj.notes) && obj.notes.length ? null : gradeNotes(score, subgrades, obj.kind || kind, seed || obj.cert || subject?.id || 'legacy');
+  return {
+    ...obj,
+    score,
+    label: obj.label || gradeLabel(score),
+    subgrades,
+    notes: report ? report.notes : obj.notes,
+    reason: obj.reason || report?.reason || gradeSummary(obj.notes || []),
+    summary: obj.summary || gradeSummary(report ? report.notes : obj.notes || []),
+    kind: obj.kind || kind,
+    case: obj.case || profile.case,
+    caseLabel: obj.caseLabel || profile.caseLabel,
+    company: obj.company || 'APEX',
+  };
+}
+
+export function gradingFromScore(subject, score, service = 'market', seed = 0, kind = 'card') {
   const s = clamp(Math.round(score), 1, 10);
-  const base = s;
-  const nudge = (k) => clamp(roundHalf(base + ((hash32(card.id + k + seed) % 300) / 100 - 1.5) * .8), 1, 10);
+  const profile = gradingProfile(kind);
+  const nudge = (k) => clamp(roundHalf(s + ((hash32(subject.id + k + seed) % 300) / 100 - 1.5) * .8), 1, 10);
+  const subgrades = {};
+  for (const cat of profile.categories) subgrades[cat.key] = nudge(cat.key[0] + seed);
+  const cert = 'APX-' + (hash32(subject.id + '|' + s + '|' + seed) % 2176782336).toString(36).toUpperCase().padStart(6, '0').slice(0, 7);
+  const report = gradeNotes(s, subgrades, kind, cert);
   return {
     score: s,
     label: gradeLabel(s),
-    subgrades: {
-      centering: nudge('c'), corners: nudge('k'), edges: nudge('e'), surface: nudge('s'),
-    },
-    cert: 'APX-' + (hash32(card.id + '|' + s + '|' + seed) % 2176782336).toString(36).toUpperCase().padStart(6, '0').slice(0, 7),
+    subgrades,
+    notes: report.notes,
+    reason: report.reason,
+    summary: gradeSummary(report.notes),
+    kind,
+    case: profile.case,
+    caseLabel: profile.caseLabel,
+    cert,
     service,
     company: service === 'market' ? 'APEX' : gradeService(service).company,
     at: Date.now(),
   };
+}
+
+export function gradedValue(base, grading) {
+  return Math.max(1, Math.round(base * gradeMultiplier(grading?.score || 0)));
 }
 
 export function itemMarketValue(item, now = Date.now()) {

@@ -11,7 +11,7 @@ import {
   gradeItem, redeemVault,
   openRelicPack, relicSupplyInfo, relicPackOdds, buyRelic, sellRelicItem,
   claimRelicAlbum, buyRelicListing, refreshRelicMarket, placeAuctionBid,
-  refreshAuctions, unlockRoom, setShowroomCustom, placeShowroomItem,
+  refreshAuctions, setAuctionLocation, unlockRoom, setShowroomCustom, placeShowroomItem,
   removeShowroomItem, toggleShowroomVisible, likeShowroom, visitShowroom,
   RELIC_MAP, RELIC_RARITY, DISPLAYS, ROOM_MAP, MEMORABILIA_PACKS,
 } from './store.js';
@@ -347,6 +347,7 @@ function openRelicInstance(relic, item = null) {
     showBuy: relic.kind === 'merchandise',
     showSell: !!owned,
     showDisplay: !!owned,
+    showGrade: !!owned,
   });
 }
 function openRelicPackFlow(packId) {
@@ -627,6 +628,15 @@ document.addEventListener('click', ev => {
     catch (err) { sfx.error(); toast('red','Cannot refresh',err.message,'!'); }
     return;
   }
+  const auctionLocationBtn = el('[data-auction-location]');
+  if (auctionLocationBtn) {
+    try {
+      const loc = setAuctionLocation(auctionLocationBtn.dataset.auctionLocation);
+      sfx.tab(); toast('cyan', `${loc.flag} ${loc.city} saleroom`, `${loc.house} · ${loc.focus}.`, '⚖');
+      render({ scroll:false });
+    } catch (err) { sfx.error(); toast('red','Location unavailable', err.message, '!'); }
+    return;
+  }
   const auctionBid = el('[data-auction-bid]');
   if (auctionBid) {
     try {
@@ -708,23 +718,31 @@ document.addEventListener('click', ev => {
 
   const gradeBtn = el('[data-grade-item]');
   if (gradeBtn) {
+    ev.preventDefault();
     const uid = gradeBtn.dataset.gradeItem;
-    const cardId = gradeBtn.dataset.gradeCard;
-    const card = CARD_MAP[cardId];
+    const kind = gradeBtn.dataset.gradeKind || (gradeBtn.dataset.gradeCard ? 'card' : 'relic');
+    const subject = kind === 'card'
+      ? CARD_MAP[gradeBtn.dataset.gradeCard]
+      : RELIC_MAP[gradeBtn.dataset.gradeRelic];
     const svc = GRADING_SERVICES.find(s => s.id === gradeBtn.dataset.gradeService);
-    if (!card || !svc) return;
+    if (!subject || !svc || !uid) return;
+    const casing = kind === 'card' ? 'slab' : 'display case';
     const fee = `${svc.currency === 'gems' ? '◆' : '◈'} ${fmt(svc.cost)}`;
     confirmAction({
-      title: `Grade ${card.name}?`,
-      body: `${svc.company} · ${svc.name} costs ${fee}. Grading is permanent. Grade 8+ lifts market value; lower grades can reduce it.`,
+      title: `Grade ${subject.name}?`,
+      body: `${svc.company} · ${svc.name} costs ${fee}. The item is permanently sealed in a ${casing}, and the report lists the exact condition notes behind the number.`,
       confirmText: `Grade · ${fee}`,
       onConfirm: () => {
         try {
-          const res = gradeItem(uid, svc.id);
+          const res = gradeItem(uid, svc.id, kind);
           sfx.fanfare();
-          toast('gold', `Grade ${res.grading.score} · ${res.grading.label}`, `${card.name} is now sealed in an ${res.grading.company} slab (${res.grading.cert}).`, '◎');
+          toast('gold', `Grade ${res.grading.score} · ${res.grading.label}`,
+            `${res.subject.name}: ${res.grading.summary}. Sealed in an ${res.grading.caseLabel} (${res.grading.cert}).`, '◎');
           closeModal();
-          setTimeout(() => openCard(cardId, uid), 40);
+          setTimeout(() => {
+            if (kind === 'card') openCard(subject.id, uid);
+            else openRelicInstance(res.subject, res.item);
+          }, 40);
         } catch (err) {
           sfx.error();
           toast('red', 'Grading failed', err.message, '!');

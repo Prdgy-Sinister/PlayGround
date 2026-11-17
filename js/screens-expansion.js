@@ -3,12 +3,15 @@
    ============================================================ */
 import {
   getState, ownedRelics, relicSupplyInfo, relicAlbumProgress, relicAlbums,
-  relicPackOdds, relicMarketListings, auctionLots, communityShowrooms,
+  relicPackOdds, relicMarketListings, auctionLots, auctionCircuitStats,
+  ungradedRelics, gradedRelicCount, communityShowrooms,
   weeklyShowrooms, roomStatus, showroomPrestige, showroomContents,
   MEMORABILIA, MERCHANDISE, RELICS, RELIC_MAP, MEMORABILIA_PACKS,
   RELIC_RARITY, RELIC_ALBUMS, ROOMS, DISPLAYS,
   THEMES, PRESTIGE,
 } from './store.js';
+import { AUCTION_REGIONS, AUCTION_LOCATIONS, auctionLocation } from './data/auctions.js';
+import { GRADING_SERVICES, gradeTone, gradeLabel } from './pricing.js';
 import { CARD_MAP } from './data/index.js';
 import { fmt, esc, emptyState, rewardHTML } from './ui.js';
 import { relicCardHTML, relicArtHTML, openRelicDetail, openRelicPackDetails } from './relic-ui.js';
@@ -314,24 +317,40 @@ export function showroomScreen() {
 }
 
 /* ---------------- marketplace expansion panels ---------------- */
+function relicGradingQueuePanel() {
+  const queue = ungradedRelics().slice(0, 6);
+  return `<div class="panel relic-grading-lab">
+    <div class="panel-head"><h3><span class="bar"></span>Memorabilia grading lab</h3>
+      <span class="chip">${gradedRelicCount()} cased · ${ungradedRelics().length} raw</span></div>
+    <p class="tiny muted">Every grade includes a written condition report — dents, bends, scuffs, fading and display wear are recorded on the case label. Replicas are sealed in an APEX display case, never a card slab.</p>
+    ${queue.length ? `<div class="rgl-grid">${queue.map(({item, relic, value}) => `<div class="rgl-item">
+      <div class="rgl-art">${relicArtHTML(relic, {small:true})}</div>
+      <div class="rgl-copy"><b>${esc(relic.name)}</b><span>◈ ${fmt(value)} raw · ${esc(RELIC_RARITY[relic.rarity].name)}</span>
+        <div class="rgl-services">${GRADING_SERVICES.map(svc => `<button class="grade-mini" data-grade-item="${esc(item.uid)}" data-grade-service="${esc(svc.id)}" data-grade-kind="${relic.kind}" data-grade-relic="${esc(relic.id)}">${esc(svc.name)} <b>${svc.currency === 'gems' ? '◆' : '◈'}${fmt(svc.cost)}</b></button>`).join('')}</div>
+      </div>
+    </div>`).join('')}</div>` : emptyState('◎','No raw collectibles to case','Buy a replica or open a memorabilia pack, then send it to the grading lab.','')}
+  </div>`;
+}
+
 export function relicMarketPanel() {
   const s = getState();
   const listings = relicMarketListings();
   return `<div class="relic-market-panel">
     ${FICTIONAL}
-    <div class="market-hero"><div><h3>Memorabilia & merchandise listings</h3><p>${listings.filter(l => !l.bought).length} active lots · estimated value shown against asking price</p></div>
+    <div class="market-hero"><div><h3>Memorabilia & merchandise listings</h3><p>${listings.filter(l => !l.bought).length} active lots · ${listings.filter(l => l.grading).length} pre-cased · estimated value shown against asking price</p></div>
       <button class="btn btn-sm" data-refresh-relic-market>↻ Refresh · ◈ 250</button></div>
     <div class="listing-grid relic-listing-grid">${listings.map(l => {
       const canBuy = !l.bought && s.coins >= l.price;
-      return `<div class="listing relic-listing ${l.bought ? 'sold' : ''}">
-        <div class="l-art" data-open-relic="${esc(l.relic.id)}">${relicArtHTML(l.relic,{small:true})}</div>
+      return `<div class="listing relic-listing ${l.bought ? 'sold' : ''}${l.grading ? ' graded-listing' : ''}">
+        <div class="l-art" data-open-relic="${esc(l.relic.id)}">${relicArtHTML(l.relic,{small:true, grading:l.grading})}</div>
         <div class="l-body"><div class="l-name">${esc(l.relic.name)}${l.relic.supply ? `<span class="supply-pill">#${l.serial}/${fmt(l.relic.supply)}</span>` : ''}</div>
-          <div class="l-meta"><span class="rarity-dot" style="background:${RELIC_RARITY[l.relic.rarity].color}"></span>${esc(RELIC_RARITY[l.relic.rarity].name)} · ${esc(l.seller)}</div>
+          <div class="l-meta"><span class="rarity-dot" style="background:${RELIC_RARITY[l.relic.rarity].color}"></span>${esc(RELIC_RARITY[l.relic.rarity].name)} · ${esc(l.seller)}${l.grading ? ` <span class="grade-pill" style="color:${gradeTone(l.grading.score)}">${l.grading.score} ${esc(gradeLabel(l.grading.score))}</span>` : ''}</div>
           <div class="l-price">◈ ${fmt(l.price)} ${l.price !== l.rawPrice ? `<span class="strike">◈ ${fmt(l.rawPrice)}</span>` : ''}</div>
         </div>
         <div class="l-buy"><button class="btn btn-sm ${canBuy ? 'btn-primary' : ''}" data-buy-relic-listing="${esc(l.id)}" ${l.bought || !canBuy ? 'disabled' : ''}>${l.bought ? 'Sold' : 'Buy'}</button></div>
       </div>`;
     }).join('')}</div>
+    ${relicGradingQueuePanel()}
     <div class="panel relic-history"><div class="panel-head"><h3><span class="bar"></span>Collectible sale history</h3><span class="chip">${s.relicMarket.history.length} records</span></div>
       ${s.relicMarket.history.length ? `<div class="mh-list">${s.relicMarket.history.slice(0,10).map(h => {
         const relic = RELIC_MAP[h.relicId];
@@ -345,16 +364,37 @@ export function relicMarketPanel() {
 
 export function auctionPanel() {
   const s = getState();
+  const loc = auctionLocation(s.auctions.location);
   const lots = auctionLots();
+  const circuit = auctionCircuitStats();
   return `<div class="auction-panel">
     ${FICTIONAL}
-    <div class="market-hero"><div><h3>Rare memorabilia auctions</h3><p>Bid against simulated collectors. Biased above the ask wins the lot instantly; lower bids get countered.</p></div>
-      <button class="btn btn-sm" data-refresh-auctions>↻ New lots</button></div>
-    <div class="auction-grid">${lots.map(lot => `<div class="auction-lot" style="--relic-accent:${RELIC_RARITY[lot.relic.rarity].color}">
-      <div class="al-art">${relicArtHTML(lot.relic,{small:true})}</div>
-      <div class="al-body"><span class="al-rarity">${RELIC_RARITY[lot.relic.rarity].name}</span>
+    <div class="market-hero"><div><h3>Global auction circuit</h3><p>Thirteen salerooms across four regions. Bid against local collector pools — all prices are all-in with each house's buyer premium included. Lower bids get countered; a winning bid seals the lot instantly.</p></div>
+      <button class="btn btn-sm" data-refresh-auctions>↻ New circuit</button></div>
+    <div class="auction-world" style="--loc-accent:${loc.color}">
+      <div class="aw-locations">
+        ${AUCTION_REGIONS.map(region => `<div class="aw-region"><span class="aw-region-title">${region.icon} ${esc(region.label)}</span>
+          <div class="aw-chips">${circuit.filter(c => c.region === region.id).map(c => `<button class="aw-chip ${c.active ? 'active' : ''}" data-auction-location="${esc(c.id)}" title="${esc(c.house)} · ${esc(c.focus)}">
+            <b>${c.flag} ${esc(c.city)}</b><small>${c.wins ? `${c.wins} won` : 'no wins'}</small>
+          </button>`).join('')}</div>
+        </div>`).join('')}
+      </div>
+      <div class="aw-detail">
+        <div class="aw-flag">${loc.flag}</div>
+        <div class="aw-copy"><span class="aw-kicker">${esc(loc.house)} · ${esc(loc.zone)}</span>
+          <h3>${esc(loc.city)} <em>${esc(loc.country)}</em></h3>
+          <p>${esc(loc.note)}</p>
+          <div class="aw-tags"><span>Focus: ${esc(loc.focus)}</span><span>Buyer premium ${Math.round(loc.premium * 100)}% included</span><span>${lots.length} live lots</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="auction-grid">${lots.map(lot => `<div class="auction-lot" style="--relic-accent:${RELIC_RARITY[lot.relic.rarity].color};--loc-accent:${loc.color}">
+      <div class="al-art">${relicArtHTML(lot.relic,{small:true, grading:lot.grading})}</div>
+      <div class="al-body"><div class="al-location">${loc.flag} ${esc(loc.city)} · LOT ${esc(lot.id.slice(-1))}</div>
+        <span class="al-rarity">${RELIC_RARITY[lot.relic.rarity].name}${lot.grading ? ` · <b style="color:${gradeTone(lot.grading.score)}">GRADED ${lot.grading.score} ${esc(gradeLabel(lot.grading.score))}</b>` : ''}</span>
         <h4>${esc(lot.relic.name)}</h4>
         <div class="al-meta">${lot.relic.supply ? `Numbered / ${fmt(lot.relic.supply)}` : 'Open edition'} · ${lot.watchers} watchers · ends ~${lot.endsIn}h</div>
+        ${lot.grading ? `<div class="al-report" title="${esc(lot.grading.reason)}">${esc(lot.grading.summary)}</div>` : ''}
         <div class="al-bid"><span>Current bid</span><b>◈ ${fmt(lot.current)}</b><small>by ${esc(lot.bidder)}</small></div>
         <div class="al-actions">
           <button class="btn btn-sm" data-auction-bid="${esc(lot.id)}" data-amount="${lot.current + lot.increment}">Bid ◈ ${fmt(lot.current + lot.increment)}</button>
@@ -363,9 +403,9 @@ export function auctionPanel() {
         ${lot.youLeading ? `<div class="al-leading">You are leading</div>` : ''}
       </div>
     </div>`).join('')}</div>
-    <div class="panel relic-history"><div class="panel-head"><h3><span class="bar"></span>Auction activity</h3><span class="chip">${s.auctions.history.length} bids</span></div>
-      ${s.auctions.history.length ? `<div class="mh-list">${s.auctions.history.slice(0,10).map(h => `<div class="mh-row"><span class="mh-type ${esc(h.type)}">${esc(h.type.toUpperCase())}</span>
-        <div class="mh-name"><b>${esc(RELIC_MAP[h.relicId]?.name || 'Lot')}</b><span>${esc(h.bidder)}</span></div><b class="mh-price">◈ ${fmt(h.amount)}</b><span class="mh-date">${new Date(h.at).toLocaleString()}</span></div>`).join('')}</div>` : emptyState('⚖','No bids placed yet','Place a bid on a rare lot to start the auction history.','')}
+    <div class="panel relic-history"><div class="panel-head"><h3><span class="bar"></span>Global auction activity</h3><span class="chip">${s.auctions.history.length} records · ${s.stats.auctionLocations || 0}/${AUCTION_LOCATIONS.length} cities won</span></div>
+      ${s.auctions.history.length ? `<div class="mh-list">${s.auctions.history.slice(0,12).map(h => `<div class="mh-row"><span class="mh-type ${esc(h.type)}">${esc(h.type.toUpperCase())}</span>
+        <div class="mh-name"><b>${esc(RELIC_MAP[h.relicId]?.name || 'Lot')}</b><span>${esc(h.bidder)} · ${esc(h.city || 'Global circuit')}</span></div><b class="mh-price">◈ ${fmt(h.amount)}</b><span class="mh-date">${new Date(h.at).toLocaleString()}</span></div>`).join('')}</div>` : emptyState('⚖','No bids placed yet','Place a bid on a rare lot to start the auction history.','')}
     </div>
   </div>`;
 }
