@@ -142,6 +142,51 @@ h1, h2, h3, h4 { font-family: 'Cinzel', Georgia, serif; margin: 0; font-weight: 
   pointer-events: auto;
 }
 .screen-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+
+.progress-screen { max-width: 1240px; margin: 0 auto; }
+.academy-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; }
+.academy-dragon { border: 1px solid var(--line2); border-radius: 18px; padding: 14px; background: rgba(8,24,32,.82); text-align: center; align-self: start; }
+.academy-dragon img { width: 126px; height: 126px; object-fit: cover; border-radius: 50%; border: 2px solid rgba(255,209,102,.35); }
+.academy-dragon h2 { margin: 5px 0 7px; }
+.stage-badge { display: inline-block; color: var(--gold); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
+.dragon-picker { display: flex; gap: 6px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+.mini-dragon { width: 38px; height: 38px; padding: 2px; border: 1px solid var(--line2); border-radius: 50%; background: rgba(255,255,255,.04); }
+.mini-dragon.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(255,209,102,.25); }
+.mini-dragon img { width: 100%; height: 100%; border: 0; }
+.discipline-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.discipline-card, .mission-card { display: flex; align-items: center; gap: 12px; min-width: 0; border: 1px solid var(--line2); border-radius: 14px; background: rgba(8,24,32,.78); padding: 14px; }
+.discipline-card.certified { border-color: rgba(111,232,212,.32); }
+.discipline-icon { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 12px; color: var(--gold); background: rgba(255,209,102,.08); font-size: 20px; }
+.discipline-copy, .mission-copy { flex: 1; min-width: 0; }
+.discipline-copy h3, .mission-copy h3 { margin: 0 0 3px; font-family: 'Cinzel'; font-size: 14px; }
+.discipline-copy p, .mission-copy p { margin: 0 0 8px; color: var(--muted); font-size: 10px; }
+.practice-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; color: #adc1c3; font-size: 9px; }
+.breeding-layout { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr); gap: 16px; }
+.breeding-table, .egg-nest { border: 1px solid var(--line2); border-radius: 18px; background: rgba(8,24,32,.82); padding: 16px; }
+.breeding-table { display: grid; grid-template-columns: 1fr 42px 1fr; align-items: center; gap: 10px; }
+.breeder-slot label { display: block; margin-bottom: 6px; color: var(--gold); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; }
+.breeder-slot select { width: 100%; height: 38px; border: 1px solid var(--line2); border-radius: 9px; background: #102731; color: #eff9f6; padding: 0 8px; }
+.breeder-dragon { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.breeder-dragon img { width: 72px; height: 72px; object-fit: cover; border-radius: 50%; }
+.breeder-dragon b, .breeder-dragon span { display: block; }
+.breeder-dragon span { color: var(--muted); font-size: 9px; text-transform: capitalize; }
+.breed-heart { text-align: center; color: var(--gold); font-size: 24px; }
+.breed-button { grid-column: 1 / -1; justify-self: center; margin-top: 8px; }
+.egg-nest { min-height: 220px; }
+.egg-card { display: grid; grid-template-columns: 74px 1fr; gap: 12px; align-items: center; border: 1px solid var(--line2); border-radius: 12px; padding: 10px; margin-top: 8px; }
+.egg-card h3 { margin: 3px 0 8px; }
+.egg-orb { width: 68px; height: 68px; display: grid; place-items: center; border-radius: 50% 50% 48% 48%; background: radial-gradient(circle at 35% 28%, #fff4c9, #9ed3bd 55%, #3d765f); color: #315d51; font-size: 24px; border: 2px solid rgba(255,255,255,.3); }
+.egg-orb.mutant { background: radial-gradient(circle at 35% 28%, #fff, #d49bf1 55%, #7550a5); box-shadow: 0 0 18px rgba(212,155,241,.35); }
+.egg-time { color: var(--gold); font-size: 9px; margin: 5px 0; }
+.hatch-name { width: 100%; height: 34px; margin-bottom: 6px; border: 1px solid var(--line2); border-radius: 8px; background: rgba(4,15,21,.7); color: #fff; padding: 0 8px; }
+.empty-state { height: 170px; display: grid; place-content: center; text-align: center; color: var(--muted); }
+.empty-state div { font-size: 42px; color: #6fae9c; }
+.empty-state h3 { color: #dcebea; margin: 4px 0; }
+.empty-state p { max-width: 260px; }
+.mission-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.mission-card.complete { border-color: rgba(255,209,102,.38); }
+.mission-card.claimed { opacity: .66; }
+.mission-mark { width: 48px; height: 48px; flex: 0 0 48px; display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(255,209,102,.25); color: var(--gold); background: rgba(255,209,102,.07); }
 .eyebrow { font-size: 10px; letter-spacing: .28em; text-transform: uppercase; color: var(--teal); margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
 .eyebrow::before { content: ''; width: 18px; height: 1px; background: var(--teal); opacity: .6; }
 .screen-title { font-size: clamp(24px, 3.2vw, 38px); color: #fff7e6; text-shadow: 0 6px 30px rgba(0,0,0,.5); }
