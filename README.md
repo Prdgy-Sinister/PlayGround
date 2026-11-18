@@ -2,15 +2,6 @@
 
 A premium, browser-based collecting game spanning Formula 1, MotoGP and crossover legends. Open sealed card packs, chase signed and numbered editions, collect fictional memorabilia and merchandise, trade on a simulated market, and build a personal 2.5D showroom for your museum.
 
-## Play
-
-Open `index.html` through any static web server, then jump into the Garage.
-
-```bash
-python3 -m http.server 3002
-# http://localhost:3002
-```
-
 All progress is saved locally in the browser. Use **Settings & Save** to export or import a collector profile. New fields are migrated automatically, so existing saves keep their cards, currency, albums, vault rewards and market history.
 
 ## Departments
@@ -53,21 +44,3 @@ Grading is permanent. The APEX lab offers three services — Standard (coins), E
 ## Tech
 
 Vanilla JavaScript ES modules, hand-built CSS and SVG artwork, a Canvas 2.5D renderer, procedural Web Audio, and `localStorage` persistence. No build step required.
-
-<!-- omgithub:readme:start -->
-## 🚀 Build, play, and remix with OMGithub
-
-**Remixed using [OMGithub.com](https://go.ondev.store/).**
-
-[![OMGithub](https://img.shields.io/badge/OMGithub-Open%20project-orange?style=for-the-badge)](https://go.ondev.store/Prdgy-Sinister/PlayGround)
-[![GitHub](https://img.shields.io/badge/GitHub-Source-181717?logo=github&style=for-the-badge)](https://github.com/Prdgy-Sinister/PlayGround)
-
-- 🎮 [Open the project](https://go.ondev.store/Prdgy-Sinister/PlayGround).
-- ✨ [Remix this project](https://go.ondev.store/Prdgy-Sinister/PlayGround?remix=1).
-- 💻 [Explore the source](https://github.com/Prdgy-Sinister/PlayGround).
-- 🛠️ [Check build runs](https://github.com/Prdgy-Sinister/PlayGround/actions).
-- 🐛 [Report an issue](https://github.com/Prdgy-Sinister/PlayGround/issues).
-- 👤 [Explore the creator's projects](https://go.ondev.store/Prdgy-Sinister).
-- 🌍 [Create with OMGithub](https://go.ondev.store/).
-- 🧬 [Explore the remix source](https://github.com/Prdgy-Sinister/PlayGround).
-<!-- omgithub:readme:end -->
