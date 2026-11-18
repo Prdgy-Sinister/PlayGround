@@ -13,7 +13,7 @@ export function defaultState() {
   const village = {};
   BUILDINGS.forEach(b => { village[b.id] = b.id === 'hall' ? 1 : 0; });
   return {
-    version: 2,
+    version: 3,
     riderName: 'Wren Skyborn',
     level: 1,
     xp: 0,
@@ -35,6 +35,18 @@ export function defaultState() {
     stats: { races: 0, wins: 0, gates: 0, boostTime: 0, orbs: 0, bonds: 0, upgrades: 0, trials: 0, distance: 0, podiums: 0 },
     season: { xp: 0, tier: 1 },
     eggs: [],
+    codex: { discovered: {}, discoveries: [], firstVisit: false },
+    dragonIsland: {
+      level: 1, xp: 0, unlocked: false,
+      habitats: { fire: 0, ice: 0, forest: 0, ocean: 0, storm: 0, earth: 0, venom: 0, ancient: 0, hybrid: 0 },
+      buildings: {}, resources: { wood: 0, stone: 0, crystal: 0, fish: 0, ember: 0 },
+      decor: [], plots: {}, interactions: { pats: 0, feeds: 0, bonds: 0 },
+    },
+    combat: {
+      unlocked: false, rating: 1000, wins: 0, losses: 0,
+      duelCooldown: 0, survivalBest: 0, bossBest: {}, tournamentBest: {}, loadout: [], activeMode: null,
+    },
+    achievements: { unlocked: [], progress: {} },
     missionProgress: {},
     claimedMissions: [],
     log: [],
@@ -91,6 +103,26 @@ function mergeDefaults(def, saved) {
   out.dailies = { ...def.dailies, ...(saved.dailies || {}) };
   out.season = { ...def.season, ...(saved.season || {}) };
   out.eggs = Array.isArray(saved.eggs) ? saved.eggs : [];
+  out.codex = {
+    discovered: { ...def.codex.discovered, ...(saved.codex?.discovered || {}) },
+    discoveries: Array.isArray(saved.codex?.discoveries) ? saved.codex.discoveries : [],
+    firstVisit: !!saved.codex?.firstVisit,
+  };
+  out.dragonIsland = {
+    ...def.dragonIsland,
+    ...(saved.dragonIsland || {}),
+    habitats: { ...def.dragonIsland.habitats, ...(saved.dragonIsland?.habitats || {}) },
+    buildings: { ...def.dragonIsland.buildings, ...(saved.dragonIsland?.buildings || {}) },
+    resources: { ...def.dragonIsland.resources, ...(saved.dragonIsland?.resources || {}) },
+    decor: Array.isArray(saved.dragonIsland?.decor) ? saved.dragonIsland.decor : [],
+    plots: { ...def.dragonIsland.plots, ...(saved.dragonIsland?.plots || {}) },
+    interactions: { ...def.dragonIsland.interactions, ...(saved.dragonIsland?.interactions || {}) },
+  };
+  out.combat = { ...def.combat, ...(saved.combat || {}), loadout: Array.isArray(saved.combat?.loadout) ? saved.combat.loadout : [] };
+  out.achievements = {
+    unlocked: Array.isArray(saved.achievements?.unlocked) ? saved.achievements.unlocked : [],
+    progress: { ...(saved.achievements?.progress || {}) },
+  };
   out.missionProgress = { ...(saved.missionProgress || {}) };
   out.claimedMissions = Array.isArray(saved.claimedMissions) ? saved.claimedMissions : [];
   out.dragons = { ...def.dragons, ...(saved.dragons || {}) };
@@ -110,7 +142,7 @@ function mergeDefaults(def, saved) {
       bonuses: { ...(academy.bonuses || {}) },
     };
   }
-  out.version = 2;
+  out.version = 3;
   if (!out.dragons[out.selected]) out.selected = Object.keys(out.dragons)[0] || 'emberling';
   return out;
 }

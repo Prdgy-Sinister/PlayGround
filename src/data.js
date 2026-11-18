@@ -2,12 +2,33 @@
 // Original world data: dragons, biomes, leagues, cosmetics and challenges.
 
 export const RARITIES = {
-  common:    { name: 'Common',    color: '#9fb4c7', glow: 'rgba(159,180,199,.45)', mult: 1.0 },
-  rare:      { name: 'Rare',      color: '#4fc3f7', glow: 'rgba(79,195,247,.5)',  mult: 1.08 },
-  epic:      { name: 'Epic',      color: '#b46cf5', glow: 'rgba(180,108,245,.55)', mult: 1.17 },
-  legendary: { name: 'Legendary', color: '#ffb545', glow: 'rgba(255,181,69,.6)',  mult: 1.27 },
-  mythical:  { name: 'Mythical',  color: '#ff6bd6', glow: 'rgba(255,107,214,.65)', mult: 1.38 },
+  common:    { name: 'Common',    color: '#9fb4c7', glow: 'rgba(159,180,199,.45)', mult: 1.0, tier: 1 },
+  rare:      { name: 'Rare',      color: '#4fc3f7', glow: 'rgba(79,195,247,.5)',  mult: 1.08, tier: 4 },
+  epic:      { name: 'Epic',      color: '#b46cf5', glow: 'rgba(180,108,245,.55)', mult: 1.17, tier: 7 },
+  legendary: { name: 'Legendary', color: '#ffb545', glow: 'rgba(255,181,69,.6)',  mult: 1.27, tier: 11 },
+  mythical:  { name: 'Mythical',  color: '#ff6bd6', glow: 'rgba(255,107,214,.65)', mult: 1.38, tier: 15 },
 };
+
+// The five legacy ranks expand into a 15-tier progression. Existing saves,
+// species and race balance remain compatible while future species can occupy
+// the intermediate legendary/ascendant ranks.
+export const RARITY_TIERS = [
+  { id: 'common', name: 'Common', color: '#9fb4c7', mult: 1.00 },
+  { id: 'uncommon', name: 'Uncommon', color: '#79d6a3', mult: 1.04 },
+  { id: 'scarce', name: 'Scarce', color: '#65bfa3', mult: 1.06 },
+  { id: 'rare', name: 'Rare', color: '#4fc3f7', mult: 1.08 },
+  { id: 'elite', name: 'Elite', color: '#63a8ff', mult: 1.11 },
+  { id: 'exceptional', name: 'Exceptional', color: '#8d86ff', mult: 1.14 },
+  { id: 'epic', name: 'Epic', color: '#b46cf5', mult: 1.17 },
+  { id: 'heroic', name: 'Heroic', color: '#d66cb7', mult: 1.20 },
+  { id: 'exalted', name: 'Exalted', color: '#e86c96', mult: 1.23 },
+  { id: 'fabled', name: 'Fabled', color: '#f18c68', mult: 1.25 },
+  { id: 'legendary', name: 'Legendary', color: '#ffb545', mult: 1.27 },
+  { id: 'mythic', name: 'Mythic', color: '#ffc76b', mult: 1.31 },
+  { id: 'celestial', name: 'Celestial', color: '#ffe7a3', mult: 1.34 },
+  { id: 'astral', name: 'Astral', color: '#ff9be8', mult: 1.36 },
+  { id: 'mythical', name: 'Mythical', color: '#ff6bd6', mult: 1.38 },
+];
 
 const D = (o) => o;
 // Expanded bestiary entries share one normaliser so every species has a home.
@@ -884,4 +905,15 @@ export const RIVAL_NAMES = [
 ];
 export const AI_DRAGONS = ['gustwing', 'sunspark', 'frostfang', 'duskfair', 'stormcrest', 'cinderclaw', 'tidecoil', 'obsidrake', 'celestray'];
 
-export const RARITY_ORDER = ['common', 'rare', 'epic', 'legendary', 'mythical'];
+export const RARITY_ORDER = RARITY_TIERS.map(t => t.id);
+
+export function rarityTierFor(def) {
+  if (!def) return RARITY_TIERS[0];
+  return RARITY_TIERS.find(t => t.id === def.rarity)
+    || RARITY_TIERS[Math.max(0, (RARITIES[def.rarity]?.tier || 1) - 1)]
+    || RARITY_TIERS[0];
+}
+
+export function expandedTierName(def) {
+  return rarityTierFor(def).name;
+}

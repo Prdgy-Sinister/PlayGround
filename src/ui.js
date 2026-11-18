@@ -2,7 +2,7 @@ import * as Save from './save.js';
 import {
   DRAGONS, DRAGON_MAP, RARITIES, RARITY_ORDER, TRACKS, TRACK_MAP, LEAGUES, MODES,
   COSMETICS, SKILLS, SKILL_LIST, BUILDINGS, EXPLORE_ZONES, RIVAL_NAMES, DAILY_POOL,
-  HABITAT_INFO, FAMILY_ORDER, dragonsByFamily,
+  HABITAT_INFO, FAMILY_ORDER, RARITY_TIERS, rarityTierFor, dragonsByFamily,
 } from './data.js';
 import { dragonThumb } from './dragon.js';
 import { sfx, setAudioEnabled, unlockAudio } from './audio.js';
@@ -126,6 +126,7 @@ export class UI {
       { id: 'academy', icon: '◎', label: 'Academy' },
       { id: 'breeding', icon: '◉', label: 'Breeding' },
       { id: 'missions', icon: '◆', label: 'Missions' },
+      { id: 'codex', icon: '☷', label: 'Codex' },
       { id: 'explore', icon: '◈', label: 'Explore' },
       { id: 'shop', icon: '◇', label: 'Market' },
     ];
@@ -158,6 +159,7 @@ export class UI {
     else if (view === 'academy') { this.game.showHangar(this.dragonId); this.renderAcademy(); }
     else if (view === 'breeding') { this.game.showHangar(this.dragonId); this.renderBreeding(); }
     else if (view === 'missions') { this.game.showMenu(); this.renderMissions(); }
+    else if (view === 'codex') { this.game.showMenu(); this.renderCodex(); }
     else if (view === 'explore') { this.game.showMenu(); this.renderExploreHub(); }
     else if (view === 'shop') { this.game.showHangar(Save.S().selected); this.renderShop(); }
     this.updateChrome();
@@ -1316,6 +1318,54 @@ export class UI {
   }
 
   // ── MISSIONS ─────────────────────────────────────────────────────────────
+  renderCodex() {
+    this.view = 'codex';
+    const s = this.S;
+    const owned = this.ownedDragons();
+    const discovered = owned.length;
+    const pct = DRAGONS.length ? Math.round(discovered / DRAGONS.length * 100) : 0;
+    const tierSummary = `<button class="codex-tier active" data-action="codex-tier" data-id="all"><span class="ct-name">All</span><span class="ct-count">${discovered}/${DRAGONS.length}</span></button>` + RARITY_TIERS.map(tier => {
+      const pool = DRAGONS.filter(d => rarityTierFor(d).id === tier.id);
+      const have = pool.filter(d => s.dragons[d.id]).length;
+      return `<button class="codex-tier" data-action="codex-tier" data-id="${tier.id}" style="--tier:${tier.color}">
+        <span class="ct-name">${tier.name}</span><span class="ct-count">${have}/${pool.length}</span>
+      </button>`;
+    }).join('');
+    const cards = DRAGONS.map(def => {
+      const ds = s.dragons[def.id];
+      const tier = rarityTierFor(def);
+      const habitat = HABITAT_INFO[def.family] || HABITAT_INFO[def.habitat] || HABITAT_INFO.ancient;
+      s.codex.discovered[def.id] = s.codex.discovered[def.id] || !!ds;
+      if (!ds) {
+        return `<article class="codex-card locked" data-rarity="${tier.id}" style="--tier:${tier.color}">
+          <div class="codex-silhouette"><img src="${this.thumb(def, true)}" alt="Uncatalogued dragon" /></div>
+          <div class="codex-card-meta"><span class="codex-rarity">${tier.name}</span><h3>???</h3><p>${habitat.icon} ${habitat.name} · ${def.unlock}</p></div>
+        </article>`;
+      }
+      return `<article class="codex-card" data-rarity="${tier.id}" style="--tier:${tier.color}">
+        <div class="codex-art"><img src="${this.thumb(def)}" alt="${def.name}" /></div>
+        <div class="codex-card-meta"><span class="codex-rarity">${tier.name}</span><h3>${def.name}</h3><p>${def.epithet}</p><small>${habitat.icon} ${habitat.name} · Lv ${ds.level}</small></div>
+      </article>`;
+    }).join('');
+    s.codex.firstVisit = true;
+    Save.save();
+    this.setScreen(`
+      <div class="codex-screen fade-in">
+        <div class="screen-head">
+          <div><div class="eyebrow">Aetherian Archive</div><h1 class="screen-title">Dragon Codex</h1><p class="screen-sub">Every discovery, every lineage, every sky-bound secret.</p></div>
+          <button class="back-btn" data-action="goto" data-id="hangar">← Dragons</button>
+        </div>
+        <div class="codex-progress">
+          <div><span>Collection progress</span><b>${discovered} / ${DRAGONS.length}</b></div>
+          <div class="cm-bar"><i style="width:${pct}%"></i></div>
+          <div class="codex-achievements"><span>${pct}% catalogued</span><span>✦ ${owned.length >= 66 ? 'Master Archivist' : 'Archivist'}</span></div>
+        </div>
+        <div class="codex-tiers">${tierSummary}</div>
+        <div class="codex-grid" id="codex-grid">${cards}</div>
+      </div>`);
+    this.updateChrome();
+  }
+
   renderMissions() {
     this.view = 'missions';
     const missions = Save.missions();
@@ -1672,6 +1722,18 @@ export class UI {
         break;
       }
       case 'goto': this.goto(id); break;
+      case 'codex-tier': {
+        const grid = document.getElementById('codex-grid');
+        if (grid) {
+          grid.querySelectorAll('.codex-card').forEach(card => {
+            card.hidden = id !== 'all' && card.dataset.rarity !== id;
+          });
+        }
+        document.querySelectorAll('.codex-tier').forEach(button => {
+          button.classList.toggle('active', button.dataset.id === id);
+        });
+        break;
+      }
       case 'quick-race': this.startQuickRace(); break;
       case 'select-mode': this.modeId = id; this.renderRaceHub(); break;
       case 'select-track':
