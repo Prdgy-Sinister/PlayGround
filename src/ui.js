@@ -76,6 +76,12 @@ export class UI {
       this.handleAction(t.dataset.action, t.dataset.id, t, e);
     });
     document.addEventListener('pointerup', () => { unlockAudio(); }, { once: true });
+    document.addEventListener('change', (e) => {
+      const slot = e.target.dataset?.breeder;
+      if (!slot) return;
+      this[slot] = e.target.value;
+      this.renderBreeding();
+    });
     $('#modal-root')?.addEventListener('click', (e) => {
       if (e.target.id === 'modal-root') this.closeModal();
     });
@@ -117,6 +123,9 @@ export class UI {
       { id: 'race', icon: '⚑', label: 'Race' },
       { id: 'hangar', icon: '✦', label: 'Dragons' },
       { id: 'village', icon: '⌂', label: 'Village' },
+      { id: 'academy', icon: '◎', label: 'Academy' },
+      { id: 'breeding', icon: '◉', label: 'Breeding' },
+      { id: 'missions', icon: '◆', label: 'Missions' },
       { id: 'explore', icon: '◈', label: 'Explore' },
       { id: 'shop', icon: '◇', label: 'Market' },
     ];
@@ -146,6 +155,9 @@ export class UI {
     else if (view === 'race') { this.game.showMenu(); this.renderRaceHub(); }
     else if (view === 'hangar') { this.dragonId = Save.S().selected; this.game.showHangar(this.dragonId); this.renderHangar(); }
     else if (view === 'village') { this.game.showVillage(); this.renderVillage(); }
+    else if (view === 'academy') { this.game.showHangar(this.dragonId); this.renderAcademy(); }
+    else if (view === 'breeding') { this.game.showHangar(this.dragonId); this.renderBreeding(); }
+    else if (view === 'missions') { this.game.showMenu(); this.renderMissions(); }
     else if (view === 'explore') { this.game.showMenu(); this.renderExploreHub(); }
     else if (view === 'shop') { this.game.showHangar(Save.S().selected); this.renderShop(); }
     this.updateChrome();
@@ -1235,6 +1247,90 @@ export class UI {
     this.renderVillage();
   }
 
+  // ── ACADEMY ──────────────────────────────────────────────────────────────
+  renderAcademy() {
+    this.view = 'academy';
+    const owned = this.ownedDragons();
+    const id = owned.some(d => d.id === this.dragonId) ? this.dragonId : owned[0]?.id;
+    if (!id) return;
+    this.dragonId = id;
+    const def = DRAGON_MAP[id];
+    const state = this.S.dragons[id];
+    const academy = Save.academyState(id);
+    const labels = {
+      speed: ['Speed', 'Top-speed drills', '⚡'], flight: ['Flight', 'Aerial control', '✦'],
+      endurance: ['Endurance', 'Stamina circuits', '◆'], agility: ['Agility', 'Turning and weaving', '↝'],
+      bond: ['Bond', 'Trust and handling', '♥'], focus: ['Focus', 'Boost and timing', '◉'],
+    };
+    this.setScreen(`
+      <div class="progress-screen fade-in">
+        <div class="screen-head"><div><div class="eyebrow">Flight School</div><h1 class="screen-title">Dragon Academy</h1><p class="screen-sub">One discipline practice per dragon, per day. Three practices earn a permanent certificate.</p></div>
+          <button class="back-btn" data-action="goto" data-id="hangar">← Return to Hangar</button></div>
+        <div class="academy-layout">
+          <aside class="academy-dragon"><img src="${this.thumb(def)}" alt="${def.name}" /><div class="card-kicker">Selected pupil</div><h2>${def.name}</h2><div class="stage-badge">${state.stage} · Level ${state.level}</div>
+            <div class="dragon-picker">${owned.map(d => `<button class="mini-dragon ${d.id === id ? 'active' : ''}" data-action="academy-select" data-id="${d.id}" title="${d.name || d.name}"><img src="${this.thumb(d)}" alt="" /></button>`).join('')}</div>
+          </aside>
+          <div class="discipline-grid">
+            ${academy.disciplines.map(d => { const [name, desc, icon] = labels[d.id]; return `<article class="discipline-card ${d.certificate ? 'certified' : ''}">
+              <div class="discipline-icon">${icon}</div><div class="discipline-copy"><h3>${name}</h3><p>${desc}</p><div class="practice-row"><span>Practice ${d.practice}/3</span><span>${d.certificate ? 'Certificate earned' : d.trainedToday ? 'Cooldown' : 'Ready today'}</span></div><div class="bar"><i style="width:${Math.min(100, d.practice / 3 * 100)}%"></i></div></div>
+              <button class="btn ${d.trainedToday ? 'btn-ghost' : 'btn-primary'}" data-action="train-discipline" data-id="${d.id}" ${d.trainedToday ? 'disabled' : ''}>${d.trainedToday ? 'Tomorrow' : d.certificate ? 'Practice' : 'Train'}</button>
+            </article>`; }).join('')}
+          </div>
+        </div>
+      </div>`);
+    this.updateChrome();
+  }
+
+  // ── BREEDING ─────────────────────────────────────────────────────────────
+  renderBreeding() {
+    this.view = 'breeding';
+    const owned = this.ownedDragons();
+    this.breedA ||= owned[0]?.id;
+    this.breedB ||= owned[1]?.id;
+    if (this.breedA === this.breedB) this.breedB = owned.find(d => d.id !== this.breedA)?.id;
+    const eggs = this.S.eggs || [];
+    this.setScreen(`
+      <div class="progress-screen fade-in">
+        <div class="screen-head"><div><div class="eyebrow">The Starloft</div><h1 class="screen-title">Dragon Breeding</h1><p class="screen-sub">Pair compatible families to discover new species and inherited traits. Eggs incubate for 30 minutes.</p></div>
+          <button class="back-btn" data-action="goto" data-id="hangar">← Hangar</button></div>
+        <div class="breeding-layout">
+          <section class="breeding-table">
+            ${[['breedA','breedB']].map(() => '').join('')}
+            ${this.renderBreederSlot('breedA', this.breedA, owned)}
+            <div class="breed-heart">＋</div>
+            ${this.renderBreederSlot('breedB', this.breedB, owned)}
+            <button class="btn btn-primary breed-button" data-action="breed-dragons" ${owned.length < 2 ? 'disabled' : ''}>Begin incubation</button>
+          </section>
+          <section class="egg-nest"><div class="section-label"><h3>Incubation Nest</h3><span>${eggs.length ? eggs.length + ' egg' + (eggs.length === 1 ? '' : 's') : 'Empty nest'}</span></div>
+            ${eggs.length ? eggs.map(egg => { const def = DRAGON_MAP[egg.speciesId]; const remaining = Save.incubationRemaining(egg); const pct = Math.max(0, Math.min(100, (1 - remaining / (30 * 60 * 1000)) * 100)); return `<article class="egg-card"><div class="egg-orb ${egg.mutation ? 'mutant' : ''}">◉</div><div><div class="card-kicker">${egg.mutation ? 'Rare mutation' : def?.rarity || 'Dragon'} egg</div><h3>${def?.name || 'Mystery hatchling'}</h3><div class="bar"><i style="width:${pct}%"></i></div><div class="egg-time">${remaining ? fmtTime(Math.ceil(remaining / 1000)) : 'Ready to hatch'}</div><input class="hatch-name" maxlength="24" placeholder="Name hatchling" data-egg-name="${egg.id}" /><button class="btn ${remaining ? 'btn-ghost' : 'btn-primary'}" data-action="claim-egg" data-id="${egg.id}" ${remaining ? 'disabled' : ''}>${remaining ? 'Incubating' : 'Hatch dragon'}</button></div></article>`; }).join('') : `<div class="empty-state"><div>◯</div><h3>The nest is quiet</h3><p>Choose two owned dragons to begin a 30-minute incubation.</p></div>`}
+          </section>
+        </div>
+      </div>`);
+    this.updateChrome();
+  }
+
+  renderBreederSlot(slot, selectedId, owned) {
+    const def = DRAGON_MAP[selectedId];
+    const d = this.S.dragons[selectedId];
+    return `<div class="breeder-slot"><label>Parent ${slot === 'breedA' ? 'One' : 'Two'}</label><select data-breeder="${slot}" ${owned.length ? '' : 'disabled'}>${owned.map(x => `<option value="${x.id}" ${x.id === selectedId ? 'selected' : ''}>${x.name || x.name}</option>`).join('')}</select>${def ? `<div class="breeder-dragon"><img src="${this.thumb(def)}" alt="" /><div><b>${def.name}</b><span>${d?.stage || 'Unknown'} · ${def.family}</span></div></div>` : ''}</div>`;
+  }
+
+  // ── MISSIONS ─────────────────────────────────────────────────────────────
+  renderMissions() {
+    this.view = 'missions';
+    const missions = Save.missions();
+    this.setScreen(`
+      <div class="progress-screen fade-in">
+        <div class="screen-head"><div><div class="eyebrow">Rider Journal</div><h1 class="screen-title">Missions & Trials</h1><p class="screen-sub">Race, bond, explore and train. Completed missions reward coins, gems and rider experience.</p></div>
+          <button class="back-btn" data-action="goto" data-id="menu">⌂ Hearthfall</button></div>
+        <div class="mission-grid">
+          ${missions.map(m => { const pct = Math.min(100, m.progress / m.goal * 100); return `<article class="mission-card ${m.complete ? 'complete' : ''} ${m.claimed ? 'claimed' : ''}"><div class="mission-mark">${m.claimed ? '✓' : m.complete ? '✦' : '◆'}</div><div class="mission-copy"><div class="card-kicker">${m.claimed ? 'Claimed' : m.complete ? 'Ready to claim' : 'In progress'}</div><h3>${m.name}</h3><p>${m.description}</p><div class="practice-row"><span>${m.progress} / ${m.goal}</span><span>${m.reward.coins ? '◈ ' + m.reward.coins : ''}${m.reward.gems ? ' · ◆ ' + m.reward.gems : ''}${m.reward.xp ? ' · ✦ ' + m.reward.xp + ' XP' : ''}</span></div><div class="bar"><i style="width:${pct}%"></i></div></div>
+            <button class="btn ${m.complete && !m.claimed ? 'btn-primary' : 'btn-ghost'}" data-action="${m.complete && !m.claimed ? 'claim-mission' : 'noop'}" data-id="${m.id}" ${m.complete && !m.claimed ? '' : 'disabled'}>${m.claimed ? 'Claimed' : m.complete ? 'Claim' : 'Tracking'}</button></article>`; }).join('')}
+        </div>
+      </div>`);
+    this.updateChrome();
+  }
+
   // ── EXPLORE HUB ──────────────────────────────────────────────────────────
   renderExploreHub() {
     this.view = 'explore';
@@ -1544,6 +1640,37 @@ export class UI {
   // ── actions ───────────────────────────────────────────────────────────────
   handleAction(a, id, el) {
     switch (a) {
+      case 'academy-select':
+        if (this.S.dragons[id]) { this.dragonId = id; this.game.showHangar(id); this.renderAcademy(); }
+        break;
+      case 'train-discipline': {
+        const res = Save.trainDiscipline(this.dragonId, id);
+        this.toast(res.msg, res.certificate ? 'Certificate added to this dragon' : '', res.ok ? 'good' : '');
+        if (res.ok) { sfx('level'); this.game.refreshHangarModel?.(); this.renderAcademy(); this.updateChrome(); }
+        break;
+      }
+      case 'breed-dragons': {
+        const res = Save.breedDragons(this.breedA, this.breedB);
+        this.toast(res.msg || 'Egg placed in the Starloft nest.', res.ok ? 'Incubation has begun — 30 minutes' : '', res.ok ? 'good' : '');
+        if (res.ok) { sfx('pickup'); this.renderBreeding(); }
+        break;
+      }
+      case 'claim-egg': {
+        const input = document.querySelector(`[data-egg-name="${id}"]`);
+        const res = Save.claimHatchling(id, input?.value || '');
+        this.toast(res.msg || (res.id ? 'A new dragon hatched!' : 'Hatchling claimed.'), res.converted ? '+300 coins' : '', res.ok ? 'good' : '');
+        if (res.ok) { sfx('level'); this.thumbs.clear(); this.renderBreeding(); this.updateChrome(); }
+        break;
+      }
+      case 'claim-mission': {
+        const res = Save.claimMission(id);
+        if (res.ok) {
+          sfx('pickup');
+          this.toast('Mission reward claimed!', `◈ ${res.reward.coins || 0}${res.reward.gems ? ' · ◆ ' + res.reward.gems : ''}${res.reward.xp ? ' · ✦ ' + res.reward.xp + ' XP' : ''}`, 'good');
+          this.renderMissions(); this.updateChrome();
+        } else this.toast(res.msg, '', '');
+        break;
+      }
       case 'goto': this.goto(id); break;
       case 'quick-race': this.startQuickRace(); break;
       case 'select-mode': this.modeId = id; this.renderRaceHub(); break;

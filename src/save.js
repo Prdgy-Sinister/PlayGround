@@ -13,7 +13,7 @@ export function defaultState() {
   const village = {};
   BUILDINGS.forEach(b => { village[b.id] = b.id === 'hall' ? 1 : 0; });
   return {
-    version: 1,
+    version: 2,
     riderName: 'Wren Skyborn',
     level: 1,
     xp: 0,
@@ -34,10 +34,20 @@ export function defaultState() {
     dailies: { date: today(), progress: {}, claimed: [] },
     stats: { races: 0, wins: 0, gates: 0, boostTime: 0, orbs: 0, bonds: 0, upgrades: 0, trials: 0, distance: 0, podiums: 0 },
     season: { xp: 0, tier: 1 },
+    eggs: [],
+    missionProgress: {},
+    claimedMissions: [],
     log: [],
     settings: { quality: 'auto', music: true, sfx: true, invertY: false, leftHand: false },
     tutorialDone: false,
   };
+}
+
+function stageForLevel(level = 1) {
+  if (level < 5) return 'hatchling';
+  if (level < 10) return 'juvenile';
+  if (level < 20) return 'adolescent';
+  return 'adult';
 }
 
 function makeDragonSave(def, level = 1) {
@@ -46,6 +56,11 @@ function makeDragonSave(def, level = 1) {
     upgrades: { speed: 0, accel: 0, stamina: 0, handling: 0 },
     skills: [], lastBond: 0, seen: true,
     cosmetics: { skin: 'default', saddle: 'none', armour: 'none', wings: 'none' },
+    name: '',
+    stage: stageForLevel(level),
+    parents: [],
+    genes: null,
+    academy: { practice: {}, trained: {}, certificates: [], bonuses: {} },
   };
 }
 
@@ -61,6 +76,7 @@ export function load() {
   } catch (err) { console.warn('Save load failed', err); }
   if (!state) state = defaultState();
   rollDailies();
+  save(); // Persist schema migrations and any newly introduced defaults.
   return state;
 }
 
@@ -74,13 +90,27 @@ function mergeDefaults(def, saved) {
   out.village = { ...def.village, ...(saved.village || {}) };
   out.dailies = { ...def.dailies, ...(saved.dailies || {}) };
   out.season = { ...def.season, ...(saved.season || {}) };
+  out.eggs = Array.isArray(saved.eggs) ? saved.eggs : [];
+  out.missionProgress = { ...(saved.missionProgress || {}) };
+  out.claimedMissions = Array.isArray(saved.claimedMissions) ? saved.claimedMissions : [];
   out.dragons = { ...def.dragons, ...(saved.dragons || {}) };
   for (const id in out.dragons) {
     const d = out.dragons[id];
     d.upgrades = { speed: 0, accel: 0, stamina: 0, handling: 0, ...(d.upgrades || {}) };
     d.cosmetics = { skin: 'default', saddle: 'none', armour: 'none', wings: 'none', ...(d.cosmetics || {}) };
-    d.skills = d.skills || [];
+    d.skills = Array.isArray(d.skills) ? d.skills : [];
+    d.name = typeof d.name === 'string' ? d.name : '';
+    d.stage = d.stage || stageForLevel(d.level || 1);
+    d.parents = Array.isArray(d.parents) ? d.parents : [];
+    d.genes = d.genes && typeof d.genes === 'object' ? d.genes : null;
+    const academy = d.academy || {};
+    d.academy = {
+      practice: { ...(academy.practice || {}) }, trained: { ...(academy.trained || {}) },
+      certificates: Array.isArray(academy.certificates) ? academy.certificates : [],
+      bonuses: { ...(academy.bonuses || {}) },
+    };
   }
+  out.version = 2;
   if (!out.dragons[out.selected]) out.selected = Object.keys(out.dragons)[0] || 'emberling';
   return out;
 }
@@ -104,6 +134,127 @@ export function addDragon(id, level = 1) {
   addRiderXp(120);
   save();
   return true;
+}
+
+const BREEDING_MS = 30 * 60 * 1000;
+const GENE_STATS = ['speed', 'accel', 'stamina', 'handling'];
+const randomItem = list => list[Math.floor(Math.random() * list.length)];
+
+function parentId(parent) { return typeof parent === 'string' ? parent : parent?.id; }
+function baseGenes(id) {
+  const def = DRAGON_MAP[id];
+  const savedGenes = state.dragons[id]?.genes?.stats;
+  return Object.fromEntries(GENE_STATS.map(key => [key, Number(savedGenes?.[key] ?? def?.stats?.[key] ?? 5)]));
+}
+function chooseOffspring(parentIds) {
+  const reserved = new Set(state.eggs.map(egg => egg.speciesId));
+  const available = DRAGONS.filter(def => !state.dragons[def.id] && !reserved.has(def.id));
+  if (!available.length) return null;
+  const parents = parentIds.map(id => DRAGON_MAP[id]);
+  const families = parents.map(p => p?.family).filter(Boolean);
+  const mutation = Math.random() < 0.08;
+  const pool = mutation ? available : available.filter(def => families.includes(def.family));
+  const choices = pool.length ? pool : available;
+  const weighted = choices.flatMap(def => {
+    const matching = families.includes(def.family);
+    return Array(Math.max(1, matching ? 4 : 1)).fill(def);
+  });
+  return { def: randomItem(weighted), mutation };
+}
+
+/** Start breeding two owned dragons. Species are unique in the current save model. */
+export function breedDragons(parentA, parentB) {
+  const parentIds = [parentId(parentA), parentId(parentB)];
+  if (parentIds.some(id => !id || !state.dragons[id])) return { ok: false, msg: 'Both parents must be dragons you own.' };
+  if (parentIds[0] === parentIds[1]) return { ok: false, msg: 'Choose two different parents.' };
+  const offspring = chooseOffspring(parentIds);
+  if (!offspring) return { ok: false, msg: 'There are no unowned dragon species left to hatch.' };
+  const { def, mutation } = offspring;
+  const inherited = parentIds.map(baseGenes);
+  const genes = { stats: {} };
+  for (const key of GENE_STATS) {
+    const inheritedValue = (inherited[0][key] + inherited[1][key]) / 2;
+    let value = def.stats[key] * 0.65 + inheritedValue * 0.35;
+    if (mutation) value += Math.random() < 0.5 ? -1.5 : 1.5;
+    genes.stats[key] = Math.round(Math.max(1, Math.min(12, value)) * 10) / 10;
+  }
+  const createdAt = Date.now();
+  const egg = {
+    id: `egg-${createdAt.toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    speciesId: def.id, parentIds, genes, mutation, createdAt, hatchAt: createdAt + BREEDING_MS,
+  };
+  state.eggs.push(egg);
+  save();
+  return { ok: true, egg };
+}
+
+export function incubationRemaining(egg) {
+  const target = typeof egg === 'string' ? state.eggs.find(item => item.id === egg) : egg;
+  return target ? Math.max(0, Number(target.hatchAt || 0) - Date.now()) : 0;
+}
+
+export function claimHatchling(eggId, name = '') {
+  const index = state.eggs.findIndex(egg => egg.id === eggId);
+  if (index < 0) return { ok: false, msg: 'Egg not found.' };
+  const egg = state.eggs[index];
+  if (incubationRemaining(egg) > 0) return { ok: false, msg: 'The egg is still incubating.', remaining: incubationRemaining(egg) };
+  state.eggs.splice(index, 1);
+  if (state.dragons[egg.speciesId]) {
+    state.coins += 300;
+    save();
+    return { ok: true, converted: true, msg: 'Duplicate species converted into 300 coins.' };
+  }
+  const dragon = makeDragonSave(DRAGON_MAP[egg.speciesId], 1);
+  dragon.name = String(name || '').trim().slice(0, 24);
+  dragon.parents = [...(egg.parentIds || [])];
+  dragon.genes = egg.genes || null;
+  state.dragons[egg.speciesId] = dragon;
+  state.log.unshift({ t: Date.now(), text: `${dragon.name || DRAGON_MAP[egg.speciesId].name} hatched!`, kind: 'dragon' });
+  state.log = state.log.slice(0, 40);
+  addRiderXp(120);
+  save();
+  return { ok: true, id: egg.speciesId, dragon };
+}
+
+export function dragonStage(id) {
+  const dragon = state.dragons[id];
+  if (!dragon) return null;
+  dragon.stage = stageForLevel(dragon.level || 1);
+  return dragon.stage;
+}
+
+export const ACADEMY_DISCIPLINES = ['speed', 'flight', 'endurance', 'agility', 'bond', 'focus'];
+export function academyState(id) {
+  const dragon = state.dragons[id];
+  if (!dragon) return null;
+  const academy = dragon.academy || (dragon.academy = { practice: {}, trained: {}, certificates: [], bonuses: {} });
+  return {
+    ...academy,
+    disciplines: ACADEMY_DISCIPLINES.map(discipline => ({
+      id: discipline, practice: academy.practice[discipline] || 0,
+      trainedToday: academy.trained[discipline] === today(),
+      certificate: academy.certificates.includes(discipline),
+    })),
+  };
+}
+
+export function trainDiscipline(dragonId, discipline) {
+  const dragon = state.dragons[dragonId];
+  if (!dragon) return { ok: false, msg: 'No dragon.' };
+  if (!ACADEMY_DISCIPLINES.includes(discipline)) return { ok: false, msg: 'Unknown discipline.' };
+  const academy = dragon.academy || (dragon.academy = { practice: {}, trained: {}, certificates: [], bonuses: {} });
+  if (academy.trained[discipline] === today()) return { ok: false, msg: 'This discipline is on cooldown until tomorrow.' };
+  academy.practice[discipline] = (academy.practice[discipline] || 0) + 1;
+  academy.trained[discipline] = today();
+  academy.bonuses[discipline] = (academy.bonuses[discipline] || 0) + 1;
+  let certificate = false;
+  if (academy.practice[discipline] >= 3 && !academy.certificates.includes(discipline)) {
+    academy.certificates.push(discipline);
+    certificate = true;
+  }
+  addDragonXp(dragonId, 25);
+  save();
+  return { ok: true, practice: academy.practice[discipline], certificate, msg: certificate ? `${discipline} certificate earned!` : `${discipline} practice complete.` };
 }
 
 export function awardCoins(n) { state.coins = Math.max(0, state.coins + Math.round(n)); save(); }
@@ -136,6 +287,7 @@ export function addDragonXp(id, n) {
     d.level++;
     ups++;
   }
+  d.stage = stageForLevel(d.level);
   if (ups) {
     const hall = BUILDINGS.find(b => b.id === 'hall');
     state.log.unshift({ t: Date.now(), text: `${DRAGON_MAP[id].name} reached level ${d.level}! ${hall ? '' : ''}`, kind: 'level' });
@@ -236,9 +388,14 @@ export function statsOf(id) {
     boostCost: d.skills.some(s => s === 'en3') ? 0.25 : 0,
   };
   const lvl = 1 + (d.level - 1) * 0.035;
-  const bond = 1 + (d.bondLevel - 1) * 0.02;
+  const training = d.academy?.bonuses || {};
+  const bond = 1 + (d.bondLevel - 1) * 0.02 + (training.bond || 0) * 0.005;
   const ups = d.upgrades;
-  const b = def.stats;
+  const b = { ...def.stats, ...(d.genes?.stats || {}) };
+  b.speed += (training.speed || 0) * 0.35 + (training.focus || 0) * 0.1;
+  b.accel += (training.flight || 0) * 0.35 + (training.focus || 0) * 0.1;
+  b.stamina += (training.endurance || 0) * 0.35;
+  b.handling += (training.agility || 0) * 0.35;
   const speed = 46 + b.speed * 3.4 + ups.speed * (2.1 * arenaMult);
   const topSpeed = speed * (1 + skillBoost.speed + skillBoost.speed2) * lvl * bond;
   const accel = (10 + b.accel * 1.6 + ups.accel * (1.7 * arenaMult)) * lvl;
@@ -293,6 +450,49 @@ export function claimDaily(ch) {
   addRiderXp(Math.round(ch.xp * 0.5));
   save();
   return true;
+}
+
+export const MISSION_LIST = [
+  { id: 'first-flight', name: 'First Flight', description: 'Complete a race.', stat: 'races', goal: 1, reward: { coins: 250, xp: 60 } },
+  { id: 'victory-lap', name: 'Victory Lap', description: 'Win three races.', stat: 'wins', goal: 3, reward: { coins: 500, gems: 1, xp: 120 } },
+  { id: 'gatekeeper', name: 'Gatekeeper', description: 'Pass through ten race gates.', stat: 'gates', goal: 10, reward: { coins: 350, xp: 90 } },
+  { id: 'bonded', name: 'Kindred Spirits', description: 'Build five bonds.', stat: 'bonds', goal: 5, reward: { coins: 300, xp: 100 } },
+  { id: 'trailblazer', name: 'Trailblazer', description: 'Visit five exploration zones.', source: 'explore', goal: 5, reward: { coins: 400, gems: 1, xp: 100 } },
+  { id: 'orb-seeker', name: 'Orb Seeker', description: 'Collect twenty exploration orbs.', stat: 'orbs', goal: 20, reward: { coins: 450, xp: 120 } },
+  { id: 'academy-scholar', name: 'Academy Scholar', description: 'Earn three academy certificates.', source: 'certificates', goal: 3, reward: { coins: 600, gems: 2, xp: 180 } },
+];
+
+function observedMissionProgress(mission) {
+  if (mission.stat) return Number(state.stats[mission.stat] || 0);
+  if (mission.source === 'explore') return Object.values(state.explore || {}).reduce((sum, zone) => sum + Number(zone.visited || 0), 0);
+  if (mission.source === 'certificates') return Object.values(state.dragons || {}).reduce((sum, dragon) => sum + (dragon.academy?.certificates?.length || 0), 0);
+  return 0;
+}
+export function missionState(id) {
+  const mission = MISSION_LIST.find(item => item.id === id);
+  if (!mission) return null;
+  const progress = Math.max(Number(state.missionProgress[id] || 0), observedMissionProgress(mission));
+  return { ...mission, progress: Math.min(mission.goal, progress), complete: progress >= mission.goal, claimed: state.claimedMissions.includes(id) };
+}
+export function missions() { return MISSION_LIST.map(mission => missionState(mission.id)); }
+export const listMissions = missions;
+export const getMissionState = missionState;
+export function missionProgress(id) { return missionState(id)?.progress || 0; }
+export function progressMission(id, amount = 1) {
+  if (!MISSION_LIST.some(mission => mission.id === id)) return false;
+  state.missionProgress[id] = Math.max(0, Number(state.missionProgress[id] || 0) + Number(amount || 0));
+  save();
+  return missionState(id);
+}
+export function claimMission(id) {
+  const mission = missionState(id);
+  if (!mission || !mission.complete || mission.claimed) return { ok: false, msg: 'Mission is not ready to claim.' };
+  state.claimedMissions.push(id);
+  state.coins += mission.reward.coins || 0;
+  state.gems += mission.reward.gems || 0;
+  addRiderXp(mission.reward.xp || 0);
+  save();
+  return { ok: true, reward: mission.reward };
 }
 
 // ── TRACK UNLOCKS ───────────────────────────────────────────────────────────
