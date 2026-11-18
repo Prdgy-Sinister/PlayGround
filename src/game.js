@@ -358,7 +358,7 @@ export class Game {
 
   refreshHangarModel() {
     if (this.mode !== 'hangar' || !this.playerModel) return;
-    const id = Save.S().selected;
+    const id = this.hangarDragonId || Save.S().selected;
     this.disposeDragon(this.playerModel);
     this.setHangarDragon(id);
     this.hangarAmbient.forEach(d => this.disposeDragon(d));
@@ -511,6 +511,10 @@ export class Game {
   showExplore(zoneId) {
     this.clearScene();
     const es = Save.exploreState(zoneId);
+    if (!es.visited) {
+      es.visited = 1;
+      Save.save();
+    }
     const w = buildExploreWorld(zoneId, { orbs: es.orbs, hidden: es.hidden }, this.quality);
     this.scene.add(w.group); this.world = w;
     this.explore = { zoneId, orbs: w.orbs, total: w.orbPositions.length, collected: es.orbs.length, nearLair: false, lair: w.lair, promptShown: false };
