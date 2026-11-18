@@ -228,14 +228,20 @@ h1, h2, h3, h4 { font-family: 'Cinzel', Georgia, serif; margin: 0; font-weight: 
   position: relative;
   display: grid; grid-template-columns: minmax(300px, 500px) 1fr minmax(290px, 360px);
   align-items: center; gap: clamp(18px, 3vw, 40px);
-  overflow: hidden; padding-bottom: calc(96px + var(--safe-bottom));
+  overflow: visible; padding-bottom: calc(96px + var(--safe-bottom));
 }
 .menu-hero {
   align-self: center; max-width: 500px; padding: 24px 26px;
   border-radius: 22px; border: 1px solid rgba(159, 227, 220, .14);
-  background: linear-gradient(155deg, rgba(5, 17, 24, .84), rgba(5, 17, 24, .5));
+  background: radial-gradient(ellipse at 12% 0%, rgba(73, 202, 188, .12), transparent 46%), linear-gradient(155deg, rgba(5, 17, 24, .88), rgba(5, 17, 24, .56));
   box-shadow: 0 24px 70px rgba(0, 0, 0, .38), inset 0 1px 0 rgba(255, 255, 255, .05);
   backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+@media (hover: hover) {
+  .menu-hero:hover { border-color: rgba(159, 227, 220, .26); box-shadow: 0 28px 78px rgba(0, 0, 0, .44), inset 0 1px 0 rgba(255, 255, 255, .07); }
+  .menu-cards .card { transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+  .menu-cards .card:hover { transform: translateY(-2px); border-color: rgba(255, 209, 102, .3); box-shadow: 0 20px 46px rgba(0, 0, 0, .38); }
 }
 .brand-line { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .brand-crest { width: 44px; height: 44px; flex: none; filter: drop-shadow(0 0 14px rgba(255,209,102,.4)); }

@@ -119,7 +119,7 @@ export class Game {
 
   freshFlight() {
     return {
-      speed: 55, yaw: 0, pitch: 0, roll: 0, stamina: 100, staminaMax: 100,
+      speed: 55, yaw: 0, pitch: 0, roll: 0, controlX: 0, controlY: 0, stamina: 100, staminaMax: 100,
       boosting: false, boostLatch: false, abilityCd: 0, maneuverCd: 0, shield: 0,
       effectTimer: 0, slowTimer: 0, dashTimer: 0, galeTimer: 0, rollSpin: 0, rollSpinT: 0,
       accelStat: 70, turn: 1.5, topSpeed: 72, boostMult: 1.35, boostCost: 18, regen: 7,
@@ -358,7 +358,7 @@ export class Game {
 
   refreshHangarModel() {
     if (this.mode !== 'hangar' || !this.playerModel) return;
-    const id = Save.S().selected;
+    const id = this.hangarDragonId || Save.S().selected;
     this.disposeDragon(this.playerModel);
     this.setHangarDragon(id);
     this.hangarAmbient.forEach(d => this.disposeDragon(d));
@@ -511,6 +511,10 @@ export class Game {
   showExplore(zoneId) {
     this.clearScene();
     const es = Save.exploreState(zoneId);
+    if (!es.visited) {
+      es.visited = 1;
+      Save.save();
+    }
     const w = buildExploreWorld(zoneId, { orbs: es.orbs, hidden: es.hidden }, this.quality);
     this.scene.add(w.group); this.world = w;
     this.explore = { zoneId, orbs: w.orbs, total: w.orbPositions.length, collected: es.orbs.length, nearLair: false, lair: w.lair, promptShown: false };
@@ -635,7 +639,8 @@ export class Game {
       nextGate: 0, gatesPassed: 0, ended: false, started: false,
       elimTimer: 20, eliminated: [], finishTimes: [], startedAt: performance.now(),
       checkTimer: mode === 'checkpoint' ? 75 : 0, score: 0, eventLog: [],
-      lastGateTime: 0, perfects: 0, bestPos: 6,
+      lastGateTime: 0, perfects: 0, bestPos: 6, courseGrace: 1.5,
+      lastCheckpointGate: 0, previousPlayerPosition: null, recoveryCooldown: 0,
     };
     // player
     this.playerModel = this.makePlayerModel({ scale: 1.35, rider: true, blob: true });
@@ -643,6 +648,7 @@ export class Game {
     const g0 = w.gates[0];
     const tan = g0.tangent.clone().normalize();
     this.player.position.copy(g0.pos).addScaledVector(tan, -42).add(V().set(0, -2, 0));
+    this.race.previousPlayerPosition = this.player.position.clone();
     const yaw = Math.atan2(-tan.x, -tan.z);
     this.flight = this.freshFlight();
     const st = Save.statsOf(Save.S().selected);
@@ -765,52 +771,105 @@ export class Game {
     }
   }
 
-  updateGates() {
+  recoverToCheckpoint(reason = 'course') {
     const r = this.race;
     const w = this.world;
-    if (!w || !w.gates) return;
+    if (!r || !w?.gates?.length || !this.player) return;
+    // Rewind to the last checkpoint actually passed (or the starting gate).
+    const checkpointIndex = Number.isInteger(r.lastCheckpointGate) ? r.lastCheckpointGate : 0;
+    const checkpoint = w.gates[checkpointIndex] || w.gates[0];
+    const tangent = checkpoint.tangent.clone().normalize();
+    this.player.position.copy(checkpoint.pos).addScaledVector(tangent, -30).add(V().set(0, -2, 0));
+    this.flight.yaw = Math.atan2(-tangent.x, -tangent.z);
+    this.flight.pitch = 0;
+    this.flight.roll = 0;
+    this.flight.controlX = 0;
+    this.flight.controlY = 0;
+    this.flight.speed = Math.max(34, Math.min(this.flight.speed * 0.72, this.flight.topSpeed * 0.9));
+    this.player.rotation.set(0, this.flight.yaw, 0, 'YXZ');
+    r.previousPlayerPosition = this.player.position.clone();
+    r.courseGrace = 1.25;
+    r.recoveryCooldown = 2;
+    this.cameraPos.copy(this.player.position).add(V().set(0, 7, 18));
+    this.cameraTarget.copy(this.player.position).addScaledVector(tangent, 12);
+    this.camShake = 0.45;
+    this.emit('notice', {
+      text: reason === 'missed-gate' ? 'Missed the gate — back to checkpoint!' : 'Course recovery — back to checkpoint!',
+      kind: 'warn',
+    });
+  }
+
+  updateGates(dt) {
+    const r = this.race;
+    const w = this.world;
+    if (!w || !w.gates?.length) return;
+    const position = this.player.position;
     const gate = w.gates[r.nextGate % w.gates.length];
     if (!gate) return;
-    const d = this.player.position.distanceTo(gate.pos);
-    if (d < gate.radius * 1.06) {
-      // ensure passing roughly forward
-      const fwd = this.forward();
-      if (fwd.dot(gate.tangent) > -0.25) {
-        const gm = w.gateMeshes[r.nextGate % w.gateMeshes.length];
-        if (gm) setGateActive(gm, false, true);
-        const perfect = d < gate.radius * 0.45;
-        r.perfects += perfect ? 1 : 0;
-        r.gatesPassed++;
-        Save.recordStat('gates', 1);
+    r.courseGrace = Math.max(0, (r.courseGrace || 0) - dt);
+    r.recoveryCooldown = Math.max(0, (r.recoveryCooldown || 0) - dt);
+    const previous = r.previousPlayerPosition || position.clone();
+    const previousSide = previous.clone().sub(gate.pos).dot(gate.tangent);
+    const currentSide = position.clone().sub(gate.pos).dot(gate.tangent);
+    const crossedForward = previousSide <= 0 && currentSide > 0;
+    const crossingT = crossedForward ? previousSide / (previousSide - currentSide) : 1;
+    const crossingPosition = previous.clone().lerp(position, crossingT);
+    const crossingSide = crossingPosition.clone().sub(gate.pos).dot(gate.tangent);
+    const offset = crossingPosition.clone().sub(gate.pos).addScaledVector(gate.tangent, -crossingSide);
+    const lateralDistance = offset.length();
+
+    if (crossedForward) {
+      if (lateralDistance > gate.radius * 0.92) {
+        this.recoverToCheckpoint('missed-gate');
+        return;
+      }
+      const gm = w.gateMeshes[r.nextGate % w.gateMeshes.length];
+      if (gm) setGateActive(gm, false, true);
+      const perfect = lateralDistance < gate.radius * 0.45;
+      r.perfects += perfect ? 1 : 0;
+      r.gatesPassed++;
+      Save.recordStat('gates', 1);
+      if (r.mode === 'checkpoint') {
+        r.score++; r.checkTimer = Math.min(95, r.checkTimer + 4.5);
+        this.emit('notice', { text: perfect ? 'Perfect gate! +6s' : 'Gate! +4s', kind: 'gate' });
+        if (perfect) r.checkTimer = Math.min(95, r.checkTimer + 1.5);
+      } else if (perfect) {
+        this.emit('notice', { text: 'Perfect line!', kind: 'gate' });
+      }
+      sfx('gate');
+      this.flight.speed = Math.min(this.flight.speed + 4, this.flight.topSpeed * 1.6);
+      this.flight.stamina = Math.min(this.flight.staminaMax, this.flight.stamina + 6);
+      r.lastGateTime = r.time;
+      this.emit('gateFlash', { perfect, index: r.nextGate });
+      if (gate.checkpoint) r.lastCheckpointGate = r.nextGate;
+      r.nextGate++;
+      if (r.nextGate >= w.gates.length) {
+        r.nextGate = 0;
         if (r.mode === 'checkpoint') {
-          r.score++; r.checkTimer = Math.min(95, r.checkTimer + 4.5);
-          this.emit('notice', { text: perfect ? 'Perfect gate! +6s' : 'Gate! +4s', kind: 'gate' });
-          if (perfect) r.checkTimer = Math.min(95, r.checkTimer + 1.5);
-        } else if (perfect) {
-          this.emit('notice', { text: 'Perfect line!', kind: 'gate' });
-        }
-        sfx('gate');
-        this.flight.speed = Math.min(this.flight.speed + 4, this.flight.topSpeed * 1.6);
-        this.flight.stamina = Math.min(this.flight.staminaMax, this.flight.stamina + 6);
-        r.lastGateTime = r.time;
-        this.emit('gateFlash', { perfect, index: r.nextGate });
-        r.nextGate++;
-        if (r.nextGate >= w.gates.length) {
-          r.nextGate = 0;
-          if (r.mode === 'checkpoint') {
-            r.score += 1;
-          } else {
-            r.lap++;
-            if (r.lap <= r.totalLaps) {
-              this.emit('lap', { lap: r.lap, total: r.totalLaps });
-              this.emit('notice', { text: r.lap === r.totalLaps ? 'Final lap!' : `Lap ${r.lap}`, kind: 'lap' });
-              sfx('level');
-            }
+          r.score += 1;
+        } else {
+          r.lap++;
+          if (r.lap <= r.totalLaps) {
+            this.emit('lap', { lap: r.lap, total: r.totalLaps });
+            this.emit('notice', { text: r.lap === r.totalLaps ? 'Final lap!' : `Lap ${r.lap}`, kind: 'lap' });
+            sfx('level');
           }
         }
-        this.activateNextGate();
+      }
+      this.activateNextGate();
+    }
+
+    // Detect a sustained departure from the route, but allow a short recovery window after launch/warp.
+    if (r.courseGrace <= 0 && r.recoveryCooldown <= 0) {
+      let nearest = Infinity;
+      for (const courseGate of w.gates) nearest = Math.min(nearest, position.distanceToSquared(courseGate.pos));
+      if (nearest > 88 * 88) {
+        this.recoverToCheckpoint('course');
+        return;
       }
     }
+    r.previousPlayerPosition = position.clone();
+    const d = position.distanceTo(gate.pos);
     // wrong way hint
     if (d > 120 && r.time - r.lastGateTime > 7) {
       if (!r.warned) { r.warned = true; this.emit('notice', { text: 'Follow the glowing rings!', kind: 'warn' }); setTimeout(() => { r.warned = false; }, 5000); }
@@ -1031,17 +1090,23 @@ export class Game {
     if (this.mode === 'race' && race && race.state !== 'flying') return;
     const ix = this.input.steerX;
     const iy = this.input.steerY;
+    // Smooth small input changes without making the controls feel delayed.
+    const inputBlend = 1 - Math.exp(-dt * 8.5);
+    f.controlX = lerp(f.controlX, ix, inputBlend);
+    f.controlY = lerp(f.controlY, iy, inputBlend);
+    const steerX = f.controlX;
+    const steerY = f.controlY;
     // yaw & pitch
     const speedFactor = clamp(1.05 - f.speed / (f.topSpeed * 3.2), 0.72, 1.05);
-    const yawRate = f.turn * speedFactor;
-    f.yaw -= ix * yawRate * dt;
-    const pitchTargetRate = f.turn * 0.72 * speedFactor;
-    f.pitch += iy * pitchTargetRate * dt;
-    if (Math.abs(iy) < 0.1) f.pitch *= (1 - Math.min(1, dt * 0.55));
-    f.pitch = clamp(f.pitch, -1.15, 1.15);
+    const yawRate = f.turn * speedFactor * 0.82;
+    f.yaw -= steerX * yawRate * dt;
+    const pitchTargetRate = f.turn * 0.64 * speedFactor;
+    f.pitch += steerY * pitchTargetRate * dt;
+    if (Math.abs(steerY) < 0.1) f.pitch *= Math.exp(-dt * 0.55);
+    f.pitch = clamp(f.pitch, -1.05, 1.05);
     // roll
-    const rollTarget = -ix * 0.58;
-    f.roll = lerp(f.roll, rollTarget, Math.min(1, dt * 3.4));
+    const rollTarget = -steerX * 0.52;
+    f.roll = lerp(f.roll, rollTarget, 1 - Math.exp(-dt * 3.4));
     f.roll += f.rollSpin;
     if (f.rollSpinT > 0) { f.rollSpinT -= dt; f.rollSpin = Math.sin((1 - f.rollSpinT / 0.7) * Math.PI) * 0.9 * (f.rollSpinDir || 1); }
     else f.rollSpin = 0;
