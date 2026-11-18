@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { TRACK_MAP, EXPLORE_ZONES, BUILDINGS } from './data.js';
+import { TRACK_MAP, EXPLORE_ZONES, BUILDINGS, HABITAT_INFO, FAMILY_ORDER } from './data.js';
 
 // ── deterministic RNG ───────────────────────────────────────────────────────
 export function rng(seed) {
@@ -818,37 +818,472 @@ export function buildMenuWorld(quality = 'high') {
   return { group, update, dispose, palette: pal };
 }
 
-// ── hangar stage ───────────────────────────────────────────────────────────
-export function buildHangarStage(trackId = 'hearthfall') {
-  const track = TRACK_MAP[trackId];
-  const pal = track.palette;
+// ── dragon sanctuary (the hangar) ───────────────────────────────────────────
+export function buildDragonSanctuary(trackId = 'hearthfall', quality = 'high') {
+  const pal = (TRACK_MAP[trackId] || TRACK_MAP.hearthfall).palette;
   const group = new THREE.Group();
-  group.add(makeSky(pal, { stars: track.biome === 'aether' }));
-  const clouds = addClouds(group, pal, 10, 300, 60);
-  const platform = new THREE.Mesh(new THREE.CylinderGeometry(26, 20, 5, 9), lam(pal.rock));
-  platform.position.y = -8; group.add(platform);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(26.4, 26, 1.2, 9), lam(pal.ground));
-  cap.position.y = -5.2; group.add(cap);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(18, 0.25, 4, 40), new THREE.MeshBasicMaterial({ color: pal.accent, transparent: true, opacity: 0.35, toneMapped: false }));
-  ring.rotation.x = -Math.PI / 2; ring.position.y = -4.5; group.add(ring);
-  for (let i = 0; i < 4; i++) {
-    const a = i / 4 * Math.PI * 2 + 0.4;
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, 10, 6), lam(pal.rock2));
-    p.position.set(Math.cos(a) * 22, -1, Math.sin(a) * 22); group.add(p);
-    const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.8, 0), new THREE.MeshBasicMaterial({ color: pal.accent, toneMapped: false }));
-    orb.position.set(Math.cos(a) * 22, 4.6, Math.sin(a) * 22); group.add(orb);
+  const anim = { waterfalls: [], clouds: [], flags: [], torches: [], lanterns: [], glows: [], embers: null, fireflies: null, pools: [] };
+  group.add(makeSky(pal, {}));
+  const light = quality !== 'high';
+  anim.clouds = addClouds(group, pal, light ? 8 : 12, 360, 90);
+
+  // materials shared across the sanctuary
+  const rock = lam(pal.rock), rock2 = lam(pal.rock2), grass = lam('#6f964f');
+  const grass2 = lam('#527a3c'), wood = lam('#8a6240'), darkWood = lam('#5b3f2c');
+  const stone = lam('#928c7c'), stone2 = lam('#6f6a5e'), straw = lam('#c8a86a');
+  const gold = lam(pal.accent), snow = lam('#eef7ff');
+  const glowCol = (c, o = 0.8) => {
+    const m = new THREE.MeshBasicMaterial({ color: new THREE.Color(c), transparent: o < 1, opacity: o, toneMapped: false });
+    m.userData.baseOpacity = o;
+    return m;
+  };
+
+  const add = (m) => { group.add(m); return m; };
+  const box = (w, h, d, mat, x = 0, y = 0, z = 0, ry = 0, parent = group) => {
+    const m = new THREE.Mesh(shared.boxGeo, mat); m.scale.set(w, h, d);
+    m.position.set(x, y, z); m.rotation.y = ry; parent.add(m); return m;
+  };
+  const cyl = (rt, rb, h, seg, mat, x = 0, y = 0, z = 0, parent = group) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+    m.position.set(x, y, z); parent.add(m); return m;
+  };
+  const cone = (r, h, seg, mat, x = 0, y = 0, z = 0, parent = group) => {
+    const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, seg), mat);
+    m.position.set(x, y, z); parent.add(m); return m;
+  };
+  const rockMesh = (s, mat, x, y, z, parent = group) => {
+    const m = new THREE.Mesh(shared.rockGeo, mat); m.position.set(x, y, z);
+    m.scale.set(s * (0.8 + Math.random() * 0.5), s * (0.6 + Math.random() * 0.5), s * (0.8 + Math.random() * 0.5));
+    m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+    parent.add(m); return m;
+  };
+  const glowSprite = (color, size, x, y, z, opacity = 0.55, parent = group) => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
+    s.scale.setScalar(size); s.position.set(x, y, z); parent.add(s); return s;
+  };
+
+  // ── sky-island foundation ──
+  const body = cyl(63, 48, 22, 14, rock2, 0, -11.4, 0);
+  body.rotation.y = 0.15;
+  const lip = cyl(64, 63, 1.2, 14, grass, 0, -0.6, 0);
+  lip.rotation.y = 0.15;
+  const inner = cyl(58, 58, 0.12, 14, grass2, 0, 0.02, 0); inner.rotation.y = 0.15;
+  // cliff shards hanging under the island
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2;
+    const r = 34 + (i % 3) * 8;
+    cone(6 + (i % 4) * 3, 22 + (i % 3) * 12, 5, rock2, Math.cos(a) * r, -24 - (i % 3) * 4, Math.sin(a) * r);
   }
-  const particles = makeParticles('motes', pal, 100);
-  group.add(particles);
+
+  // ── mountain ring ──
+  for (let i = 0; i < 11; i++) {
+    const a = i / 11 * Math.PI * 2 + 0.35;
+    const dist = 170 + (i % 3) * 28;
+    const h = 64 + (i % 4) * 24;
+    const r = 24 + (i % 3) * 10;
+    const m = cone(r, h, 6, rock, Math.cos(a) * dist, h / 2 - 32, Math.sin(a) * dist);
+    m.rotation.y = i;
+    const cap = cone(r * 0.52, h * 0.32, 6, snow, Math.cos(a) * dist, h - 32 - h * 0.16, Math.sin(a) * dist);
+    cap.rotation.y = i;
+  }
+
+  // ── central plaza & dais ──
+  const dais = new THREE.Group(); group.add(dais);
+  cyl(10.5, 11, 0.4, 18, stone, 0, 0.2, 0, dais);
+  cyl(8.6, 9.2, 0.42, 18, stone2, 0, 0.6, 0, dais);
+  cyl(6.9, 7.6, 0.42, 18, stone, 0, 1.0, 0, dais);
+  const runeRing = new THREE.Mesh(new THREE.TorusGeometry(7.2, 0.12, 4, 40), glowCol(pal.accent, 0.55));
+  runeRing.rotation.x = -Math.PI / 2; runeRing.position.y = 1.22; dais.add(runeRing);
+  const focus = new THREE.Vector3(0, 1.22, 0);
+  // carved dragon stones and a central hearth behind the dais
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2;
+    const s = new THREE.Mesh(shared.boxGeo, i % 2 ? stone2 : stone);
+    s.scale.set(0.35, 1.1, 1.1); s.position.set(Math.cos(a) * 9.2, 0.75, Math.sin(a) * 9.2);
+    s.rotation.y = -a; dais.add(s);
+  }
+  const hearth = new THREE.Group(); hearth.position.set(0, 1.2, -8.4); group.add(hearth);
+  cyl(1.9, 2.2, 0.7, 8, stone2, 0, 0.35, 0, hearth);
+  const emberMat = glowCol('#ff8a3a', 0.95);
+  cyl(1.35, 1.5, 0.25, 8, emberMat, 0, 0.72, 0, hearth);
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2;
+    const fl = new THREE.Mesh(shared.sphereGeo, glowCol(i % 2 ? '#ffb44a' : '#ff6a1f', 0.9));
+    fl.scale.set(0.24, 0.65, 0.24); fl.position.set(Math.cos(a) * 0.6, 1.05, Math.sin(a) * 0.6);
+    hearth.add(fl); anim.glows.push(fl);
+  }
+  const hearthLight = new THREE.PointLight('#ffb066', 9, 34, 2);
+  hearthLight.position.set(0, 5, -8.4); group.add(hearthLight);
+
+  // ── walkways from the plaza to every habitat ──
+  const familyList = FAMILY_ORDER;
+  const padRadius = 31.5;
+  const anchors = [], pads = [];
+  const padColors = Object.fromEntries(familyList.map(f => [f, HABITAT_INFO[f]?.accent || pal.accent]));
+  for (let i = 0; i < familyList.length; i++) {
+    const a = i / familyList.length * Math.PI * 2 - Math.PI / 2;
+    const cx = Math.cos(a) * padRadius, cz = Math.sin(a) * padRadius;
+    // plank path
+    const ry = Math.PI / 2 - a;
+    for (let k = 0; k < 3; k++) {
+      const rr = 12 + k * 6.2;
+      const plank = box(3.1, 0.16, 5.9, k % 2 ? wood : darkWood, Math.cos(a) * rr, 0.16 + k * 0.02, Math.sin(a) * rr, ry);
+      plank.receiveShadow = false;
+    }
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 2; k++) {
+        const rr = 15 + k * 9;
+        const px = Math.cos(a) * rr + Math.cos(a + Math.PI / 2) * side * 2.2;
+        const pz = Math.sin(a) * rr + Math.sin(a + Math.PI / 2) * side * 2.2;
+        box(0.16, 1.15, 0.16, darkWood, px, 0.58, pz, ry);
+      }
+    }
+
+    const pad = new THREE.Group(); pad.position.set(cx, 0, cz); group.add(pad);
+    const famCol = padColors[familyList[i]];
+    const plateMat = lam(familyList[i] === 'fire' ? '#4a3233' : familyList[i] === 'ice' ? '#bfe6f2' : familyList[i] === 'night' ? '#3a3450' : familyList[i] === 'forest' || familyList[i] === 'venom' ? '#5d7f45' : familyList[i] === 'ocean' ? '#4c8d94' : stone);
+    cyl(4.8, 5.1, 0.5, 10, plateMat, 0, 0.25, 0, pad);
+    // straw nest
+    const nest = new THREE.Mesh(new THREE.TorusGeometry(2.15, 0.48, 5, 14), straw);
+    nest.rotation.x = -Math.PI / 2; nest.position.y = 0.62; pad.add(nest);
+    const bed = new THREE.Mesh(shared.sphereGeo, straw);
+    bed.scale.set(1.85, 0.28, 1.85); bed.position.y = 0.58; pad.add(bed);
+    // carved signpost and species banner
+    box(0.18, 2.9, 0.18, darkWood, 3.7, 1.45, 1.0, 0, pad);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85, 3, 1), lam(famCol, { side: THREE.DoubleSide }));
+    flag.position.set(4.3, 2.45, 1.0); flag.rotation.y = Math.PI / 2; pad.add(flag);
+    anim.flags.push(flag);
+    // family decoration
+    decorateHabitat(pad, familyList[i], { rock, rock2, stone, stone2, wood, darkWood, grass, grass2, snow, gold, straw, glowCol, glowSprite, anim, R: rng(hash(familyList[i] + 'sanctuary')), cone, cyl, box, rockMesh, famCol });
+    pad.userData.interact = { type: 'habitat', family: familyList[i] };
+    pad.userData.family = familyList[i];
+    pads.push(pad);
+    // dragons on the pad face the plaza
+    const face = Math.atan2(cx, cz);
+    anchors.push({ family: familyList[i], position: new THREE.Vector3(cx, 0.72, cz), rotation: face, pad });
+  }
+
+  // ── great hall ──
+  const hall = new THREE.Group(); hall.position.set(0, 0, -46); hall.rotation.y = Math.PI; group.add(hall);
+  box(19, 8, 12, wood, 0, 4, 0, 0, hall);
+  const roof = cone(14, 7.2, 4, lam('#7b3d33'), 0, 11.6, 0, hall); roof.rotation.y = Math.PI / 4;
+  box(20, 0.45, 12.5, gold, 0, 8.1, 0, 0, hall);
+  // door
+  box(3.6, 4.6, 0.4, darkWood, 0, 2.3, 6.05, 0, hall);
+  box(0.25, 5.6, 0.6, gold, -1.95, 2.8, 6.1, 0, hall);
+  box(0.25, 5.6, 0.6, gold, 1.95, 2.8, 6.1, 0, hall);
+  // gable dragon prow
+  cone(0.9, 4, 5, gold, 0, 17.2, 0, hall);
+  const prowEye = glowCol('#ffe27a', 0.95);
+  for (const sd of [-1, 1]) {
+    const e = new THREE.Mesh(shared.sphereGeo, prowEye); e.scale.setScalar(0.18); e.position.set(sd * 0.55, 15.9, 0.1); hall.add(e);
+  }
+  // glowing windows
+  for (let i = 0; i < 4; i++) {
+    const w = box(1.4, 1.8, 0.18, glowCol('#ffd88a', 0.9), -6 + i * 4, 5.2, 6.08, 0, hall);
+    anim.glows.push(w);
+  }
+  // roof beams and shields
+  for (let i = 0; i < 5; i++) {
+    box(0.28, 0.28, 13.4, darkWood, -6 + i * 3, 8.6, 0, 0, hall).rotation.z = 0.08;
+    const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.18, 8), lam(i % 2 ? pal.accent : '#7b3d33'));
+    shield.rotation.x = Math.PI / 2; shield.position.set(-8 + i * 4, 6.7, 6.15); hall.add(shield);
+  }
+  const hallBannerL = makeBanner(pal, 12); hallBannerL.position.set(-12, 0, 6.4); hall.add(hallBannerL); anim.flags.push(hallBannerL.userData.flag);
+  const hallBannerR = makeBanner(pal, 12); hallBannerR.position.set(12, 0, 6.4); hall.add(hallBannerR); anim.flags.push(hallBannerR.userData.flag);
+
+  // ── watchtowers ──
+  for (const sd of [-1, 1]) {
+    const tw = new THREE.Group(); tw.position.set(sd * 46, 0, -26); group.add(tw);
+    for (let i = 0; i < 4; i++) {
+      const a = i / 4 * Math.PI * 2 + Math.PI / 4;
+      box(0.45, 9, 0.45, darkWood, Math.cos(a) * 2.3, 4.5, Math.sin(a) * 2.3, 0, tw);
+    }
+    box(5.8, 0.5, 5.8, wood, 0, 8.8, 0, 0, tw);
+    box(4.8, 2.7, 4.8, wood, 0, 10.4, 0, 0, tw);
+    const tr = cone(4.4, 3.2, 4, lam('#7b3d33'), 0, 13.4, 0, tw); tr.rotation.y = Math.PI / 4;
+    const t = makeTorch(); t.position.set(0, 11.9, 2.7); tw.add(t); anim.torches.push(t);
+    const b = makeBanner(pal, 9); b.position.set(2.6, 9.4, 1.8); tw.add(b); anim.flags.push(b.userData.flag);
+  }
+
+  // ── training ring ──
+  const training = new THREE.Group(); training.position.set(-42, 0, 33); group.add(training);
+  cyl(7.4, 7.9, 0.5, 12, lam('#a8a67a'), 0, 0.25, 0, training);
+  const tring = new THREE.Mesh(new THREE.TorusGeometry(6.6, 0.18, 4, 28), gold); tring.rotation.x = -Math.PI / 2; tring.position.y = 0.55; training.add(tring);
+  for (let i = 0; i < 3; i++) {
+    const a = i / 3 * Math.PI * 2 + 0.4;
+    const px = Math.cos(a) * 5.2, pz = Math.sin(a) * 5.2;
+    box(0.28, 3.4, 0.28, darkWood, px, 1.7, pz, 0, training);
+    const dummy = new THREE.Mesh(new THREE.SphereGeometry(0.8, 6, 4), straw); dummy.scale.set(1, 1.1, 0.8); dummy.position.set(px, 3.6, pz); training.add(dummy);
+    const ar = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.08, 4, 12), gold); ar.position.set(px, 3.6, pz); ar.rotation.y = a; training.add(ar);
+  }
+  // floating training hoops
+  for (let i = 0; i < 3; i++) {
+    const hoop = new THREE.Mesh(new THREE.TorusGeometry(1.7 + i * 0.3, 0.1, 4, 18), glowCol(pal.accent, 0.6));
+    hoop.position.set(0, 4 + i * 2.2, 0); hoop.rotation.set(0.4 + i * 0.2, i * 0.7, 0.2); training.add(hoop);
+    anim.glows.push(hoop);
+  }
+  training.userData.interact = { type: 'training' };
+  const trainLight = new THREE.PointLight('#ffcf6b', 4, 24, 2); trainLight.position.set(-42, 7, 33); group.add(trainLight);
+
+  // ── feeding station ──
+  const feeding = new THREE.Group(); feeding.position.set(42, 0, 33); group.add(feeding);
+  box(8, 4.4, 6, wood, 0, 2.2, 0, 0, feeding);
+  const fr = cone(6.4, 3, 4, lam('#7b3d33'), 0, 5.8, 0, feeding); fr.rotation.y = Math.PI / 4;
+  box(5.2, 0.9, 1.8, stone2, 0, 0.45, 4.2, 0, feeding);
+  for (let i = 0; i < 4; i++) {
+    const fish = new THREE.Mesh(shared.sphereGeo, lam('#9fd8e8'));
+    fish.scale.set(0.75, 0.25, 0.35); fish.position.set(-1.5 + i * 1, 1.1, 4.2); feeding.add(fish);
+  }
+  // hanging haunch and herb bundles
+  for (let i = 0; i < 3; i++) {
+    box(0.12, 1.1, 0.12, straw, -2 + i * 2, 3.9, 3.1, 0, feeding);
+    const bundle = new THREE.Mesh(new THREE.ConeGeometry(0.38, 1.1, 5), lam(i % 2 ? '#b8d070' : '#d8c080'));
+    bundle.rotation.x = Math.PI; bundle.position.set(-2 + i * 2, 3.2, 3.1); feeding.add(bundle);
+  }
+  const feedLight = new THREE.PointLight('#ffb066', 3.5, 20, 2); feedLight.position.set(42, 5, 33); group.add(feedLight);
+  feeding.userData.interact = { type: 'feeding' };
+
+  // ── waterfall and pool ──
+  const waterfall = makeWaterfall(pal, 16, 74);
+  waterfall.position.set(47, 30, -34); waterfall.rotation.y = -0.7; group.add(waterfall); anim.waterfalls.push(waterfall);
+  const pool = cyl(8.5, 9, 0.35, 16, new THREE.MeshBasicMaterial({ color: new THREE.Color('#7fd8e8'), transparent: true, opacity: 0.55, toneMapped: false }), 43, 0.1, -25);
+  anim.pools.push(pool);
+  for (let i = 0; i < 5; i++) {
+    rockMesh(1.4 + i * 0.15, rock2, 36 + i * 3.2, 0.4 + i * 0.3, -20 - i * 1.6);
+  }
+
+  // ── lanterns along the ring ──
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2 + 0.2;
+    const lm = new THREE.Group();
+    lm.position.set(Math.cos(a) * 22, 0, Math.sin(a) * 22);
+    group.add(lm);
+    box(0.18, 4.6, 0.18, darkWood, 0, 2.3, 0, 0, lm);
+    box(1.5, 0.15, 0.15, darkWood, 0.65, 4.5, 0, 0, lm);
+    const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), glowCol('#ffd36b', 0.95));
+    lamp.position.set(1.15, 4.15, 0); lm.add(lamp);
+    const halo = glowSprite('#ffcf6b', 2.2, 1.15, 4.15, 0, 0.4, lm);
+    anim.lanterns.push({ lamp, halo, base: 4.15, phase: i });
+    const t = makeTorch(); t.position.set(0, 0.1, 0); lm.add(t); t.scale.setScalar(0.7); anim.torches.push(t);
+  }
+
+  // ── countryside details: trees, grass, rocks, paths ──
+  const R = rng(9182);
+  for (let i = 0; i < 22; i++) {
+    const a = R() * Math.PI * 2, r = 37 + R() * 21;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const s = 0.8 + R() * 1.1;
+    if (R() > 0.35) {
+      const trunk = box(0.32 * s, 2.4 * s, 0.32 * s, darkWood, x, 1.2 * s, z);
+      for (let k = 0; k < 3; k++) {
+        const foliage = cone((1.8 - k * 0.35) * s, (2.2 - k * 0.45) * s, 6, k % 2 ? grass2 : grass, x, (2.7 + k * 1.15) * s, z);
+        foliage.rotation.y = R() * 3;
+      }
+    } else {
+      rockMesh(0.7 + R() * 1.2, R() > 0.5 ? rock : rock2, x, 0.4, z);
+    }
+  }
+  for (let i = 0; i < 34; i++) {
+    const a = R() * Math.PI * 2, r = 12 + R() * 46;
+    if (r < 16) continue;
+    const g = cone(0.18 + R() * 0.12, 0.7 + R() * 0.8, 4, R() > 0.4 ? grass : grass2, Math.cos(a) * r, 0.35, Math.sin(a) * r);
+    g.rotation.y = R() * 3;
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2 + 0.1;
+    rockMesh(0.8 + R() * 1.5, i % 2 ? rock : rock2, Math.cos(a) * 58, 0.2, Math.sin(a) * 58);
+  }
+
+  // a little arched footbridge over the stream
+  const bridge = new THREE.Group(); bridge.position.set(20, 0, -30); bridge.rotation.y = -0.65; group.add(bridge);
+  for (let i = 0; i < 7; i++) {
+    const t = i / 6;
+    const seg = box(4.4, 0.22, 1.35, i % 2 ? wood : darkWood, 0, 0.65 + Math.sin(t * Math.PI) * 2.1, -4.2 + t * 8.4, 0, bridge);
+    seg.rotation.x = -Math.cos(t * Math.PI) * 0.42;
+  }
+  for (const sd of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const t = (i + 0.5) / 3;
+      box(0.18, 1.1, 0.18, darkWood, sd * 2.1, 1.2 + Math.sin(t * Math.PI) * 2.1, -4 + t * 8, 0, bridge);
+    }
+  }
+
+  // ── growing flocks: warm motes + fire embers + forest fireflies ──
+  const motes = makeParticles('motes', pal, light ? 78 : 140); group.add(motes);
+  // local ember cloud above the fire pad
+  const firePad = pads[familyList.indexOf('fire')];
+  const fireBase = firePad ? firePad.position.clone() : new THREE.Vector3(-20, 0, 20);
+  const emberCount = light ? 20 : 34;
+  const emberGeo = new THREE.BufferGeometry();
+  const emberPos = new Float32Array(emberCount * 3);
+  for (let i = 0; i < emberCount; i++) {
+    const a = Math.random() * 6.28, r = Math.random() * 4.4;
+    emberPos[i * 3] = Math.cos(a) * r; emberPos[i * 3 + 1] = 1 + Math.random() * 7; emberPos[i * 3 + 2] = Math.sin(a) * r;
+  }
+  emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPos, 3));
+  const embers = new THREE.Points(emberGeo, new THREE.PointsMaterial({ color: '#ff9a4a', size: 0.55, map: glowTexture(), transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+  embers.position.copy(fireBase); group.add(embers); anim.embers = embers;
+  // fireflies in the green roost
+  const forestPad = pads[familyList.indexOf('forest')];
+  const flyBase = forestPad ? forestPad.position.clone() : new THREE.Vector3(20, 0, -20);
+  const flyCount = light ? 9 : 14;
+  const flyGeo = new THREE.BufferGeometry();
+  const flyPos = new Float32Array(flyCount * 3);
+  for (let i = 0; i < flyCount; i++) { flyPos[i * 3] = (Math.random() - 0.5) * 7; flyPos[i * 3 + 1] = 1 + Math.random() * 4; flyPos[i * 3 + 2] = (Math.random() - 0.5) * 7; }
+  flyGeo.setAttribute('position', new THREE.BufferAttribute(flyPos, 3));
+  const flies = new THREE.Points(flyGeo, new THREE.PointsMaterial({ color: '#c8ff8a', size: 0.42, map: glowTexture(), transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }));
+  flies.position.copy(flyBase); group.add(flies); anim.fireflies = flies;
+
   let time = 0;
   function update(dt, center) {
     time += dt;
-    ring.rotation.z += dt * 0.1;
-    clouds.forEach(c => { c.position.x += c.userData.drift * dt; if (c.position.x > 600) c.position.x = -600; });
-    if (center) updateParticles(particles, dt, center);
+    anim.waterfalls.forEach(w => { w.material.uniforms.time.value = time; });
+    anim.clouds.forEach(c => { c.position.x += c.userData.drift * dt; if (c.position.x > 700) c.position.x = -700; });
+    anim.flags.forEach(f => { if (f) f.rotation.y = Math.PI / 2 + Math.sin(time * 1.7 + f.position.x * 0.2) * 0.16; });
+    anim.torches.forEach(t => { if (t.userData.flame) t.userData.flame.scale.y = 1.6 + Math.sin(time * 9 + t.position.x + t.position.z) * 0.28; });
+    anim.glows.forEach((g, i) => { if (g.material) g.material.opacity = (g.material.userData?.baseOpacity ?? 0.7) + Math.sin(time * 1.8 + i) * 0.1; });
+    anim.lanterns.forEach((l, i) => {
+      const swing = Math.sin(time * 0.9 + l.phase) * 0.09;
+      l.lamp.position.y = l.base + Math.sin(time * 1.3 + l.phase) * 0.12;
+      l.lamp.rotation.z = swing; l.halo.position.y = l.lamp.position.y;
+      l.halo.material.opacity = 0.32 + Math.sin(time * 2.2 + i) * 0.08;
+    });
+    if (anim.embers) {
+      const arr = anim.embers.geometry.attributes.position.array;
+      for (let i = 0; i < emberCount; i++) {
+        arr[i * 3 + 1] += dt * (0.6 + (i % 5) * 0.22);
+        arr[i * 3] += Math.sin(time * 1.5 + i) * dt * 0.25;
+        if (arr[i * 3 + 1] > 9) { arr[i * 3 + 1] = 0.8; const a = Math.random() * 6.28, r = Math.random() * 4.2; arr[i * 3] = Math.cos(a) * r; arr[i * 3 + 2] = Math.sin(a) * r; }
+      }
+      anim.embers.geometry.attributes.position.needsUpdate = true;
+    }
+    if (anim.fireflies) {
+      const arr = anim.fireflies.geometry.attributes.position.array;
+      for (let i = 0; i < flyCount; i++) {
+        arr[i * 3] += Math.sin(time * 0.8 + i * 2.1) * dt * 0.5;
+        arr[i * 3 + 1] += Math.sin(time * 1.2 + i) * dt * 0.3;
+        arr[i * 3 + 2] += Math.cos(time * 0.7 + i * 1.7) * dt * 0.5;
+      }
+      anim.fireflies.geometry.attributes.position.needsUpdate = true;
+    }
+    anim.glows.forEach(g => { if (g.material && g.material.userData.baseOpacity === undefined) g.material.userData.baseOpacity = g.material.opacity; });
+    hearthLight.intensity = 8.4 + Math.sin(time * 6.2) * 1.5;
+    const c = center || focus;
+    updateParticles(motes, dt, c);
   }
   function dispose() { disposeTree(group); }
-  return { group, update, dispose, palette: pal };
+  return { group, update, dispose, palette: pal, focus, anchors, pads, training, feeding, interactions: [training, feeding], time: () => time };
+}
+
+function decorateHabitat(pad, family, k) {
+  const { rock, rock2, stone, stone2, wood, darkWood, grass, grass2, snow, gold, straw, glowCol, glowSprite, anim, R, cone, cyl, box, rockMesh, famCol } = k;
+  const add = (m) => { pad.add(m); return m; };
+  const post = (x, y, z, h, mat = darkWood) => { const m = new THREE.Mesh(shared.boxGeo, mat); m.scale.set(0.25, h, 0.25); m.position.set(x, y, z); pad.add(m); return m; };
+  if (family === 'fire') {
+    for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4; rockMesh(0.9 + R() * 0.7, i % 2 ? rock2 : rock, Math.cos(a) * 3.7, 0.7, Math.sin(a) * 3.7, pad); }
+    for (let i = 0; i < 3; i++) { const crack = new THREE.Mesh(shared.boxGeo, glowCol('#ff6a1f', 0.85)); crack.scale.set(0.18, 0.06, 1.3 + R() * 1.5); crack.position.set(-1.5 + i * 1.5, 0.54, -2.4 + R() * 1.4); crack.rotation.y = R() * 3; pad.add(crack); }
+    const forge = cyl(1.2, 1.4, 0.9, 7, stone2, 2.7, 0.9, -2.1, pad);
+    const coals = new THREE.Mesh(shared.sphereGeo, glowCol('#ff7a2a', 0.95)); coals.scale.set(1, 0.28, 1); coals.position.set(2.7, 1.42, -2.1); pad.add(coals);
+    glowSprite('#ff8a3a', 4.5, 2.7, 1.6, -2.1, 0.34, pad);
+    const t = makeTorch(); t.position.set(-3.8, 0.5, 2.4); pad.add(t); anim.torches.push(t);
+  } else if (family === 'ice') {
+    for (let i = 0; i < 5; i++) {
+      const a = i / 5 * Math.PI * 2 + 0.3;
+      const shard = cone(0.55 + R() * 0.5, 2.4 + R() * 2.8, 5, new THREE.MeshLambertMaterial({ color: new THREE.Color('#bfeaff'), transparent: true, opacity: 0.78, flatShading: true }));
+      shard.position.set(Math.cos(a) * 3.3, 1.6 + R(), Math.sin(a) * 3.3); shard.rotation.set(R() * 0.4, R() * 3, R() * 0.4); pad.add(shard);
+    }
+    const iceBed = cyl(3.4, 3.6, 0.16, 8, new THREE.MeshLambertMaterial({ color: new THREE.Color('#e8fbff'), transparent: true, opacity: 0.7, flatShading: true }), 0, 0.56, 0, pad);
+    glowSprite('#8fe8ff', 5.4, 0, 2.1, 0, 0.28, pad);
+    for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2; const s = cone(0.32, 1.4, 5, snow, Math.cos(a) * 4.2, 0.9, Math.sin(a) * 4.2, pad); s.rotation.z = 0.2; }
+  } else if (family === 'night') {
+    for (const sd of [-1, 1]) { post(sd * 2.8, 1.8, -2.4, 3.6); }
+    const lintel = box(6.2, 0.5, 0.5, stone2, 0, 3.6, -2.4, 0, pad);
+    for (let i = 0; i < 4; i++) {
+      const c = cone(0.34, 1.4 + R(), 5, glowCol('#b18aff', 0.8), -2.4 + i * 1.6, 0.95, -3.0 + (i % 2) * 0.4, pad);
+      c.rotation.x = 0.3;
+    }
+    glowSprite('#b18aff', 5.4, 0, 1.8, -2.2, 0.3, pad);
+    const dust = new THREE.Mesh(shared.sphereGeo, new THREE.MeshBasicMaterial({ color: '#1b1828', transparent: true, opacity: 0.35, depthWrite: false }));
+    dust.scale.set(4, 2.3, 4); dust.position.set(0, 1.2, -2.2); pad.add(dust);
+  } else if (family === 'forest') {
+    const trunk = cyl(0.42, 0.55, 3.8, 6, darkWood, -2.5, 1.9, -2.6, pad);
+    for (let i = 0; i < 4; i++) { const foliage = cone(2.5 - i * 0.45, 2.2 - i * 0.3, 7, i % 2 ? grass2 : grass, -2.5, 3.8 + i * 1.2, -2.6, pad); foliage.rotation.y = R() * 3; }
+    for (let i = 0; i < 7; i++) { const a = R() * 6.28, r = 2 + R() * 2.6; cone(0.16, 0.9 + R(), 5, grass, Math.cos(a) * r - 1, 0.6, Math.sin(a) * r - 2, pad); }
+    for (let i = 0; i < 5; i++) {
+      const a = R() * 6.28, r = 1.6 + R() * 3;
+      const flower = new THREE.Mesh(shared.sphereGeo, glowCol(i % 2 ? '#ff9bc4' : '#ffe27a', 0.9));
+      flower.scale.setScalar(0.18); flower.position.set(Math.cos(a) * r, 0.85, Math.sin(a) * r); pad.add(flower);
+    }
+    glowSprite('#b8e86a', 5, -1, 1.9, -2.2, 0.2, pad);
+  } else if (family === 'ocean') {
+    const tide = cyl(3.2, 3.4, 0.15, 12, new THREE.MeshBasicMaterial({ color: '#7cf0ff', transparent: true, opacity: 0.4, toneMapped: false }), 1.4, 0.58, -1.4, pad);
+    anim.pools.push(tide);
+    for (let i = 0; i < 6; i++) {
+      const a = R() * 6.28, r = 1 + R() * 3.2;
+      const coral = cone(0.28 + R() * 0.25, 1.2 + R() * 1.4, 5, lam(i % 2 ? '#ff8fb0' : '#ffb47a'), 1.4 + Math.cos(a) * r, 0.9, -1.4 + Math.sin(a) * r, pad);
+      coral.rotation.z = (R() - 0.5) * 0.4;
+    }
+    glowSprite('#7cf0ff', 4.6, 1.4, 1.7, -1.4, 0.3, pad);
+    for (let i = 0; i < 3; i++) { const shell = new THREE.Mesh(new THREE.TorusGeometry(0.38 + i * 0.1, 0.12, 4, 10, Math.PI), lam('#f0e0c8')); shell.rotation.x = -Math.PI / 2; shell.position.set(-1.4 + i * 1.1, 0.72, 2.4); pad.add(shell); }
+  } else if (family === 'storm') {
+    const spire = cone(1.1, 6.4, 5, stone2, -2.4, 3.2, -2.2, pad); spire.rotation.z = -0.1;
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.2 + i * 0.5, 0.08, 4, 16), glowCol('#a6f7ff', 0.75));
+      ring.position.set(-2.4, 4.4 + i * 0.7, -2.2); ring.rotation.set(0.7 + i * 0.3, i * 0.8, 0.2); pad.add(ring); anim.glows.push(ring);
+    }
+    const cloud = new THREE.Mesh(shared.sphereGeo, new THREE.MeshLambertMaterial({ color: '#465066', flatShading: true }));
+    cloud.scale.set(3.4, 1.3, 2.6); cloud.position.set(-2.4, 7.6, -2.2); pad.add(cloud);
+    glowSprite('#a6f7ff', 5, -2.4, 5.2, -2.2, 0.22, pad);
+    for (let i = 0; i < 3; i++) post(2.4 + i * 0.7, 1.4, 2.4 - i * 0.4, 2.8, stone2);
+  } else if (family === 'earth') {
+    for (let i = 0; i < 5; i++) {
+      const a = i / 5 * Math.PI * 2 + 0.2;
+      const st = box(1.1, 3.2 + (i % 2) * 1.2, 0.9, i % 2 ? stone : stone2, Math.cos(a) * 3.2, 1.7, Math.sin(a) * 3.2, -a, pad);
+      st.rotation.z = (R() - 0.5) * 0.12;
+    }
+    for (let i = 0; i < 5; i++) rockMesh(0.4 + i * 0.14, stone2, 1.8 + (i % 2) * 0.4, 0.8 + i * 0.42, -2.2, pad);
+    const vein = new THREE.Mesh(shared.boxGeo, glowCol('#ffb45e', 0.55)); vein.scale.set(0.12, 0.05, 2.2); vein.position.set(-1.8, 0.56, -2.2); vein.rotation.y = 0.5; pad.add(vein);
+  } else if (family === 'venom') {
+    for (let i = 0; i < 4; i++) {
+      const a = -0.8 + i * 0.6;
+      const stem = cyl(0.16, 0.22, 1.2 + R(), 5, lam('#c8d8a0'), -2.6 + i * 1.1, 1, -2.6, pad);
+      const cap = cone(0.55 + R() * 0.3, 0.5, 7, glowCol(i % 2 ? '#c8ff6a' : '#a8ff7a', 0.85), -2.6 + i * 1.1, 1.7 + (i % 2) * 0.4, -2.6, pad);
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = R() * 6.28, r = 2.2 + R() * 2.2;
+      const thorn = cone(0.16, 1 + R() * 0.9, 4, lam('#3d5038'), Math.cos(a) * r, 0.9, Math.sin(a) * r, pad);
+      thorn.rotation.z = (R() - 0.5) * 0.6;
+    }
+    glowSprite('#c8ff6a', 4.4, -1, 1.8, -2.2, 0.26, pad);
+  } else if (family === 'ancient') {
+    for (let i = 0; i < 4; i++) {
+      const a = i / 4 * Math.PI * 2 + 0.5;
+      const st = box(0.85, 3.8, 0.85, i % 2 ? stone : stone2, Math.cos(a) * 3.3, 2, Math.sin(a) * 3.3, -a, pad);
+      const rune = new THREE.Mesh(shared.boxGeo, glowCol('#ffd166', 0.8));
+      rune.scale.set(0.1, 0.8, 0.1); rune.position.set(Math.cos(a) * 3.3, 2.1, Math.sin(a) * 3.3); pad.add(rune); anim.glows.push(rune);
+    }
+    const arch = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.14, 4, 18, Math.PI), glowCol('#ffd166', 0.55));
+    arch.position.set(0, 2.5, -2.6); arch.rotation.z = Math.PI; pad.add(arch);
+    const altar = box(3.2, 0.8, 1.6, stone, 0, 0.9, -2.6, 0, pad);
+    glowSprite('#ffd166', 5, 0, 2, -2.6, 0.3, pad);
+    for (let i = 0; i < 5; i++) { const a = i / 5 * 6.28; cone(0.08, 0.7, 4, gold, Math.cos(a) * 1.2, 1.4, -2.6 + Math.sin(a) * 0.5, pad); }
+  } else {
+    // hybrid: a wild roost where crystal and blossom meet
+    const trunk = cyl(0.35, 0.5, 3.2, 6, darkWood, -2.2, 1.6, -2.4, pad);
+    for (let i = 0; i < 3; i++) cone(2.1 - i * 0.4, 1.9 - i * 0.25, 6, i % 2 ? grass2 : grass, -2.2, 3.2 + i * 1, -2.4, pad);
+    for (let i = 0; i < 4; i++) {
+      const a = i / 4 * Math.PI * 2 + 0.4;
+      const cr = cone(0.4, 2.2 + i * 0.25, 5, glowCol(['#ff9de2', '#a6f7ff', '#ffd166', '#b8ff9a'][i], 0.85));
+      cr.position.set(Math.cos(a) * 3.4, 1.4, Math.sin(a) * 3.4); pad.add(cr);
+    }
+    glowSprite('#ff9de2', 5.2, 0, 2, 0, 0.28, pad);
+  }
+}
+
+// Backwards-compatible alias: the old floating stage is now the sanctuary.
+export function buildHangarStage(trackId = 'hearthfall', quality = 'high') {
+  return buildDragonSanctuary(trackId, quality);
 }
 
 // ── village ────────────────────────────────────────────────────────────────

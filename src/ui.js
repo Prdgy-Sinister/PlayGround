@@ -2,6 +2,7 @@ import * as Save from './save.js';
 import {
   DRAGONS, DRAGON_MAP, RARITIES, RARITY_ORDER, TRACKS, TRACK_MAP, LEAGUES, MODES,
   COSMETICS, SKILLS, SKILL_LIST, BUILDINGS, EXPLORE_ZONES, RIVAL_NAMES, DAILY_POOL,
+  HABITAT_INFO, FAMILY_ORDER, dragonsByFamily,
 } from './data.js';
 import { dragonThumb } from './dragon.js';
 import { sfx, setAudioEnabled, unlockAudio } from './audio.js';
@@ -23,7 +24,10 @@ export class UI {
     this.leagueId = 'hatchling';
     this.dragonId = Save.S().selected;
     this.hangarTab = 'train';
+    this.habitatFilter = 'all';
+    this.habitatFocus = null;
     this.shopTab = 'dragons';
+    this.shopFamily = 'all';
     this.champ = null;
     this.lastRaceConfig = null;
     this.isEventRace = false;
@@ -39,9 +43,10 @@ export class UI {
 
   // ── shortcuts ─────────────────────────────────────────────────────────────
   get S() { return Save.S(); }
-  thumb(def) {
-    if (!this.thumbs.has(def.id)) this.thumbs.set(def.id, dragonThumb(def, 128));
-    return this.thumbs.get(def.id);
+  thumb(def, silhouette = false) {
+    const key = silhouette ? def.id + ':sil' : def.id;
+    if (!this.thumbs.has(key)) this.thumbs.set(key, dragonThumb(def, 128, silhouette));
+    return this.thumbs.get(key);
   }
   rarity(def) { return RARITIES[def.rarity]; }
   dragonSave(id) { return this.S.dragons[id]; }
@@ -86,6 +91,9 @@ export class UI {
     g.on('pickup', (d) => this.toast(d.text, d.sub, 'good'));
     g.on('lairFound', (d) => this.onLairFound(d));
     g.on('lotClick', (d) => this.openBuilding(d.buildingId));
+    g.on('hangarHabitat', (d) => this.onHangarHabitat(d.family));
+    g.on('hangarAction', (d) => this.onHangarAction(d.type));
+    g.on('hangarSelect', (d) => { if (this.view === 'hangar') { this.dragonId = d.id; this.renderHangar(); } });
     g.on('notice', (d) => this.hudNotice(d.text, d.kind));
     g.on('countdown', (d) => this.onCountdown(d));
     g.on('lap', (d) => this.hudNotice(d.lap === d.total ? 'Final lap! Make it count.' : `Lap ${d.lap} of ${d.total}`, 'lap'));
@@ -396,6 +404,10 @@ export class UI {
       if (Save.addDragon(league.rewards.dragon, 3)) rewards.dragon = DRAGON_MAP[league.rewards.dragon];
       else { Save.awardGems(10); rewards.duplicate = true; }
     }
+    if (champ && league.rewards.bonusDragon) {
+      if (Save.addDragon(league.rewards.bonusDragon, 5)) rewards.bonusDragon = DRAGON_MAP[league.rewards.bonusDragon];
+      else { Save.awardGems(14); }
+    }
     Save.addDragonXp(this.S.selected, 260);
     const progress = Save.leagueProgress(league.id);
     Save.saveLeague(league.id, {
@@ -403,6 +415,11 @@ export class UI {
       wins: champ ? (progress.wins || 0) + 1 : (progress.wins || 0),
       bestPos: Math.min(progress.bestPos || 9, playerPlace), points: c.playerPoints,
     });
+    // Conquer every league and the Dragon's Crown is yours — along with the
+    // mythical Aetherion, whose unlock condition names exactly that feat.
+    if (LEAGUES.every(l => Save.leagueProgress(l.id).completed) && Save.addDragon('aetherion', 6)) {
+      rewards.crownDragon = DRAGON_MAP.aetherion;
+    }
     Save.save();
     this.updateChrome();
     return { ...rewards, league, standings: ordered };
@@ -830,12 +847,14 @@ export class UI {
         <div class="reward-chip">◈ +${fmt(data.coins)}</div>
         <div class="reward-chip gem">◆ +${data.gems}</div>
         ${data.dragon ? `<div class="reward-chip gem">✦ ${data.dragon.name} joined!</div>` : ''}
+        ${data.bonusDragon ? `<div class="reward-chip gem">✦ ${data.bonusDragon.name} joined!</div>` : ''}
+        ${data.crownDragon ? `<div class="reward-chip gem" style="border-color:var(--gold);color:var(--gold)">♛ ${data.crownDragon.name} — the Dragon’s Crown!</div>` : ''}
         ${data.track ? `<div class="reward-chip xp">⚑ ${data.track.name} unlocked</div>` : ''}
         ${data.duplicate ? `<div class="reward-chip gem">◆ Duplicate dragon → +10 gems</div>` : ''}
       </div>
       ${data.champ ? `<div class="new-best">✦ ${data.league.name} trophy earned</div>` : ''}
       <div class="results-actions">
-        <button class="btn btn-primary" data-action="goto" data-id="hangar">${data.dragon ? 'Meet ' + data.dragon.name : 'To the roost'}</button>
+        <button class="btn btn-primary" data-action="goto" data-id="hangar">${data.dragon || data.bonusDragon || data.crownDragon ? 'Meet ' + (data.dragon || data.bonusDragon || data.crownDragon).name : 'To the roost'}</button>
         <button class="btn btn-ghost" data-action="goto" data-id="menu">Home</button>
       </div>
     </div>`;
@@ -855,24 +874,59 @@ export class UI {
     const stats = Save.statsOf(id);
     const xpPct = Save.xpPercent(id);
     const sp = Save.skillPoints(id);
-    const skinColors = (def.palette.body);
     const owned = this.ownedDragons();
     const locked = this.lockedDragons();
+    const famFilter = this.habitatFilter || 'all';
+    const famPool = dragonsByFamily(famFilter === 'all' ? 'all' : famFilter);
+    const famOwned = famPool.filter(x => this.S.dragons[x.id]);
+    const famLocked = famPool.filter(x => !this.S.dragons[x.id]);
+    const habitat = HABITAT_INFO[def.family] || HABITAT_INFO.forest;
+    const affinity = def.habitat && def.habitat !== def.family ? HABITAT_INFO[def.habitat] : null;
+    const byHabitat = (fam) => {
+      const pool = dragonsByFamily(fam);
+      return { owned: pool.filter(x => this.S.dragons[x.id]).length, total: pool.length };
+    };
     this.setScreen(`
       <div class="hangar-screen fade-in">
-        <div class="screen-head" style="margin-bottom:12px">
-          <div><div class="eyebrow">Dragon Roost</div><h1 class="screen-title" style="font-size:clamp(21px,2.5vw,30px)">Your flight</h1></div>
+        <div class="screen-head" style="margin-bottom:10px">
+          <div><div class="eyebrow">Dragon Sanctuary</div><h1 class="screen-title" style="font-size:clamp(21px,2.5vw,30px)">The high roost</h1></div>
           <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
             <span class="stat-pill">✦ ${owned.length} / ${DRAGONS.length} discovered</span>
             <button class="btn btn-sm btn-ghost" data-action="goto" data-id="shop">◇ Market</button>
             <button class="back-btn" data-action="goto" data-id="menu">⌂ Hearthfall</button>
           </div>
         </div>
+        <div class="collection-meter">
+          <span class="cm-label">✧ Collection</span>
+          <div class="cm-bar"><i style="width:${Math.round(owned.length / DRAGONS.length * 100)}%"></i></div>
+          <span class="cm-count">${owned.length} / ${DRAGONS.length}</span>
+        </div>
+        <div class="habitat-strip">
+          <button class="habitat-chip ${famFilter === 'all' ? 'active' : ''}" data-action="hangar-habitat-filter" data-id="all">
+            <span class="hab-ico">✧</span><span class="hab-nm">All roosts</span>
+            <span class="hab-ct">${owned.length}/${DRAGONS.length}</span>
+          </button>
+          ${FAMILY_ORDER.map(fam => {
+            const info = HABITAT_INFO[fam], cnt = byHabitat(fam);
+            return `<button class="habitat-chip ${famFilter === fam ? 'active' : ''}" data-action="hangar-habitat-filter" data-id="${fam}" style="--hab:${info.accent}">
+              <span class="hab-ico">${info.icon}</span><span class="hab-nm">${info.name}</span>
+              <span class="hab-ct">${cnt.owned}/${cnt.total}</span>
+            </button>`;
+          }).join('')}
+        </div>
         <div class="hangar-layout">
           <aside class="hangar-side">
-            <div class="side-title"><h2>Flight roster</h2><span>${owned.length}/${DRAGONS.length}</span></div>
+            ${famFilter !== 'all' ? (() => {
+              const info = HABITAT_INFO[famFilter], cnt = byHabitat(famFilter);
+              return `<div class="habitat-note" style="--hab:${info.accent}">
+                <div class="hn-title">${info.icon} ${info.name} roost</div>
+                <p>${info.desc}</p>
+                <div class="hn-sub">${info.home} · ${cnt.owned} of ${cnt.total} discovered</div>
+              </div>`;
+            })() : ''}
+            <div class="side-title"><h2>${famFilter === 'all' ? 'Flight roster' : (HABITAT_INFO[famFilter]?.name || 'Roost')}</h2><span>${famOwned.length}/${famPool.length}</span></div>
             <div class="dragon-list">
-              ${owned.map(dd => {
+              ${famOwned.map(dd => {
                 const rar = RARITIES[dd.rarity];
                 return `<button class="dragon-row ${dd.id === id ? 'active' : ''}" data-action="select-dragon" data-id="${dd.id}">
                   <img src="${this.thumb(dd)}" alt="" />
@@ -880,23 +934,29 @@ export class UI {
                   <span class="lvl">${this.S.dragons[dd.id].bondLevel ? '♥' + this.S.dragons[dd.id].bondLevel : ''}</span>
                 </button>`;
               }).join('')}
-              ${locked.map(dd => {
+              ${famLocked.map(dd => {
                 const rar = RARITIES[dd.rarity];
-                return `<button class="dragon-row locked-row" data-action="inspect-locked" data-id="${dd.id}">
-                  <img src="${this.thumb(dd)}" alt="" style="filter:grayscale(.8) brightness(.6)" />
-                  <div><div class="nm">${dd.name}</div><div class="sub"><span class="rarity-dot" style="background:${rar.color}"></span>${rar.name} · undiscovered</div></div>
+                const hint = dd.unlock || 'Still wild';
+                return `<button class="dragon-row locked-row" data-action="inspect-locked" data-id="${dd.id}" title="${hint}">
+                  <img src="${this.thumb(dd, true)}" alt="" class="silhouette" />
+                  <div><div class="nm">${dd.name}</div><div class="sub"><span class="rarity-dot" style="background:${rar.color}"></span>${rar.name} · ${hint}</div></div>
                   <span class="lock">🔒</span>
                 </button>`;
               }).join('')}
+              ${famPool.length === 0 ? `<div class="empty-note">No dragons in this roost yet.</div>` : ''}
             </div>
             <button class="btn btn-ghost btn-sm" data-action="goto" data-id="shop" style="margin-top:2px">Explore the market ›</button>
           </aside>
-          <div class="hangar-center"><div class="stage-hint">Drag to admire · skins change immediately</div></div>
+          <div class="hangar-center"><div class="stage-hint">Drag to orbit · scroll to zoom · tap a dragon or roost</div></div>
           <section class="hangar-panel" style="--rarity:${r.color};--rarity-glow:${r.glow}">
             <div class="dragon-head">
               <div class="dragon-rarity" style="--rarity:${r.color}">${r.name} · ${def.ability.type}</div>
               <div class="dragon-title">${def.name}</div>
               <div class="dragon-epithet">${def.epithet}</div>
+              <div class="habitat-badge" style="--hab:${habitat.accent}">
+                <span>${habitat.icon}</span> ${habitat.name} roost · <b>${habitat.home}</b>
+              </div>
+              ${affinity ? `<div class="habitat-badge" style="--hab:${affinity.accent};margin-left:4px"><span>${affinity.icon}</span> drawn to ${affinity.name}</div>` : ''}
               <div class="level-row">
                 <span class="level-badge">LV ${d.level}</span>
                 <div class="level-xp"><div class="bar"><i style="width:${xpPct}%"></i></div><div class="txt"><span>${d.xp} / ${Save.dragonXpNeed(d.level)} XP</span><span>${sp} skill pt${sp === 1 ? '' : 's'}</span></div></div>
@@ -910,6 +970,11 @@ export class UI {
                 <button data-action="bond" data-id="train"><span>◎</span>Train</button>
                 <button data-action="bond" data-id="pet"><span>♥</span>Bond</button>
               </div>
+            </div>
+            <div class="sanctuary-actions">
+              <button class="btn btn-sm btn-ghost" data-action="hangar-visit" data-id="${def.family}">${habitat.icon} Visit roost</button>
+              <button class="btn btn-sm btn-ghost" data-action="hangar-visit" data-id="training">◎ Training ring</button>
+              <button class="btn btn-sm btn-ghost" data-action="hangar-visit" data-id="feeding">❧ Feeding hall</button>
             </div>
             <div class="tabs">
               <button class="tab ${this.hangarTab === 'train' ? 'active' : ''}" data-action="hangar-tab" data-id="train">Train</button>
@@ -994,6 +1059,8 @@ export class UI {
         }).join('')}
       </div>`;
     }
+    const habitat = HABITAT_INFO[def.family] || HABITAT_INFO.forest;
+    const affinity = def.habitat && def.habitat !== def.family ? HABITAT_INFO[def.habitat] : null;
     return `<div class="lore">
       <p>${def.desc}</p>
       <blockquote>“${def.epithet}. In the old tongue they called it ${def.name.split(' ')[0]} — a name spoken softly, for the sky is listening.”</blockquote>
@@ -1002,7 +1069,12 @@ export class UI {
         <span class="trait-chip">${def.ability.name}</span>
         <span class="trait-chip">${Save.bondLevelName(d.bondLevel)} bond</span>
         <span class="trait-chip">${def.shape.pattern} markings</span>
+        <span class="trait-chip" style="border-color:${habitat.accent}">${habitat.icon} ${habitat.name}</span>
+        ${affinity ? `<span class="trait-chip" style="border-color:${affinity.accent}">${affinity.icon} ${affinity.name} affinity</span>` : ''}
       </div>
+      <div class="cos-title">${habitat.home}</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.55">${habitat.desc}</div>
+      ${affinity ? `<div style="font-size:10.5px;color:var(--muted);line-height:1.55;margin-top:4px">Its wild nature also answers the ${affinity.name.toLowerCase()} — ${affinity.desc}</div>` : ''}
       <div class="cos-title">Discovery</div>
       <div style="font-size:11px;color:var(--muted);line-height:1.55">${def.unlock}${def.price ? ` · Market price ${fmt(def.price)} ◈` : ''}</div>
       <div class="cos-title">Flight profile</div>
@@ -1011,7 +1083,38 @@ export class UI {
         Turning <b style="color:#e9dcc0">${stats.turn.toFixed(2)}</b> · Stamina <b style="color:#e9dcc0">${stats.staminaMax.toFixed(0)}</b><br/>
         Boost cost <b style="color:#e9dcc0">${stats.boostCost.toFixed(0)}/s</b> · Recovery <b style="color:#e9dcc0">${stats.regen.toFixed(1)}/s</b>
       </div>
+      <div class="cos-title">Weakness</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.55">${def.weakness}</div>
     </div>`;
+  }
+
+  onHangarHabitat(family) {
+    if (!family) return;
+    this.habitatFocus = family;
+    this.habitatFilter = family;
+    if (this.view === 'hangar') this.renderHangar();
+    const info = HABITAT_INFO[family];
+    if (info) this.toast(`${info.home}`, info.name + ' roost', 'good');
+  }
+
+  onHangarAction(type) {
+    if (type === 'feed') this.onBond('feed');
+    else if (type === 'train') this.onBond('train');
+    else if (type === 'pet') this.onBond('pet');
+  }
+
+  visitHangar(target) {
+    if (target === 'training' || target === 'feeding') {
+      this.game.focusHangarStation?.(target);
+      const sc = $('#screen');
+      if (sc) sc.scrollTop = 0;
+      this.toast(target === 'training' ? 'Training ring' : 'Feeding hall', target === 'training' ? 'Hone speed, stamina and turns' : 'A warm meal deepens the bond', 'good');
+      return;
+    }
+    const anchorFam = HABITAT_INFO[target] ? target : (DRAGON_MAP[this.dragonId]?.habitat || 'forest');
+    this.game.focusHangarHabitat?.(anchorFam);
+    this.habitatFilter = anchorFam;
+    this.renderHangar();
   }
 
   onBond(kind) {
@@ -1030,10 +1133,17 @@ export class UI {
     d[cfg.key] = now;
     this.S.coins -= cfg.cost;
     Save.addBond(id, cfg.gain);
+    this.game.reactDragon?.(kind);
     sfx('pickup');
     this.toast(cfg.msg, `+${cfg.gain} bond`, 'good');
     this.updateChrome();
-    this.renderHangar();
+    // Update the bond read-out in place so mobile keeps its scroll position.
+    const bar = $('.bond-box .bar i');
+    if (bar) bar.style.width = Math.min(100, d.bond) + '%';
+    const head = $('.bond-head span:last-child');
+    if (head) head.textContent = `♥ ${Math.round(d.bond)} / 100`;
+    const bname = $('.bond-head b');
+    if (bname) bname.textContent = Save.bondLevelName(d.bondLevel);
   }
 
   // ── VILLAGE ──────────────────────────────────────────────────────────────
@@ -1214,8 +1324,19 @@ export class UI {
         <div class="featured"><div class="f-kicker">Seasonal Nursery</div><div class="f-title">The Skyfire awaits</div><div class="f-desc">Collect festival embers in any race to earn Solstice, harbinger of the dawn.</div><div class="f-actions"><button class="btn btn-sm btn-primary" data-action="start-event">Race the trial</button><span style="font-size:10px;color:var(--muted)">${Math.min(s.season.xp, 600)} / 600 embers</span></div></div>
         <div class="featured" style="background:linear-gradient(140deg,rgba(70,53,100,.96),rgba(10,24,34,.96))"><div class="f-kicker">Your Dragon</div><div class="f-title">${sel.name}</div><div class="f-desc">${sel.epithet}. Level ${s.dragons[sel.id]?.level || 1} · ${RARITIES[sel.rarity].name}</div><div class="f-actions"><button class="btn btn-sm btn-ghost" data-action="goto" data-id="hangar">Customise</button></div></div>
       </div>
+      <div class="habitat-strip">
+        <button class="habitat-chip ${this.shopFamily === 'all' ? 'active' : ''}" data-action="shop-habitat-filter" data-id="all">
+          <span class="hab-ico">✧</span><span class="hab-nm">All species</span><span class="hab-ct">${DRAGONS.length}</span>
+        </button>
+        ${FAMILY_ORDER.map(fam => {
+          const info = HABITAT_INFO[fam], pool = dragonsByFamily(fam);
+          return `<button class="habitat-chip ${this.shopFamily === fam ? 'active' : ''}" data-action="shop-habitat-filter" data-id="${fam}" style="--hab:${info.accent}">
+            <span class="hab-ico">${info.icon}</span><span class="hab-nm">${info.name}</span><span class="hab-ct">${pool.length}</span>
+          </button>`;
+        }).join('')}
+      </div>
       <div class="shop-grid">
-        ${DRAGONS.map(def => {
+        ${dragonsByFamily(this.shopFamily === 'all' ? 'all' : this.shopFamily).map(def => {
           const owned = !!s.dragons[def.id];
           const r = RARITIES[def.rarity];
           const buyable = def.price > 0;
@@ -1278,6 +1399,7 @@ export class UI {
     this.S.coins -= def.price;
     const added = Save.addDragon(id, 1);
     if (added) {
+      this.closeModal();
       this.S.selected = id;
       Save.save();
       this.toast(`${def.name} joined your roost!`, 'A new bond begins', 'good');
@@ -1448,6 +1570,14 @@ export class UI {
         break;
       }
       case 'hangar-tab': this.hangarTab = id; this.renderHangar(); break;
+      case 'hangar-habitat-filter': {
+        this.habitatFilter = id;
+        if (id === 'all') this.game.focusHangarDragon?.();
+        else this.game.focusHangarHabitat?.(id);
+        this.renderHangar();
+        break;
+      }
+      case 'hangar-visit': this.visitHangar(id); break;
       case 'select-dragon': {
         if (!this.S.dragons[id]) { this.inspectLocked(id); break; }
         this.S.selected = id; this.dragonId = id; Save.save();
@@ -1490,6 +1620,7 @@ export class UI {
       case 'discover-lair': this.game.discoverLair(); break;
       case 'exit-explore': this.exitExplore(); break;
       case 'shop-tab': this.shopTab = id; this.renderShop(); break;
+      case 'shop-habitat-filter': this.shopFamily = id; this.renderShop(); break;
       case 'buy-dragon': this.buyDragon(id); break;
       case 'pause-race': this.pauseRace(); break;
       case 'resume': this.closeModal(); this.game.pause(false); break;
@@ -1561,14 +1692,19 @@ export class UI {
     const def = DRAGON_MAP[id];
     if (!def) return;
     const r = RARITIES[def.rarity];
+    const hab = HABITAT_INFO[def.habitat] || HABITAT_INFO[def.family] || HABITAT_INFO.forest;
+    const ownedCount = this.ownedDragons().length;
     this.openModal(`
       <div style="text-align:center">
-        <div style="width:110px;height:110px;margin:0 auto 7px;border-radius:50%;overflow:hidden;border:2px solid ${r.color};opacity:.8">
-          <img src="${this.thumb(def)}" alt="" style="width:100%;height:100%;object-fit:cover;filter:grayscale(.3)" /></div>
-        <div class="card-kicker" style="color:${r.color}">${r.name} dragon</div>
+        <div style="width:110px;height:110px;margin:0 auto 7px;border-radius:50%;overflow:hidden;border:2px solid ${r.color};opacity:.85">
+          <img src="${this.thumb(def, true)}" alt="" style="width:100%;height:100%;object-fit:cover" /></div>
+        <div class="card-kicker" style="color:${r.color}">${r.name} dragon · ${hab.icon} ${hab.name}</div>
         <h2>${def.name}</h2>
         <p class="modal-sub">${def.desc}</p>
-        <div class="bonus-line" style="justify-content:center;gap:8px">Unlock: ${def.unlock}</div>
+        <div class="bonus-line" style="justify-content:center;gap:8px">Roost: ${hab.home}</div>
+        <div class="bonus-line" style="justify-content:center;gap:8px">How to find: ${def.unlock}</div>
+        <div class="bonus-line" style="justify-content:center;gap:8px;color:var(--muted)">${ownedCount} of ${DRAGONS.length} species discovered</div>
+        <div class="bonus-line" style="justify-content:center;gap:8px;color:var(--muted);font-size:10.5px">Weakness: ${def.weakness}</div>
         <div class="modal-actions" style="justify-content:center">
           ${def.price > 0 ? `<button class="btn btn-primary" data-action="buy-dragon" data-id="${def.id}" ${this.S.coins < def.price ? 'disabled' : ''}>Buy · ◈ ${fmt(def.price)}</button>` : `<button class="btn btn-ghost" data-action="close-modal">Keep searching</button>`}
           <button class="btn btn-ghost" data-action="close-modal">Close</button>

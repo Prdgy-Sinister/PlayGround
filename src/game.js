@@ -1,7 +1,7 @@
 import * as THREE from '../vendor/three.module.js';
-import { DRAGON_MAP, DRAGON_MAP as DM, TRACK_MAP, LEAGUES, EXPLORE_ZONES, RIVAL_NAMES, AI_DRAGONS } from './data.js';
+import { DRAGON_MAP, DRAGON_MAP as DM, FAMILY_ORDER, TRACK_MAP, LEAGUES, EXPLORE_ZONES, RIVAL_NAMES, AI_DRAGONS } from './data.js';
 import { createDragon } from './dragon.js';
-import { buildMenuWorld, buildHangarStage, buildVillageWorld, buildRaceWorld, buildExploreWorld, glowTexture, setGateActive, makePickup } from './environment.js';
+import { buildMenuWorld, buildHangarStage, buildDragonSanctuary, buildVillageWorld, buildRaceWorld, buildExploreWorld, glowTexture, setGateActive, makePickup } from './environment.js';
 import * as Save from './save.js';
 import { sfx, setAudioEnabled, unlockAudio } from './audio.js';
 
@@ -48,6 +48,14 @@ export class Game {
     this.villageDragons = [];
     this.drag = { active: false, x: 0, y: 0, startX: 0, startY: 0, moved: 0 };
     this.hangarSpin = 0;
+    this.hangarOrbit = { yaw: 0, pitch: 0.24, dist: 17 };
+    this.hangarFocus = { type: 'dragon' };
+    this.hangarTarget = new THREE.Vector3(0, 3.2, 0);
+    this.hangarAmbient = [];
+    this.hangarPickables = [];
+    this.hangarReact = 0;
+    this.pointers = new Map();
+    this.pinchDist = 0;
 
     const hemi = new THREE.HemisphereLight(0xbfe9ff, 0x3b4a3a, 1.55);
     this.hemi = hemi; this.scene.add(hemi);
@@ -100,6 +108,13 @@ export class Game {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    // Keep the sanctuary framed sensibly across orientation changes.
+    const narrow = window.innerWidth < 900;
+    if (this.mode === 'hangar' && narrow !== this.hangarNarrow) {
+      this.hangarNarrow = narrow;
+      this.hangarOrbit.dist = narrow ? 24 : 17;
+      this.hangarOrbit.pitch = narrow ? 0.16 : 0.2;
+    }
   }
 
   freshFlight() {
@@ -118,6 +133,9 @@ export class Game {
     this.ai = [];
     this.villageDragons.forEach(d => this.disposeDragon(d));
     this.villageDragons = [];
+    this.hangarAmbient.forEach(d => this.disposeDragon(d));
+    this.hangarAmbient = [];
+    this.hangarPickables = [];
     this.disposeDragon(this.villageFlyer);
     this.villageFlyer = null;
     this.villageLots = [];
@@ -215,56 +233,210 @@ export class Game {
     this.world.update(dt, this.player.position);
   }
 
-  // ── HANGAR / SHOP STAGE ──────────────────────────────────────────────────
-  showHangar(dragonId = Save.S().selected, cameraSide = -1) {
+  // ── DRAGON SANCTUARY / HANGAR ────────────────────────────────────────────
+  showHangar(dragonId = Save.S().selected) {
     this.clearScene();
-    const d = Save.S().dragons[dragonId];
-    const def = DM[dragonId] || DM[Save.S().selected];
-    const trackId = 'hearthfall';
-    const w = buildHangarStage(trackId);
+    const id = Save.S().dragons[dragonId] ? dragonId : Save.S().selected;
+    const w = buildDragonSanctuary('hearthfall', this.quality);
     this.scene.add(w.group); this.world = w;
-    this.setFog({ fog: '#d4e7ee' }, 220, 1200);
+    this.setFog({ fog: '#cfe2e8' }, 190, 1150);
     this.mode = 'hangar';
     this.paused = false;
     this.hangarSpin = 0;
-    this.playerModel = this.makePlayerModel({ scale: 1.7, rider: true, dragonId: def.id, level: d?.level, cosmetics: d?.cosmetics });
-    this.player = this.playerModel.group;
-    this.player.position.set(0, 2.6, 0);
-    this.player.rotation.order = 'YXZ';
-    this.player.rotation.set(0, Math.PI + 0.28, 0);
-    this.cameraPos.set(13, 7.1, 17.5);
-    this.cameraTarget.set(0, 0.9, 0);
-    this.hemi.color.set('#cfeaff'); this.hemi.groundColor.set('#405060');
-    this.sun.color.set('#fff4dd'); this.sun.intensity = 2.1;
+    this.hangarReact = 1;
+    this.hangarFocus = { type: 'dragon' };
+    this.hangarNarrow = window.innerWidth < 900;
+    this.hangarOrbit = this.hangarNarrow
+      ? { yaw: 0.2, pitch: 0.16, dist: 24 }
+      : { yaw: 0.18, pitch: 0.2, dist: 17 };
+    this.hangarAmbient = [];
+    this.setHangarDragon(id);
+    this.populateHangar();
+    this.hangarPickables = [w.training, w.feeding, ...w.pads, this.playerModel.group, ...this.hangarAmbient.map(a => a.group)];
+    const target = new THREE.Vector3(w.focus.x, w.focus.y + this.hangarFocusHeight(), w.focus.z);
+    this.hangarTarget.copy(target);
+    this.cameraTarget.copy(target);
+    this.cameraPos.copy(target).add(this.hangarCameraOffset());
+    this.hemi.color.set('#ffe8c8'); this.hemi.groundColor.set('#3c3028');
+    this.hemi.intensity = 1.75;
+    this.sun.color.set('#ffd9a0'); this.sun.intensity = 2.35;
     this.emit('screen', { name: 'hangar' });
+  }
+
+  hangarCameraOffset(o = this.hangarOrbit) {
+    return V().set(
+      Math.sin(o.yaw) * Math.cos(o.pitch),
+      Math.sin(o.pitch),
+      Math.cos(o.yaw) * Math.cos(o.pitch),
+    ).multiplyScalar(o.dist);
+  }
+
+  // Narrow screens show the sanctuary through a shorter window between the
+  // header and the roster, so the dragon is framed smaller and a little higher.
+  hangarFocusHeight() { return this.hangarNarrow ? 1.35 : 2.7; }
+
+  setHangarDragon(id) {
+    const d = Save.S().dragons[id];
+    const def = DM[id];
+    if (!def) return;
+    this.hangarDragonId = id;
+    const model = createDragon(def, {
+      level: d?.level ?? 1, cosmetics: d?.cosmetics, rider: false, castShadow: false,
+    });
+    model.group.scale.setScalar(1.62);
+    this.scene.add(model.group);
+    // Ground it precisely on the central dais, whatever its species proportions.
+    const box = new THREE.Box3().setFromObject(model.group);
+    const focus = this.world?.focus || new THREE.Vector3(0, 1.22, 0);
+    model.group.position.set(focus.x, focus.y - box.min.y, focus.z);
+    model.group.rotation.order = 'YXZ';
+    model.group.rotation.set(0, Math.PI + 0.18, 0);
+    model.group.userData.dragonId = id;
+    model.group.userData.interact = { type: 'dragon', id };
+    model.update(0.016, { flying: false, grounded: true, walk: 0.25 });
+    this.playerModel = model;
+    this.player = model.group;
+  }
+
+  // Hard LOD for background roost dragons: at habitat distance the nostrils,
+  // claws and teeth are sub-pixel, so drop every mesh smaller than ~2% of the
+  // body height. Eyes are preserved so blinking still reads. This cuts dozens
+  // of draw calls per ambient dragon on mobile without any visible change.
+  simplifyDragon(model, threshold = 0.022) {
+    const keep = new Set(model.group.userData.eyeMeshes || []);
+    const box = new THREE.Box3().setFromObject(model.group);
+    const h = Math.max(0.001, box.max.y - box.min.y);
+    const drop = [];
+    model.group.traverse(o => {
+      if (!o.isMesh || keep.has(o)) return;
+      o.geometry.computeBoundingSphere();
+      const r = (o.geometry.boundingSphere?.radius || 0) * Math.max(o.scale.x, o.scale.y, o.scale.z);
+      if (r > 0 && r < h * threshold) drop.push(o);
+    });
+    drop.forEach(o => o.parent?.remove(o));
+    this.hangarLodSaved = (this.hangarLodSaved || 0) + drop.length;
+    return drop.length;
+  }
+
+  populateHangar() {
+    if (!this.world?.anchors) return;
+    const selected = this.hangarDragonId || Save.S().selected;
+    const seen = new Set();
+    const best = new Map();
+    for (const [id, d] of Object.entries(Save.S().dragons)) {
+      if (id === selected) continue;
+      const def = DM[id];
+      if (!def) continue;
+      const fam = def.family || 'forest';
+      if (seen.has(fam)) continue;
+      // Prefer the most experienced dragon for each habitat.
+      const prev = best.get(fam);
+      if (!prev || d.level > prev.level) best.set(fam, { id, d, def, level: d.level ?? 1 });
+    }
+    // Ambient roost dragons are the most expensive part of the sanctuary, so
+    // scale how many habitats are occupied to the device tier. The selected
+    // dragon always stands in its own roost regardless of this cap.
+    const cap = { low: 4, medium: 6, high: 10 }[this.quality] ?? 8;
+    const ordered = [...best.entries()].sort(
+      (a, b) => (FAMILY_ORDER.indexOf(a[0]) + 1 || 99) - (FAMILY_ORDER.indexOf(b[0]) + 1 || 99)
+    ).slice(0, cap);
+    for (const [fam, entry] of ordered) {
+      const anchor = this.world.anchors.find(a => a.family === fam);
+      if (!anchor) continue;
+      const model = createDragon(entry.def, { level: entry.level, cosmetics: entry.d.cosmetics, rider: false, castShadow: false });
+      model.group.scale.setScalar(1.12);
+      this.scene.add(model.group);
+      const b = new THREE.Box3().setFromObject(model.group);
+      model.group.position.set(anchor.position.x, anchor.position.y - b.min.y, anchor.position.z);
+      model.group.rotation.y = anchor.rotation;
+      model.group.userData.dragonId = entry.id;
+      this.simplifyDragon(model);
+      this.hangarAmbient.push(model);
+      seen.add(fam);
+    }
   }
 
   refreshHangarModel() {
     if (this.mode !== 'hangar' || !this.playerModel) return;
     const id = Save.S().selected;
-    const d = Save.S().dragons[id];
-    const pos = this.playerModel.group.position.clone();
-    const rot = this.playerModel.group.rotation.clone();
     this.disposeDragon(this.playerModel);
-    this.playerModel = this.makePlayerModel({ scale: 1.7, rider: true, dragonId: id, level: d?.level, cosmetics: d?.cosmetics });
-    this.player = this.playerModel.group;
-    this.player.position.copy(pos);
-    this.player.rotation.order = 'YXZ';
-    this.player.rotation.copy(rot);
+    this.setHangarDragon(id);
+    this.hangarAmbient.forEach(d => this.disposeDragon(d));
+    this.hangarAmbient = [];
+    this.populateHangar();
+    this.hangarPickables = [this.world.training, this.world.feeding, ...this.world.pads, this.playerModel.group, ...this.hangarAmbient.map(a => a.group)];
+    this.hangarReact = 1;
+  }
+
+  focusHangarHabitat(family) {
+    if (this.mode !== 'hangar' || !this.world) return;
+    const anchor = this.world.anchors.find(a => a.family === family);
+    if (!anchor) return;
+    this.hangarFocus = { type: 'habitat', family };
+    this.hangarOrbit.yaw = Math.atan2(-anchor.position.x, -anchor.position.z);
+    this.hangarOrbit.dist = this.hangarNarrow ? 21 : 18;
+    this.hangarOrbit.pitch = this.hangarNarrow ? 0.18 : 0.22;
+  }
+
+  focusHangarDragon() {
+    this.hangarFocus = { type: 'dragon' };
+    this.hangarOrbit.yaw = this.hangarNarrow ? 0.2 : 0.18;
+    this.hangarOrbit.dist = this.hangarNarrow ? 24 : 17;
+    this.hangarOrbit.pitch = this.hangarNarrow ? 0.16 : 0.2;
+  }
+
+  focusHangarStation(station) {
+    if (this.mode !== 'hangar' || !this.world) return;
+    const node = station === 'training' ? this.world.training : this.world.feeding;
+    if (!node) return;
+    this.hangarFocus = { type: 'station', station };
+    // Frame the working side of each station rather than its back wall.
+    if (station === 'feeding') {
+      this.hangarOrbit.yaw = 0.34;
+      this.hangarOrbit.pitch = this.hangarNarrow ? 0.2 : 0.09;
+      this.hangarOrbit.dist = this.hangarNarrow ? 34 : 30;
+    } else {
+      this.hangarOrbit.yaw = -0.5;
+      this.hangarOrbit.pitch = this.hangarNarrow ? 0.36 : 0.38;
+      this.hangarOrbit.dist = this.hangarNarrow ? 36 : 32;
+    }
+  }
+
+  reactDragon(kind = 'pet') {
+    this.hangarReact = kind === 'feed' ? 1 : kind === 'train' ? 0.85 : 0.7;
+    if (this.playerModel) this.playerModel.group.userData.reactKind = kind;
   }
 
   updateHangar(dt) {
     this.hangarSpin += dt * 0.12;
-    const p = this.player;
-    p.position.y = 2.6 + Math.sin(this.elapsed * 1.2) * 0.22;
-    p.rotation.y = Math.PI + 0.25 + Math.sin(this.elapsed * 0.25) * 0.3 + (this.hangarRot || 0);
-    this.playerModel.update(dt, { speed: 40, flying: true, flapSpeed: 3.2, bank: Math.sin(this.elapsed * 0.5) * 0.15 });
-    const camA = Math.sin(this.elapsed * 0.16) * 0.24;
-    const desired = V().set(13.5 + camA * 4, 7 + Math.sin(this.elapsed * 0.3) * 0.4, 17.5 + camA * 5);
-    this.cameraPos.lerp(desired, Math.min(1, dt * 2));
-    this.cameraTarget.lerp(V().set(0, 0.9, 0), Math.min(1, dt * 3));
+    this.hangarReact = Math.max(0, this.hangarReact - dt * 0.65);
+    const excite = this.hangarReact;
+    if (this.playerModel) {
+      this.playerModel.update(dt, {
+        flying: false, grounded: true, walk: 0.24, excite,
+        headTurn: Math.sin(this.elapsed * 0.34) * 0.65,
+      });
+    }
+    this.hangarAmbient.forEach((m, i) => {
+      m.update(dt, { flying: false, grounded: true, walk: 0.12, excite: 0, headTurn: Math.sin(this.elapsed * 0.33 + i * 1.7) * 0.4 });
+    });
+    const w = this.world;
+    let target;
+    if (this.hangarFocus.type === 'habitat') {
+      const anchor = w.anchors.find(a => a.family === this.hangarFocus.family) || w.anchors[0];
+      target = V().set(anchor.position.x, anchor.position.y + (this.hangarNarrow ? 1.4 : 2.2), anchor.position.z);
+    } else if (this.hangarFocus.type === 'station') {
+      const node = this.hangarFocus.station === 'training' ? w.training : w.feeding;
+      target = V().set(node.position.x, this.hangarFocus.station === 'feeding' ? 2.6 : 2.1, node.position.z);
+    } else {
+      target = V().set(w.focus.x, w.focus.y + this.hangarFocusHeight(), w.focus.z);
+    }
+    this.hangarTarget.lerp(target, Math.min(1, dt * 4));
+    const desired = V().copy(this.hangarTarget).add(this.hangarCameraOffset());
+    this.cameraPos.lerp(desired, Math.min(1, dt * 6));
+    this.cameraTarget.lerp(this.hangarTarget, Math.min(1, dt * 5));
     this.applyCamera(50, true);
-    this.world.update(dt, p.position);
+    this.world.update(dt, this.hangarTarget);
   }
 
   // ── VILLAGE ──────────────────────────────────────────────────────────────
@@ -428,6 +600,16 @@ export class Game {
     const dragonId = zone.hidden;
     const isNew = Save.addDragon(dragonId, 1);
     if (!isNew) { Save.awardGems(8); Save.awardCoins(500); }
+    // Seasoned explorers may draw a second, rarer species out of the same lair.
+    if (Save.S().level >= (zone.reqLevel || 1) + 2) {
+      const bonus = (zone.bonusHidden || []).filter(id => !Save.S().dragons[id]);
+      if (bonus.length) {
+        const pick = bonus[Math.floor(Math.random() * bonus.length)];
+        if (Save.addDragon(pick, 1)) {
+          this.emit('pickup', { text: 'Rare discovery!', sub: `${DRAGON_MAP[pick]?.name || 'A rare dragon'} joined your sanctuary.`, kind: 'dragon' });
+        }
+      }
+    }
     Save.addRiderXp(180);
     Save.recordStat('orbs', 1);
     Save.save();
@@ -934,7 +1116,7 @@ export class Game {
     const bankNorm = clamp(f.roll / 0.58, -1, 1);
     this.playerModel.update(dt, {
       speed: f.speed, bank: bankNorm, boosting: f.boosting,
-      flapSpeed: f.boosting ? 11 : f.gliding ? 3.2 : 7,
+      flapSpeed: (f.boosting ? 11 : f.gliding ? 3.2 : 7) * (this.playerModel.flightRate || 6) / 6,
       gliding: f.gliding, flying: true, pitchLean: -f.pitch * 0.8,
       wingWOsc: Math.sin(this.elapsed * 8) * 0.2,
     });
@@ -1212,33 +1394,100 @@ export class Game {
     const el = this.renderer.domElement;
     el.addEventListener('pointerdown', e => {
       unlockAudio();
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pointers.size === 2) {
+        const [a, b] = [...this.pointers.values()];
+        this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+        this.drag.moved = 999;
+      }
       this.drag.active = true; this.drag.startX = e.clientX; this.drag.startY = e.clientY;
-      this.drag.lastX = e.clientX; this.drag.lastY = e.clientY; this.drag.dx = 0; this.drag.moved = 0;
+      this.drag.lastX = e.clientX; this.drag.lastY = e.clientY; this.drag.dx = 0; this.drag.moved = this.pointers.size > 1 ? 999 : 0;
       this.drag.id = e.pointerId;
     });
     el.addEventListener('pointermove', e => {
       if (!this.drag.active) return;
-      this.drag.dx = e.clientX - this.drag.lastX;
+      if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      // pinch-to-zoom the sanctuary camera
+      if (this.pointers.size >= 2) {
+        const [a, b] = [...this.pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (this.pinchDist > 0 && this.mode === 'hangar') {
+          this.hangarOrbit.dist = clamp(this.hangarOrbit.dist * (this.pinchDist / Math.max(10, d)), 8, 34);
+        }
+        this.pinchDist = d;
+        this.drag.moved = 999;
+        return;
+      }
+      const dx = e.clientX - this.drag.lastX;
+      const dy = e.clientY - this.drag.lastY;
+      this.drag.dx = dx;
       this.drag.lastX = e.clientX; this.drag.lastY = e.clientY;
-      this.drag.moved += Math.abs(e.clientX - this.drag.startX) + Math.abs(e.clientY - this.drag.startY);
-      if (this.mode === 'hangar') this.hangarRot = (this.hangarRot || 0) + this.drag.dx * 0.008;
+      this.drag.moved += Math.abs(dx) + Math.abs(dy);
+      if (this.mode === 'hangar') {
+        this.hangarOrbit.yaw -= dx * 0.006;
+        this.hangarOrbit.pitch = clamp(this.hangarOrbit.pitch + dy * 0.004, 0.02, 1.05);
+      } else if (this.mode === 'village') {
+        this.villageAngle += dx * 0.003;
+      }
     });
-    el.addEventListener('pointerup', e => {
+    const endPointer = (e) => {
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size < 2) this.pinchDist = 0;
       const wasDrag = this.drag.moved > 8;
-      this.drag.active = false;
+      if (this.drag.id === e.pointerId) this.drag.active = false;
       if (!wasDrag) this.handleTap(e);
-    });
-    el.addEventListener('pointercancel', () => { this.drag.active = false; });
-    // wheel / pinch optional zoom in hangar
-    el.addEventListener('wheel', e => { if (this.mode === 'hangar') { this.cameraPos.z = clamp(this.cameraPos.z + e.deltaY * 0.01, 12, 28); } }, { passive: true });
+    };
+    el.addEventListener('pointerup', endPointer);
+    el.addEventListener('pointercancel', (e) => { this.pointers.delete(e.pointerId); this.drag.active = false; this.pinchDist = 0; });
+    el.addEventListener('wheel', e => {
+      if (this.mode === 'hangar') {
+        e.preventDefault();
+        this.hangarOrbit.dist = clamp(this.hangarOrbit.dist + e.deltaY * 0.012, 8, 34);
+      }
+    }, { passive: false });
   }
 
   handleTap(e) {
-    if (this.mode !== 'village') return;
+    if (this.mode !== 'hangar' && this.mode !== 'village') return;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, this.camera);
+
+    if (this.mode === 'hangar') {
+      if (!this.hangarPickables.length) return;
+      const hits = ray.intersectObjects(this.hangarPickables, true);
+      if (!hits.length) return;
+      let obj = hits[0].object;
+      while (obj && !obj.userData?.interact && !obj.userData?.dragonId) obj = obj.parent;
+      if (!obj) return;
+      const it = obj.userData.interact;
+      if (it?.type === 'dragon' || obj.userData.dragonId) {
+        const id = it?.id || obj.userData.dragonId;
+        sfx('click');
+        if (id !== Save.S().selected && Save.S().dragons[id]) {
+          Save.S().selected = id; Save.save();
+          this.showHangar(id);
+        } else {
+          this.reactDragon('pet');
+        }
+        this.emit('hangarSelect', { id });
+      } else if (it?.type === 'habitat') {
+        sfx('click');
+        this.focusHangarHabitat(it.family);
+        this.emit('hangarHabitat', { family: it.family });
+      } else if (it?.type === 'feeding') {
+        sfx('pickup');
+        this.reactDragon('feed');
+        this.emit('hangarAction', { type: 'feed' });
+      } else if (it?.type === 'training') {
+        sfx('click');
+        this.reactDragon('train');
+        this.emit('hangarAction', { type: 'train' });
+      }
+      return;
+    }
+
     if (!this.villageLots.length) return;
     const hits = ray.intersectObjects(this.villageLots, true);
     if (hits.length) {
