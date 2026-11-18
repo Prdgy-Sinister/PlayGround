@@ -1,0 +1,9 @@
+{
+  "name": "dragon-rush",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dragon Rush - Race of Legends: a stylized 3D mobile dragon racing game.",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
