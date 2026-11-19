@@ -387,7 +387,7 @@ export function makeCompetitors(week = 1) {
       aggression: l.aggro,
       cash: randi(2, 12) * 1e6,
       artists: [],
-      releaseInterval: randi(2, 4),
+      releaseInterval: randi(5, 8),
       lastRelease: -randi(0, 4),
       albums: 0,
       isPlayer: false,

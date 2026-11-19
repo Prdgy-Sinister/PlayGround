@@ -99,7 +99,7 @@ export function createNewGame({ name, color, logoShape, initials, founderGenre }
     awards: [],
     loans: [],
     trends: Object.fromEntries(GENRES.map((g) => [g.id, 1])),
-    trendState: { hot: 'pop', nextShift: randi(5, 8) },
+    trendState: { hot: 'pop', nextShift: randi(8, 12) },
     flags: { won: false, insolventWeeks: 0, studioMalusUntil: 0, releaseCount: 0 },
     news: [],
     gameOver: false,
@@ -159,6 +159,12 @@ function migrate(s) {
   s.roster ||= [];
   s.prospects ||= [];
   s.competitors ||= [];
+  for (const comp of s.competitors) {
+    const interval = Number(comp.releaseInterval);
+    if (Number.isFinite(interval) && interval > 0 && interval < 5) {
+      comp.releaseInterval = randi(5, 8);
+    }
+  }
   s.tracks ||= [];
   s.demos ||= [];
   s.releases ||= [];
@@ -179,7 +185,7 @@ function migrate(s) {
   s.acquired ||= [];
   s.totals ||= { revenue: 0, expenses: 0, streams: 0, downloads: 0, fans: 0, releases: 0, no1: 0, top10: 0, awards: 0, chartEntries: 0, tourRevenue: 0 };
   s.trends ||= Object.fromEntries(GENRES.map((g) => [g.id, 1]));
-  s.trendState ||= { hot: 'pop', nextShift: s.week + 4 };
+  s.trendState ||= { hot: 'pop', nextShift: s.week + 8 };
   s.flags ||= {};
   s.flags.won ??= false;
   s.flags.insolventWeeks ??= 0;
@@ -1002,8 +1008,8 @@ function simulateTracks() {
       if (artist) {
         artistStreams.set(track.artistId, (artistStreams.get(track.artistId) || 0) + weekly);
         artist.totalStreams = (artist.totalStreams || 0) + weekly;
-        artist.fans += Math.round(weekly * 0.012);
-        state.totals.fans = Math.round((state.totals.fans || 0) + weekly * 0.012);
+        artist.fans += Math.round(weekly * 0.007);
+        state.totals.fans = Math.round((state.totals.fans || 0) + weekly * 0.007);
       }
       if (!track.rightsSold && weekly > 60000 && chance(0.004 + (track.quality / 100) * 0.008 + (hasFacility('sync') ? 0.02 : 0))) {
         const amount = Math.round(rand(4000, 24000) + track.quality * 260);
@@ -1021,12 +1027,12 @@ function simulateTracks() {
   for (const a of state.roster) {
     const s = artistStreams.get(a.id) || 0;
     if (s > 0) {
-      const delta = clamp(Math.log10(s / 35000 + 1) * 0.72, 0.02, 2.2);
+      const delta = clamp(Math.log10(s / 35000 + 1) * 0.42, 0.01, 1.25);
       a.popularity = clamp(a.popularity + delta, 0, 97);
       // raw talent grows with studio time
       const tr = traitById(a.trait) || {};
-      a.skill = clamp(a.skill + 0.03 + (tr.growth || 0) * 0.03, 0, 98);
-      a.songwriting = clamp(a.songwriting + 0.02 + (tr.growth || 0) * 0.02, 0, 98);
+      a.skill = clamp(a.skill + 0.018 + (tr.growth || 0) * 0.018, 0, 98);
+      a.songwriting = clamp(a.songwriting + 0.012 + (tr.growth || 0) * 0.012, 0, 98);
     } else {
       a.popularity = clamp(a.popularity - 0.1, 0, 97);
     }
@@ -1095,7 +1101,7 @@ function simulateCompetitors() {
     comp.lastRelease++;
     if (comp.lastRelease >= comp.releaseInterval) {
       comp.lastRelease = 0;
-      comp.releaseInterval = randi(2, 4);
+      comp.releaseInterval = randi(5, 8);
       releaseAiTrack(comp, state.tracks, state.week, {});
       comp.reputation = clamp(comp.reputation + rand(-0.4, 0.5), 20, 96);
     }
@@ -1270,7 +1276,7 @@ function updateTrends() {
     if (g !== next && g !== old) state.trends[g] = clamp((state.trends[g] || 1) + rand(-0.05, 0.04), 0.82, 1.18);
   }
   state.trendState.hot = next;
-  state.trendState.nextShift = state.week + randi(5, 9);
+  state.trendState.nextShift = state.week + randi(8, 13);
   const g = genreById(next);
   addNews(`The sound shifts: ${g.name} is now the hottest genre in the industry.`, 'trend');
   if (chance(0.55)) {
@@ -2326,7 +2332,7 @@ export function artistFoundsLabel(artist) {
   const compName = `${firstName} ${pick(['Worldwide', 'Sound', 'Records', 'Collective', 'Music Group'])}`;
   const comp = {
     id: uid('comp'), name: compName, color: pick(BRAND_COLORS), personality: 'independent', reputation: clamp(18 + artist.popularity * 0.36, 12, 66),
-    aggression: rand(0.5, 0.95), cash: rand(600000, 2600000), artists: [], releaseInterval: randi(2, 4), lastRelease: 0, albums: 0,
+    aggression: rand(0.5, 0.95), cash: rand(600000, 2600000), artists: [], releaseInterval: randi(5, 8), lastRelease: 0, albums: 0,
     isPlayer: false, foundedBy: artist.name, foundedWeek: state.week,
   };
   artist.labelId = comp.id;
