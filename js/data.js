@@ -218,6 +218,19 @@ export function makeArtist(opts = {}) {
     name: opts.name || freshArtistName(),
     genre,
     age: randi(19, 38),
+    personality: pick(PERSONALITY_TRAITS).id,
+    ambition: pick(AMBITIONS).id,
+    homeCity: pick(['London', 'Lagos', 'Seoul', 'New York', 'Berlin', 'São Paulo', 'Toronto', 'Paris', 'Tokyo', 'Nashville', 'Manchester', 'Accra']),
+    preferredGenres: [genre, pick(GENRES).id].filter((g, i, arr) => arr.indexOf(g) === i),
+    creativeControl: randi(30, 82),
+    relationships: [],
+    careerTimeline: [],
+    careerStage: 'discovery',
+    onBreakUntil: 0,
+    retired: false,
+    labelFounder: false,
+    careerPeak: popularity,
+    awardsWon: 0,
     popularity,
     skill: clamp(skillBase + (trait.quality || 0) * 0.7, 25, 96),
     songwriting: clamp(skillBase + rand(-8, 14), 20, 97),
@@ -247,6 +260,59 @@ export function makeArtist(opts = {}) {
   };
   a.popularity = clamp(popularity + (GENRE_POP_BIAS[genre] || 0) * 0.3, 2, 96);
   a.fans = Math.round(a.popularity ** 2 * rand(180, 420));
+  a.strengths = artistStrengths(a);
+  a.weaknesses = artistWeaknesses(a);
+  a.careerStage = careerStageFor(a).id;
+  return a;
+}
+
+const STRENGTH_LABELS = {
+  skill: 'Studio voice', songwriting: 'Songwriting', charisma: 'Star presence', workEthic: 'Work ethic', loyalty: 'Loyalty', ego: 'Unshakeable confidence',
+};
+export function artistStrengths(a) {
+  const pairs = [
+    ['skill', a.skill || 40], ['songwriting', a.songwriting || 40], ['charisma', a.charisma || 40],
+    ['workEthic', a.workEthic || 40], ['loyalty', a.loyalty || 40], ['ego', a.ego || 40],
+  ].sort((x, y) => y[1] - x[1]);
+  return pairs.slice(0, 2).map(([k]) => STRENGTH_LABELS[k]);
+}
+export function artistWeaknesses(a) {
+  const pairs = [
+    ['skill', a.skill || 40], ['songwriting', a.songwriting || 40], ['charisma', a.charisma || 40],
+    ['workEthic', a.workEthic || 40], ['loyalty', a.loyalty || 40],
+  ].sort((x, y) => x[1] - y[1]);
+  return pairs.slice(0, 2).map(([k]) => STRENGTH_LABELS[k]);
+}
+export function careerStageFor(a) {
+  if (a.retired) return { id: 'retired', name: 'Retired', color: '#636b7e' };
+  const age = a.age || 25;
+  const pop = a.popularity || 0;
+  const weeks = a.careerWeeks || 0;
+  if (age >= 40 && pop >= 48) return CAREER_STAGES.legacy;
+  if (age >= 36 && pop >= 55) return CAREER_STAGES.veteran;
+  if (pop >= 74) return CAREER_STAGES.superstar;
+  if (pop >= 58) return CAREER_STAGES.star;
+  if (pop >= 40 || weeks > 90) return CAREER_STAGES.breakthrough;
+  if (pop >= 25) return CAREER_STAGES.rising;
+  return CAREER_STAGES.discovery;
+}
+export function ensureArtistProfile(a) {
+  if (!a || typeof a !== 'object') return a;
+  a.personality ||= pick(PERSONALITY_TRAITS).id;
+  a.ambition ||= pick(AMBITIONS).id;
+  a.homeCity ||= pick(['London', 'Lagos', 'Seoul', 'New York', 'Berlin', 'São Paulo', 'Toronto', 'Paris', 'Tokyo', 'Nashville']);
+  a.preferredGenres ||= [a.genre, pick(GENRES).id].filter((g, i, arr) => arr.indexOf(g) === i);
+  a.creativeControl ??= randi(30, 82);
+  a.relationships ||= [];
+  a.careerTimeline ||= [];
+  a.onBreakUntil ||= 0;
+  a.retired ||= false;
+  a.labelFounder ||= false;
+  a.careerPeak = Math.max(a.careerPeak || 0, Math.round(a.popularity || 0));
+  a.awardsWon ||= 0;
+  a.strengths ||= artistStrengths(a);
+  a.weaknesses ||= artistWeaknesses(a);
+  a.careerStage = careerStageFor(a).id;
   return a;
 }
 
@@ -587,3 +653,293 @@ export function genreMomentumLabel(m) {
   if (m >= 0.94) return 'Steady';
   return 'Cooling';
 }
+
+/* ========================================================================== */
+/*                    MAJOR EXPANSION — STUDIO, LEGACY, AWARDS                */
+/* ========================================================================== */
+
+/* ------------------------------ studio complex ----------------------------- */
+/* Level 0 = not built. Each further level adds a real economic / creative bonus. */
+export const STUDIO_WINGS = [
+  {
+    id: 'production', name: 'Production Room', icon: 'sliders', color: '#ff5c8a',
+    desc: 'Outboard gear, modular synths and a tuned listening room. The beating heart of the complex.',
+    effect: 'Record quality and weekly session capacity.',
+    levels: [
+      { name: 'Not built', cost: 0, upkeep: 0 },
+      { name: 'Production Suite', cost: 42000, upkeep: 850, quality: 4, slots: 1, costMult: 0.97 },
+      { name: 'Advanced Production Lab', cost: 135000, upkeep: 2400, quality: 8, slots: 2, costMult: 0.94 },
+      { name: 'World-Class Hit Factory', cost: 340000, upkeep: 6200, quality: 12, slots: 3, costMult: 0.9 },
+    ],
+  },
+  {
+    id: 'songwriting', name: 'Songwriting Rooms', icon: 'pen', color: '#a78bfa',
+    desc: 'Quiet rooms, grand pianos and a resident topline team. Songs are written before the red light goes on.',
+    effect: 'Song quality and writing costs.',
+    levels: [
+      { name: 'Not built', cost: 0, upkeep: 0 },
+      { name: 'Writing Room', cost: 26000, upkeep: 520, quality: 3, writer: 2, costMult: 0.98 },
+      { name: 'Writer’s Wing', cost: 88000, upkeep: 1600, quality: 6, writer: 4, costMult: 0.94 },
+      { name: 'Legendary Songbook', cost: 240000, upkeep: 4400, quality: 9, writer: 6, costMult: 0.89 },
+    ],
+  },
+  {
+    id: 'offices', name: 'Label Offices', icon: 'building', color: '#38bdf8',
+    desc: 'Desks, spreadsheets and the people who keep the machine running. More room means a bigger team.',
+    effect: 'Staff capacity and lower office overheads.',
+    levels: [
+      { name: 'Garage Office', cost: 0, upkeep: 0, staffCap: 4, officeDiscount: 0 },
+      { name: 'Studio Offices', cost: 30000, upkeep: 700, staffCap: 6, officeDiscount: 0.08 },
+      { name: 'Label Headquarters', cost: 110000, upkeep: 2100, staffCap: 9, officeDiscount: 0.15 },
+      { name: 'Global HQ', cost: 300000, upkeep: 5600, staffCap: 14, officeDiscount: 0.22 },
+    ],
+  },
+  {
+    id: 'executive', name: 'Executive Suites', icon: 'crown', color: '#f5c451',
+    desc: 'Corner offices, a boardroom and the kind of address that makes artists take your call.',
+    effect: 'Signing power, artist morale and industry prestige.',
+    levels: [
+      { name: 'Not built', cost: 0, upkeep: 0 },
+      { name: 'Executive Office', cost: 55000, upkeep: 1100, sign: 0.02, morale: 1, rep: 0.02 },
+      { name: 'Boardroom Floor', cost: 165000, upkeep: 3400, sign: 0.05, morale: 2, rep: 0.04 },
+      { name: 'Empire Penthouse', cost: 420000, upkeep: 8800, sign: 0.08, morale: 3, rep: 0.07 },
+    ],
+  },
+  {
+    id: 'lounge', name: 'Artist Lounge', icon: 'heart', color: '#2dd4bf',
+    desc: 'A place to decompress between sessions: records, food, daylight and no A&R hovering.',
+    effect: 'Artist morale, satisfaction and retention.',
+    levels: [
+      { name: 'Not built', cost: 0, upkeep: 0 },
+      { name: 'Green Room', cost: 18000, upkeep: 380, morale: 2, satisfaction: 3 },
+      { name: 'Rooftop Lounge', cost: 72000, upkeep: 1300, morale: 4, satisfaction: 6 },
+      { name: 'Members’ Club', cost: 190000, upkeep: 3600, morale: 6, satisfaction: 10 },
+    ],
+  },
+];
+export const wingById = (id) => STUDIO_WINGS.find((w) => w.id === id);
+export const wingLevel = (wing, level) => wing.levels[Math.max(0, Math.min(wing.levels.length - 1, level))];
+
+export const STUDIO_THEMES = [
+  { id: 'midnight', name: 'Midnight Session', accent: '#ff2e63', wall: '#16111f', floor: '#241a2b' },
+  { id: 'gold', name: 'Gold Room', accent: '#f5c451', wall: '#1d1710', floor: '#2d2418' },
+  { id: 'neon', name: 'Neon Lab', accent: '#22d3ee', wall: '#0d1820', floor: '#132332' },
+  { id: 'forest', name: 'Forest Retreat', accent: '#a3e635', wall: '#111b15', floor: '#1b2a20' },
+  { id: 'violet', name: 'Violet Hour', accent: '#a78bfa', wall: '#171225', floor: '#241d38' },
+];
+export const STUDIO_FLOORS = [
+  { id: 'oak', name: 'Oak boards' },
+  { id: 'concrete', name: 'Polished concrete' },
+  { id: 'carpet', name: 'Deep carpet' },
+  { id: 'checker', name: 'Checker tile' },
+];
+export const STUDIO_LIGHTING = [
+  { id: 'warm', name: 'Warm tungsten' },
+  { id: 'neon', name: 'Neon wash' },
+  { id: 'daylight', name: 'Daylight' },
+  { id: 'moody', name: 'Moody' },
+];
+
+/* --------------------------------- legacy ---------------------------------- */
+export const RARITIES = {
+  common: { name: 'Common', color: '#94a3b8', weight: 46, prestige: 1 },
+  rare: { name: 'Rare', color: '#38bdf8', weight: 28, prestige: 3 },
+  epic: { name: 'Epic', color: '#a78bfa', weight: 16, prestige: 7 },
+  legendary: { name: 'Legendary', color: '#f5c451', weight: 8, prestige: 15 },
+  mythic: { name: 'Mythic', color: '#ff2e63', weight: 2, prestige: 30 },
+};
+export const COLLECTIBLE_DEFS = {
+  gold: { name: 'Gold Record', category: 'certification', rarity: 'rare', icon: 'disc', blurb: '500,000 streams. The first plaque on the wall.' },
+  platinum: { name: 'Platinum Record', category: 'certification', rarity: 'epic', icon: 'disc', blurb: 'Two million streams. A record that changed the trajectory.' },
+  diamond: { name: 'Diamond Record', category: 'certification', rarity: 'legendary', icon: 'diamond', blurb: 'Ten million streams. A generational smash.' },
+  legendary: { name: 'Legendary Plaque', category: 'certification', rarity: 'mythic', icon: 'crown', blurb: 'Fifty million streams. Immortal.' },
+  poster: { name: 'Tour Poster', category: 'memorabilia', rarity: 'common', icon: 'pin', blurb: 'A screen-printed poster from a night to remember.' },
+  signed_vinyl: { name: 'Signed Vinyl', category: 'memorabilia', rarity: 'rare', icon: 'disc', blurb: 'Hand-signed, numbered and kept behind glass.' },
+  lyrics: { name: 'Handwritten Lyrics', category: 'memorabilia', rarity: 'rare', icon: 'pen', blurb: 'The original notebook page for a hit.' },
+  backstage: { name: 'Backstage Pass', category: 'memorabilia', rarity: 'common', icon: 'tag', blurb: 'Laminated proof that you were in the room.' },
+  guitar: { name: 'Stage-Used Guitar', category: 'memorabilia', rarity: 'epic', icon: 'guitar', blurb: 'Dented, sweat-stained and priceless to fans.' },
+  festival_poster: { name: 'Festival Poster', category: 'memorabilia', rarity: 'epic', icon: 'festival', blurb: 'The lineup poster from one of your own festivals.' },
+  trophy: { name: 'Award Trophy', category: 'award', rarity: 'legendary', icon: 'trophy', blurb: 'Awarded by the industry. Heavy in the best way.' },
+  platinum_key: { name: 'Platinum Key', category: 'award', rarity: 'mythic', icon: 'key', blurb: 'Presented for a record that defined an era.' },
+  signed_mic: { name: 'Signed Microphone', category: 'memorabilia', rarity: 'epic', icon: 'mic', blurb: 'The vocal mic from a career-defining session.' },
+  gold_chain: { name: 'Custom Gold Chain', category: 'memorabilia', rarity: 'rare', icon: 'star', blurb: 'Commissioned by an artist after their first #1.' },
+};
+export const COLLECTIBLE_RARITY_ORDER = ['common', 'rare', 'epic', 'legendary', 'mythic'];
+
+/* --------------------------------- awards ---------------------------------- */
+export const AWARD_CATEGORIES = [
+  { id: 'song', name: 'Song of the Year', icon: 'music', blurb: 'The record that owned the year.' },
+  { id: 'album', name: 'Album of the Year', icon: 'disc', blurb: 'A body of work with lasting weight.' },
+  { id: 'artist', name: 'Artist of the Year', icon: 'star', blurb: 'The defining career of the last twelve months.' },
+  { id: 'new', name: 'Best New Artist', icon: 'sparkle', blurb: 'The breakthrough everyone is talking about.' },
+  { id: 'producer', name: 'Best Producer', icon: 'sliders', blurb: 'The ear behind the year’s biggest records.' },
+];
+export const awardById = (id) => AWARD_CATEGORIES.find((a) => a.id === id);
+
+/* -------------------------------- festivals -------------------------------- */
+export const FESTIVAL_THEMES = [
+  { id: 'neon', name: 'Neon Nights', accent: '#ff2e63', accent2: '#22d3ee', blurb: 'Lasers, synths and a crowd that never stops moving.' },
+  { id: 'sunset', name: 'Golden Hour', accent: '#f5c451', accent2: '#fb7185', blurb: 'Warm light, big singalongs and a festival built for sunset.' },
+  { id: 'cosmic', name: 'Cosmic Frequency', accent: '#a78bfa', accent2: '#38bdf8', blurb: 'A cosmic production with immersive light and spatial sound.' },
+  { id: 'forest', name: 'Wildwood', accent: '#a3e635', accent2: '#2dd4bf', blurb: 'Forest stages, lanterns and a gentler kind of chaos.' },
+  { id: 'retro', name: 'Rewind', accent: '#f97316', accent2: '#fbbf24', blurb: 'Analog warmth, vintage signage and timeless records.' },
+];
+export const festivalThemeById = (id) => FESTIVAL_THEMES.find((t) => t.id === id) || FESTIVAL_THEMES[0];
+
+export const FESTIVAL_LOCATIONS = [
+  { id: 'local', name: 'Local Fairground', baseCap: 3500, basePrice: 38, baseCost: 32000, minRep: 0, blurb: 'A fenced field, one stage and a very long queue for food.' },
+  { id: 'city', name: 'City Park', baseCap: 9500, basePrice: 55, baseCost: 85000, minRep: 14, blurb: 'A proper city festival with room for a second stage.' },
+  { id: 'national', name: 'National Arena Grounds', baseCap: 24000, basePrice: 78, baseCost: 260000, minRep: 30, blurb: 'National attention, national production, national risk.' },
+  { id: 'international', name: 'International Festival Island', baseCap: 62000, basePrice: 110, baseCost: 720000, minRep: 48, blurb: 'Artists and fans fly in from everywhere. This is the big league.' },
+];
+export const festivalLocationById = (id) => FESTIVAL_LOCATIONS.find((l) => l.id === id) || FESTIVAL_LOCATIONS[0];
+
+export const FESTIVAL_UPGRADES = [
+  { id: 'stages', name: 'Stages & Production', icon: 'stage', desc: 'More stage capacity, better sound and bigger productions.', levels: [
+    { name: 'One small stage', cost: 0, capacity: 0, quality: 0 },
+    { name: 'Main stage + lights', cost: 28000, capacity: 0.18, quality: 5 },
+    { name: 'Twin stages & LED walls', cost: 95000, capacity: 0.34, quality: 11 },
+    { name: 'Immersive festival build', cost: 240000, capacity: 0.5, quality: 18 },
+  ] },
+  { id: 'vip', name: 'VIP Area', icon: 'crown', desc: 'Premium viewing, hospitality and a much higher spend per head.', levels: [
+    { name: 'No VIP', cost: 0, spend: 0, quality: 0 },
+    { name: 'VIP terrace', cost: 12000, spend: 7, quality: 2 },
+    { name: 'Backstage hospitality', cost: 42000, spend: 15, quality: 5 },
+    { name: 'Ultra VIP village', cost: 110000, spend: 26, quality: 9 },
+  ] },
+  { id: 'food', name: 'Food Court', icon: 'food', desc: 'More vendors, shorter queues and a happier crowd.', levels: [
+    { name: 'Two vans', cost: 0, spend: 2, quality: 0 },
+    { name: 'Food trucks', cost: 9000, spend: 5, quality: 3 },
+    { name: 'Street food market', cost: 32000, spend: 9, quality: 7 },
+    { name: 'Chef-led village', cost: 85000, spend: 14, quality: 12 },
+  ] },
+  { id: 'merch', name: 'Merch Stalls', icon: 'tag', desc: 'Official merch, artist pop-ups and physical records.', levels: [
+    { name: 'One table', cost: 0, spend: 1, quality: 0 },
+    { name: 'Merch row', cost: 8000, spend: 4, quality: 2 },
+    { name: 'Artist pop-up village', cost: 30000, spend: 8, quality: 5 },
+    { name: 'Collector’s market', cost: 78000, spend: 13, quality: 9 },
+  ] },
+  { id: 'backstage', name: 'Backstage Facilities', icon: 'door', desc: 'Proper dressing rooms and production offices. Artists notice.', levels: [
+    { name: 'Tents', cost: 0, capacity: 0, quality: -2 },
+    { name: 'Dressing rooms', cost: 11000, capacity: 0.04, quality: 3 },
+    { name: 'Production compound', cost: 38000, capacity: 0.08, quality: 7 },
+    { name: 'Artist village', cost: 96000, capacity: 0.12, quality: 12 },
+  ] },
+];
+export const festivalUpgradeById = (id) => FESTIVAL_UPGRADES.find((u) => u.id === id);
+
+export const FESTIVAL_SPONSORS = [
+  { id: 'none', name: 'No sponsor', amount: 0, minRep: 0, desc: 'Keep the festival independent.' },
+  { id: 'energy', name: 'Volt Energy', amount: 45000, minRep: 8, desc: 'Cash plus sampling activations across the grounds.' },
+  { id: 'fashion', name: 'Atelier Nine', amount: 95000, minRep: 22, desc: 'Fashion partner with a VIP installation.' },
+  { id: 'tech', name: 'Nova Tech', amount: 180000, minRep: 36, desc: 'Official streaming and broadcast partner.' },
+  { id: 'auto', name: 'Apex Motors', amount: 320000, minRep: 50, desc: 'Title sponsor with a main-stage takeover.' },
+];
+export const festivalSponsorById = (id) => FESTIVAL_SPONSORS.find((s) => s.id === id) || FESTIVAL_SPONSORS[0];
+
+/* ----------------------------- living artists ------------------------------ */
+export const AMBITIONS = [
+  { id: 'chart', name: 'Chart domination', desc: 'Wants number ones, radio and global reach.', morale: 'hits' },
+  { id: 'artistry', name: 'Artistic legacy', desc: 'Would rather make a masterpiece than a hit.', morale: 'freedom' },
+  { id: 'wealth', name: 'Wealth & fame', desc: 'Treats music as a business. Pays attention to every royalty statement.', morale: 'money' },
+  { id: 'legacy', name: 'Cultural legacy', desc: 'Wants to change the sound of a generation.', morale: 'impact' },
+  { id: 'freedom', name: 'Creative freedom', desc: 'Hates being told what to record.', morale: 'control' },
+];
+export const ambitionById = (id) => AMBITIONS.find((a) => a.id === id) || AMBITIONS[0];
+
+export const PERSONALITY_TRAITS = [
+  { id: 'warm', name: 'Warm', desc: 'Makes everyone in the room feel welcome.' },
+  { id: 'intense', name: 'Intense', desc: 'Obsessive about the work, exhausting about everything else.' },
+  { id: 'private', name: 'Private', desc: 'Keeps the world at arm’s length.' },
+  { id: 'charismatic', name: 'Charismatic', desc: 'Can charm a room, a label or a stadium.' },
+  { id: 'restless', name: 'Restless', desc: 'Always looking for the next sound.' },
+  { id: 'romantic', name: 'Romantic', desc: 'Wears their heart on every record.' },
+  { id: 'ruthless', name: 'Ruthless', desc: 'Will trade a friendship for a career.' },
+  { id: 'goofy', name: 'Goofy', desc: 'Fans love the chaos; publicists less so.' },
+];
+export const personalityById = (id) => PERSONALITY_TRAITS.find((p) => p.id === id) || PERSONALITY_TRAITS[0];
+
+export const CAREER_STAGES = {
+  discovery: { name: 'Discovery', color: '#94a3b8', min: 0 },
+  rising: { name: 'Rising', color: '#38bdf8', min: 25 },
+  breakthrough: { name: 'Breakthrough', color: '#2dd4bf', min: 40 },
+  star: { name: 'Star', color: '#f5c451', min: 58 },
+  superstar: { name: 'Superstar', color: '#ff2e63', min: 74 },
+  veteran: { name: 'Veteran', color: '#a78bfa', min: 62 },
+  legacy: { name: 'Legacy Act', color: '#f97316', min: 50 },
+};
+
+/* ------------------------- expansion support content ----------------------- */
+export const STAR_PRODUCERS = [
+  'Nico Vale', 'Kaya Bloom', 'Sable Rivers', 'Emil Kova', 'Rue Delacroix',
+  'Tomo Ishida', 'Mira Sol', 'Dex Calloway', 'Nadia Wren', 'Silas Grant',
+];
+
+export const TROPHY_ROOM_THEMES = [
+  { id: 'gold', name: 'The Gold Vault', wall: '#1d1710', floor: '#2d2418', accent: '#f5c451', blurb: 'Warm brass, black velvet and low amber light.' },
+  { id: 'museum', name: 'Modern Museum', wall: '#171a22', floor: '#22262f', accent: '#e2e8f0', blurb: 'Gallery white, glass cases and clean sightlines.' },
+  { id: 'neon', name: 'Neon Archive', wall: '#0f1620', floor: '#152232', accent: '#22d3ee', blurb: 'A future-facing archive lit in electric cyan.' },
+  { id: 'club', name: 'Afterhours Club', wall: '#1a1020', floor: '#26152d', accent: '#ff2e63', blurb: 'Plush booths, gold records and a permanent afterparty.' },
+];
+export const trophyThemeById = (id) => TROPHY_ROOM_THEMES.find((t) => t.id === id) || TROPHY_ROOM_THEMES[0];
+
+export const HALL_LAYOUTS = [
+  { id: 'classic', name: 'Classic hall', blurb: 'Symmetrical cabinets and a central trophy aisle.' },
+  { id: 'gallery', name: 'Gallery walls', blurb: 'Frames salon-style with a reading bench in the middle.' },
+  { id: 'vault', name: 'Private vault', blurb: 'Dark cases, spotlit plinths and limited access.' },
+];
+
+export const FESTIVAL_BRAND_COLORS = ['#ff2e63', '#f5c451', '#22d3ee', '#a3e635', '#a78bfa', '#fb7185', '#f97316'];
+
+/* ---------------------- living-artist decision events ---------------------- */
+Object.assign(EVENT_DEFS, {
+  royaltyDispute: {
+    title: 'Royalty disagreement',
+    icon: 'scale',
+    body: (d) => `${d.artistName} has seen the last statement and wants a bigger share. Their team is asking for a public show of faith.`,
+    options: [
+      { label: 'Raise the royalty rate', cost: 0, hint: 'Royalty +3%. Loyalty and morale up.' },
+      { label: 'Pay a one-off bonus', cost: (d) => d.cost || 18000, hint: 'Costs cash now, keeps the deal intact.' },
+      { label: 'Hold the line', cost: 0, hint: 'Save money. Loyalty takes a hit.' },
+    ],
+  },
+  creativeDifferences: {
+    title: 'Creative differences',
+    icon: 'sliders',
+    body: (d) => `${d.artistName} wants to change direction and is clashing with the team in the studio. The next record is on the line.`,
+    options: [
+      { label: 'Give them creative control', cost: 0, hint: 'Artistic freedom. Quality up, commercial risk.' },
+      { label: 'Book a writing retreat', cost: (d) => d.cost || 24000, hint: 'Reset the room. Morale and quality up.' },
+      { label: 'Push for the hit', cost: 0, hint: 'Commercial focus, morale down.' },
+    ],
+  },
+  careerBreak: {
+    title: 'Burnout',
+    icon: 'clock',
+    body: (d) => `${d.artistName} is exhausted and wants time away from the schedule. Pushing too hard could cost you the artist.`,
+    options: [
+      { label: 'Give them time off', cost: 0, hint: 'Two weeks out. Morale recovers.' },
+      { label: 'Pay for a private retreat', cost: (d) => d.cost || 15000, hint: 'One week out. Big morale and loyalty boost.' },
+      { label: 'Keep the schedule', cost: 0, hint: 'No downtime. Morale drops sharply.' },
+    ],
+  },
+  labelFounder: {
+    title: 'They want their own label',
+    icon: 'building',
+    body: (d) => `${d.artistName} feels ready to build something of their own. They could stay as a partner — or leave and become a competitor.`,
+    options: [
+      { label: 'Offer an imprint partnership', cost: (d) => d.cost || 90000, hint: 'Keep the artist close and gain reputation.' },
+      { label: 'Match the offer and re-sign', cost: (d) => Math.round((d.cost || 90000) * 1.7), hint: 'Expensive, but they stay on the roster.' },
+      { label: 'Let them go', cost: 0, hint: 'They leave and launch a rival label.' },
+    ],
+  },
+  duet: {
+    title: 'A duet in the making',
+    icon: 'sparkle',
+    body: (d) => `${d.artistName} and ${d.partnerName} have been in the studio together. The chemistry is obvious — the room wants a record.`,
+    options: [
+      { label: 'Book the session', cost: (d) => d.cost || 22000, hint: 'Add a high-quality collaboration to the vault.' },
+      { label: 'Keep them focused', cost: 0, hint: 'No distraction, no new record.' },
+    ],
+  },
+});
