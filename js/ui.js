@@ -5,8 +5,15 @@ import {
   EQUIPMENT, FACILITIES, facilityById, DISTRIBUTION, distById, CAMPAIGNS, campaignById,
   BUDGETS, FOCUS, RELEASE_TYPES, ROLES, roleById, TRAITS, traitById, genreMomentumLabel,
   clamp, pick, sum,
+  STUDIO_WINGS, wingById, STUDIO_THEMES, STUDIO_FLOORS, STUDIO_LIGHTING, RARITIES,
+  COLLECTIBLE_DEFS, AWARD_CATEGORIES, awardById, FESTIVAL_THEMES,
+  festivalThemeById, FESTIVAL_LOCATIONS, festivalLocationById, FESTIVAL_UPGRADES, festivalUpgradeById,
+  FESTIVAL_SPONSORS, festivalSponsorById, FESTIVAL_BRAND_COLORS, TROPHY_ROOM_THEMES, trophyThemeById,
+  HALL_LAYOUTS, AMBITIONS, ambitionById, PERSONALITY_TRAITS, personalityById,
 } from './data.js';
 import * as G from './game.js';
+import { icon3d } from './visuals.js';
+import { mountScene, sceneFor, cleanupScenes } from './scene3d.js';
 
 /* --------------------------------- helpers --------------------------------- */
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -90,6 +97,11 @@ const NAV = [
     { id: 'company', label: 'Company', icon: 'building' },
     { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   ] },
+  { group: 'Empire', items: [
+    { id: 'legacy', label: 'Legacy', icon: 'trophy' },
+    { id: 'awards', label: 'Awards', icon: 'crown' },
+    { id: 'festivals', label: 'Festivals', icon: 'stage' },
+  ] },
 ];
 const SCREEN_INFO = {
   dashboard: { title: 'Dashboard', sub: 'The state of your label, this week.' },
@@ -102,6 +114,9 @@ const SCREEN_INFO = {
   finance: { title: 'Finance', sub: 'Cash, costs, debt and the long game.' },
   company: { title: 'Company', sub: 'Branding, facilities, team and progression.' },
   calendar: { title: 'Calendar', sub: 'Everything that lands in the next twelve weeks.' },
+  legacy: { title: 'Legacy & collectors', sub: 'Certifications, memorabilia and the Hall of Fame.' },
+  awards: { title: 'Annual awards', sub: 'Nominees, winners and the industry’s biggest night.' },
+  festivals: { title: 'Festivals', sub: 'Build a stage, book a lineup and own the summer.' },
 };
 
 const ui = {
@@ -110,6 +125,7 @@ const ui = {
   chartTab: 'songs',
   moreOpen: false,
   intro: { color: '#ff2e63', shape: 'vinyl', genre: 'pop' },
+  ceremonyStep: 0,
 };
 export const uiState = ui;
 
@@ -173,6 +189,14 @@ function meter(label, value, max = 100, cls = '', display = null) {
 function ringHTML(pctVal, label, color = 'var(--brand)') {
   return `<div class="ring" style="--p:${clamp(pctVal, 0, 100)};--ring:${color}"><span>${label}</span></div>`;
 }
+function mountScenesIn(container) {
+  if (!container) return;
+  container.querySelectorAll('canvas[data-scene]').forEach((canvas) => {
+    let opts = {};
+    try { opts = JSON.parse(canvas.dataset.sceneOpts || '{}'); } catch (err) { opts = {}; }
+    mountScene(canvas, canvas.dataset.scene, opts);
+  });
+}
 function sparkline(values, w = 130, h = 34, color = 'var(--brand)', fill = true) {
   if (!values || values.length < 2) values = [0, 0, 0];
   const max = Math.max(...values, 1);
@@ -228,6 +252,7 @@ export function initUI() {
   });
   document.addEventListener('change', (e) => {
     const t = e.target;
+    if (t.dataset.act) { handleAction(t.dataset.act, t); return; }
     if (t.closest('#song-form')) updateSongPreview();
     if (t.closest('#tour-form')) updateTourPreview();
     if (t.dataset.field === 'type' && t.closest('#release-form')) {
@@ -279,10 +304,12 @@ function renderShell(s) {
       studio: s.demos.length,
       charts: s.chartSongs.filter((c) => c.isPlayer).length,
       marketing: G.activeCampaigns().length,
+      awards: s.pendingCeremony ? 1 : 0,
+      festivals: s.festivals.filter((f) => f.status === 'planned').length,
     };
     const b = badges[item.id];
     return `<button class="nav-item ${ui.screen === item.id ? 'active' : ''}" data-screen="${item.id}">
-      ${icon(item.icon, 17)}<span>${item.label}</span>${b ? `<span class="nav-badge ${item.id === 'roster' ? '' : 'dim'}">${b}</span>` : ''}
+      ${icon3d(item.icon, 19)}<span>${item.label}</span>${b ? `<span class="nav-badge ${item.id === 'roster' ? '' : 'dim'}">${b}</span>` : ''}
     </button>`;
   };
   return `<div class="app-shell">
@@ -337,6 +364,9 @@ function screenHTML(s) {
     case 'finance': return financeView(s);
     case 'company': return companyView(s);
     case 'calendar': return calendarView(s);
+    case 'legacy': return legacyView(s);
+    case 'awards': return awardsView(s);
+    case 'festivals': return festivalsView(s);
     default: return dashboardView(s);
   }
 }
@@ -352,6 +382,10 @@ function dashboardView(s) {
   const weeklyStreams = sum(s.tracks.filter((t) => t.isPlayer), (t) => t.weekly || 0);
   const top = s.chartSongs[0];
   const playerChart = s.chartSongs.filter((c) => c.isPlayer);
+  const legacy = G.legacyStats();
+  const complex = G.studioComplexSummary();
+  const nextFest = s.festivals.filter((f) => f.status === 'planned').sort((a, b) => a.week - b.week)[0];
+  const awardsIn = 52 - (((s.week - 1) % 52) + 1);
   const demoCount = s.demos.length;
   const upcoming = s.releases.filter((r) => r.status === 'scheduled').sort((a, b) => a.releaseWeek - b.releaseWeek);
   const expiring = s.roster.filter((a) => a.contract && a.contract.weeksLeft <= 6);
@@ -365,6 +399,8 @@ function dashboardView(s) {
   if (expiring.length) agenda.push({ icon: 'scale', text: `${expiring[0].name}’s contract ends in ${Math.max(0, expiring[0].contract.weeksLeft)} weeks`, cta: 'Roster', screen: 'roster' });
   if (!s.roster.length) agenda.push({ icon: 'users', text: 'No artists signed. Your first signing is out there.', cta: 'Find talent', screen: 'roster' });
   if (!G.activeCampaigns().length && s.roster.length) agenda.push({ icon: 'megaphone', text: 'No campaigns running. The catalog is quiet.', cta: 'Promote', screen: 'marketing' });
+  if (s.pendingCeremony) agenda.push({ icon: 'trophy', text: 'The annual awards ceremony is waiting for you', cta: 'Attend', screen: 'awards' });
+  if (nextFest) agenda.push({ icon: 'stage', text: `${nextFest.name} takes over in ${Math.max(0, nextFest.week - s.week)} weeks`, cta: 'Lineup', screen: 'festivals' });
   if (s.cash < G.weeklyBurn() * 4) agenda.push({ icon: 'wallet', text: 'Cash runway is short. Review the finances.', cta: 'Finance', screen: 'finance' });
   if (!agenda.length) agenda.push({ icon: 'check-circle', text: 'Everything is running. Time to make a record.', cta: 'Record', screen: 'studio' });
 
@@ -419,6 +455,29 @@ function dashboardView(s) {
       <div class="stat-val">${money(G.weeklyBurn())}</div>
       <div class="stat-foot">${s.cash > 0 ? `${Math.max(0, Math.floor(s.cash / Math.max(1, G.weeklyBurn())))} weeks runway` : 'Cash negative'}</div>
     </div>
+  </div>
+
+  <div class="empire-strip mt-16">
+    <button class="empire-card" data-screen="studio">
+      <span class="empire-icon">${icon3d('building', 34)}</span>
+      <span class="empire-copy"><b>Studio complex</b><span>${complex.total}/${complex.max} upgrades · ${Math.round(G.staffCapacity())} staff capacity</span></span>
+      <span class="empire-go">${icon('arrow-right', 14)}</span>
+    </button>
+    <button class="empire-card" data-screen="legacy">
+      <span class="empire-icon">${icon3d('trophy', 34)}</span>
+      <span class="empire-copy"><b>Legacy ${legacy.total ? `· ${legacy.total}` : ''}</b><span>${legacy.total ? `${legacy.certTotal} certification${legacy.certTotal === 1 ? '' : 's'} · ${legacy.prestige} prestige` : 'Awards, vinyl and memorabilia await'}</span></span>
+      <span class="empire-go">${icon('arrow-right', 14)}</span>
+    </button>
+    <button class="empire-card" data-screen="awards">
+      <span class="empire-icon">${icon3d('crown', 34)}</span>
+      <span class="empire-copy"><b>Annual awards</b><span>${s.pendingCeremony ? 'Ceremony live now' : `Next ceremony in ${awardsIn} week${awardsIn === 1 ? '' : 's'}`}</span></span>
+      <span class="empire-go">${icon('arrow-right', 14)}</span>
+    </button>
+    <button class="empire-card" data-screen="festivals">
+      <span class="empire-icon">${icon3d('stage', 34)}</span>
+      <span class="empire-copy"><b>Festivals</b><span>${nextFest ? `${nextFest.name} · wk ${nextFest.week}` : 'No festival booked yet'}</span></span>
+      <span class="empire-go">${icon('arrow-right', 14)}</span>
+    </button>
   </div>
 
   <div class="split mt-16">
@@ -560,6 +619,68 @@ function releaseStreams(s, r) {
 function releaseTotalStreams(s, r) {
   return sum(s.tracks.filter((t) => t.releaseKey === r.id), (t) => t.streamsTotal || 0);
 }
+function studioSceneOpts(s) {
+  const theme = STUDIO_THEMES.find((t) => t.id === s.complex?.theme) || STUDIO_THEMES[0];
+  const light = s.complex?.lighting || 'warm';
+  return {
+    theme: theme.id, accent: theme.accent, wall: theme.wall, floor: theme.floor, lighting: light,
+    sign: (s.label.name || 'STUDIO').toUpperCase().slice(0, 14), auto: true,
+  };
+}
+function sceneCanvas(kind, opts, cls = '') {
+  return `<canvas class="scene-canvas ${cls}" data-scene="${kind}" data-scene-opts="${esc(JSON.stringify(opts))}" aria-label="Interactive 3D ${kind} environment"></canvas>`;
+}
+function wingPips(level, max) {
+  return `<span class="wing-pips">${Array.from({ length: max }, (_, i) => `<i class="${i < level ? 'on' : ''}"></i>`).join('')}</span>`;
+}
+function studioComplexPanel(s) {
+  const summary = G.studioComplexSummary();
+  const cap = G.staffCapacity();
+  return `<div class="complex-panel mb-16">
+    <div class="complex-scene">
+      ${sceneCanvas('studio', studioSceneOpts(s))}
+      <div class="scene-hud">
+        <span class="live-badge"><i></i> LIVE 3D</span>
+        <span class="pill">${esc(STUDIO_THEMES.find((t) => t.id === s.complex?.theme)?.name || 'Midnight Session')}</span>
+      </div>
+      <div class="scene-tools">
+        <button class="scene-tool" data-act="scene-preset" data-scene="studio" data-preset="wide">Wide</button>
+        <button class="scene-tool" data-act="scene-preset" data-scene="studio" data-preset="close">Close</button>
+        <button class="scene-tool" data-act="scene-preset" data-scene="studio" data-preset="orbit">Orbit</button>
+      </div>
+      <div class="scene-hint">${icon('search', 11)} Drag to look around · scroll to zoom</div>
+    </div>
+    <div class="complex-body">
+      <div class="complex-head">
+        <div><div class="eyebrow">Your building</div><h2 class="complex-title">${esc(s.label.name)} Studio Complex</h2><div class="small muted">Better rooms and better people raise the ceiling on everything you record.</div></div>
+        ${ringHTML(summary.pct, `${summary.total}/${summary.max}`, 'var(--gold)')}
+      </div>
+      <div class="complex-meta">
+        <span class="pill ${s.staff.length >= cap ? 'gold' : 'green'}">${icon('users', 11)} ${s.staff.length}/${cap} staff</span>
+        <span class="pill">${icon('sliders', 11)} +${Math.round(summary.bonuses.quality)} session quality</span>
+        <span class="pill">${icon('wallet', 11)} ${Math.round((1 - summary.bonuses.costMult) * 100)}% cheaper sessions</span>
+      </div>
+      <div class="wing-grid">
+        ${STUDIO_WINGS.map((w) => {
+          const st = G.wingStatus(w.id);
+          const cost = G.wingUpgradeCost(w.id);
+          const next = cost !== null ? w.levels[st.level + 1] : null;
+          return `<div class="wing-card">
+            <div class="between"><span class="wing-icon" style="color:${w.color}">${icon3d(w.icon, 30)}</span>${wingPips(st.level, w.levels.length - 1)}</div>
+            <div><b class="small">${esc(w.name)}</b><div class="tiny dim">${esc(st.info.name || w.levels[0].name)}</div></div>
+            <div class="tiny muted" style="line-height:1.45">${esc(w.effect)}</div>
+            <div class="between"><span class="tiny dim">${next ? `${money(cost)}` : 'Max level'}</span><button class="btn btn-sm ${st.level === 0 ? 'btn-primary' : ''}" data-act="upgrade-wing" data-id="${w.id}" ${cost === null || s.cash < cost ? 'disabled' : ''}>${st.level === 0 ? 'Build' : 'Upgrade'}</button></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="complex-customise">
+        <div class="customise-group"><span class="tiny dim">Theme</span><div class="row wrap">${STUDIO_THEMES.map((t) => `<button class="swatch-btn ${s.complex?.theme === t.id ? 'active' : ''}" style="--sw:${t.accent}" data-act="complex-theme" data-id="${t.id}" title="${esc(t.name)}"></button>`).join('')}</div></div>
+        <div class="customise-group"><span class="tiny dim">Floor</span><select class="mini-select" data-act="complex-floor">${STUDIO_FLOORS.map((f) => `<option value="${f.id}" ${s.complex?.floor === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></div>
+        <div class="customise-group"><span class="tiny dim">Lighting</span><select class="mini-select" data-act="complex-light">${STUDIO_LIGHTING.map((l) => `<option value="${l.id}" ${s.complex?.lighting === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>
+      </div>
+    </div>
+  </div>`;
+}
 function studioView(s) {
   const demos = [...s.demos].sort((a, b) => b.createdWeek - a.createdWeek);
   const scheduled = s.releases.filter((r) => r.status === 'scheduled').sort((a, b) => a.releaseWeek - b.releaseWeek);
@@ -572,6 +693,7 @@ function studioView(s) {
     <div><div class="eyebrow">Production</div><h1 class="page-title">Studio & production</h1><div class="page-sub">Better rooms, better people, better records. Every session costs money — and every release is a shot at the charts.</div></div>
     <div class="head-actions"><button class="btn" data-act="build-studio">${icon('plus', 15)} Build studio · ${money(G.newStudioCost())}</button><button class="btn btn-primary" data-act="open-record" ${s.roster.length ? '' : 'disabled'}>${icon('mic', 15)} New session</button></div>
   </div>
+  ${studioComplexPanel(s)}
   <div class="stat-grid mb-16">
     <div class="stat"><div class="stat-label">Best studio quality</div><div class="stat-val">${Math.round(Math.max(...s.studios.map((st) => G.studioQuality(st.id))))}</div><div class="stat-foot">Engineer bonus ${engineers ? 'active' : 'none'}</div></div>
     <div class="stat"><div class="stat-label">Songs in the vault</div><div class="stat-val">${demos.length}</div><div class="stat-foot">${scheduled.length} release${scheduled.length === 1 ? '' : 's'} scheduled</div></div>
@@ -641,6 +763,210 @@ function studioView(s) {
       </div>
     </div>
   </div>`;
+}
+
+/* ---------------------------------- legacy --------------------------------- */
+function legacyRoomOpts(s) {
+  const theme = trophyThemeById(s.legacy?.trophyTheme);
+  return { accent: theme.accent, wall: theme.wall, floor: theme.floor, auto: true };
+}
+function collectibleCard(c) {
+  const rarity = RARITIES[c.rarity] || RARITIES.common;
+  return `<div class="collectible-card ${c.displayed ? 'displayed' : ''}" style="--rarity:${rarity.color}">
+    <div class="collectible-art">${icon3d(c.icon || 'disc', 42)}<span class="rarity-pill">${esc(rarity.name)}</span></div>
+    <div class="collectible-copy">
+      <b>${esc(c.name)}</b>
+      <span>${esc(c.trackTitle ? `“${c.trackTitle}” · ${c.artistName}` : c.artistName || c.note || '')}</span>
+      <span class="tiny dim">${esc(c.category)} · wk ${c.week}${c.signed ? ' · signed' : ''}</span>
+    </div>
+    <button class="btn btn-sm ${c.displayed ? 'btn-primary' : 'btn-ghost'}" data-act="toggle-display" data-id="${c.id}">${c.displayed ? 'On display' : 'Display'}</button>
+  </div>`;
+}
+function legacyView(s) {
+  const stats = G.legacyStats();
+  const theme = trophyThemeById(s.legacy?.trophyTheme);
+  const displayed = s.legacy.collectibles.filter((c) => c.displayed);
+  return `
+  <div class="page-head">
+    <div><div class="eyebrow">Hall of Fame</div><h1 class="page-title">Legacy & collectors</h1><div class="page-sub">Gold records, signed vinyl, stage-used guitars and the trophies that prove it happened. Build a room worth visiting.</div></div>
+    <div class="head-actions"><span class="pill gold">${icon3d('trophy', 14)} ${stats.prestige} prestige</span><button class="btn" data-screen="awards">${icon('crown', 14)} Awards</button></div>
+  </div>
+  <div class="scene-card mb-16">
+    ${sceneCanvas('hall', legacyRoomOpts(s))}
+    <div class="scene-hud"><span class="live-badge"><i></i> HALL OF FAME</span><span class="pill">${esc(theme.name)} · ${esc(HALL_LAYOUTS.find((l) => l.id === s.legacy?.layout)?.name || 'Classic hall')}</span></div>
+    <div class="scene-tools">
+      <button class="scene-tool" data-act="scene-preset" data-scene="hall" data-preset="wide">Wide</button>
+      <button class="scene-tool" data-act="scene-preset" data-scene="hall" data-preset="close">Close</button>
+      <button class="scene-tool" data-act="scene-preset" data-scene="hall" data-preset="orbit">Orbit</button>
+    </div>
+    <div class="scene-hint">${icon('search', 11)} Drag to explore the trophy room · scroll to zoom</div>
+  </div>
+  <div class="stat-grid mb-16">
+    <div class="stat"><div class="stat-label">${icon3d('trophy', 16)} Collection</div><div class="stat-val">${stats.total}</div><div class="stat-foot">${stats.displayed}/${stats.capacity} on display</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('diamond', 16)} Certifications</div><div class="stat-val">${stats.certTotal}</div><div class="stat-foot">${stats.certs.gold} gold · ${stats.certs.platinum} platinum · ${stats.certs.diamond} diamond</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('star', 16)} Rarest find</div><div class="stat-val">${stats.by.mythic ? 'Mythic' : stats.by.legendary ? 'Legendary' : stats.by.epic ? 'Epic' : stats.by.rare ? 'Rare' : '—'}</div><div class="stat-foot">${esc(stats.latest?.name || 'No collectibles yet')}</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('cash', 16)} Insured value</div><div class="stat-val">${money(stats.value)}</div><div class="stat-foot">Sentimental value: priceless</div></div>
+  </div>
+  <div class="split">
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">${icon3d('disc', 18)} The collection</div><div class="card-sub">Every certification, award and piece of memorabilia</div></div><span class="pill">${stats.total}</span></div>
+        ${s.legacy.collectibles.length ? `<div class="collectible-grid">${s.legacy.collectibles.slice(0, 24).map((c) => collectibleCard(c)).join('')}</div>` : `<div class="empty"><div class="empty-icon">${icon3d('trophy', 26)}</div><b>The walls are bare</b><p>Streams unlock gold, platinum, diamond and legendary plaques. Tours, festivals and awards add memorabilia.</p><button class="btn btn-primary mt-12" data-screen="studio">Make a record</button></div>`}
+        ${s.legacy.collectibles.length > 24 ? `<div class="tiny dim mt-12">Showing the 24 most recent pieces. ${s.legacy.collectibles.length - 24} more in storage.</div>` : ''}
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">${icon3d('chart', 18)} Certification progress</div><div class="card-sub">Your catalog against the next plaque</div></div></div>
+        ${s.tracks.filter((t) => t.isPlayer).sort((a, b) => (b.streamsTotal || 0) - (a.streamsTotal || 0)).slice(0, 5).map((t) => {
+          const total = t.streamsTotal || 0;
+          const next = [[500000, 'Gold'], [2000000, 'Platinum'], [10000000, 'Diamond'], [50000000, 'Legendary']].find(([n]) => total < n);
+          const pctVal = next ? clamp((total / next[0]) * 100, 0, 100) : 100;
+          return `<div class="cert-row"><div class="row" style="min-width:0">${coverHTML(t.cover, t.title, 'sm')}<div style="min-width:0"><div class="chart-track-title">${esc(t.title)}</div><div class="chart-artist">${esc(t.artistName)} · ${num(total)} streams</div></div></div><div class="cert-progress">${progressBar(pctVal, 100, 'gold')}<span class="tiny dim">${next ? `${num(next[0] - total)} to ${next[1]}` : 'Legendary'}</span></div></div>`;
+        }).join('') || `<div class="tiny dim">Release music to start collecting certifications.</div>`}
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">${icon3d('building', 18)} Customise the room</div><div class="card-sub">Theme, layout and display rotation</div></div></div>
+        <div class="customise-group"><span class="tiny dim">Theme</span><div class="trophy-theme-grid">${TROPHY_ROOM_THEMES.map((t) => `<button class="trophy-theme ${s.legacy?.trophyTheme === t.id ? 'active' : ''}" data-act="legacy-theme" data-id="${t.id}" style="--tc:${t.accent}"><i></i><span>${esc(t.name)}</span></button>`).join('')}</div></div>
+        <div class="customise-group"><span class="tiny dim">Layout</span><select class="mini-select" data-act="legacy-layout">${HALL_LAYOUTS.map((l) => `<option value="${l.id}" ${s.legacy?.layout === l.id ? 'selected' : ''}>${esc(l.name)} — ${esc(l.blurb)}</option>`).join('')}</select></div>
+        <div class="divider"></div>
+        <div class="between"><span class="small muted">Display slots</span><b>${displayed.length} / 12</b></div>
+        <div class="tiny dim mt-4">Select “Display” on any piece to move it into the 3D trophy room. The room holds twelve pieces at a time.</div>
+        <button class="btn btn-block mt-12" data-act="auto-display" ${s.legacy.collectibles.length ? '' : 'disabled'}>${icon3d('sparkle', 14)} Curate the best pieces</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">${icon3d('crown', 18)} Recent additions</div></div></div>
+        ${s.legacy.collectibles.slice(0, 5).map((c) => `<div class="between" style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,.045)"><div class="row"><span style="color:${RARITIES[c.rarity]?.color || '#fff'}">${icon3d(c.icon || 'disc', 22)}</span><div><div class="small" style="font-weight:650">${esc(c.name)}</div><div class="tiny dim">${esc(c.artistName || c.trackTitle || c.note || '')}</div></div></div><span class="tiny dim">Wk ${c.week}</span></div>`).join('') || `<div class="tiny dim">Nothing collected yet.</div>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------------------------------- awards --------------------------------- */
+function awardsView(s) {
+  const latest = s.awardsHistory[0];
+  const woy = ((s.week - 1) % 52) + 1;
+  const nextIn = 52 - woy;
+  const winsByCat = {};
+  for (const a of s.awardsHistory) for (const c of a.categories) if (c.winner?.isPlayer) winsByCat[c.id] = (winsByCat[c.id] || 0) + 1;
+  return `
+  <div class="page-head">
+    <div><div class="eyebrow">The industry</div><h1 class="page-title">Annual awards</h1><div class="page-sub">Artist, album, song, breakthrough and producer of the year. Every label competes — votes are earned with streams, sales, popularity and critical reception.</div></div>
+    <div class="head-actions">${latest ? `<button class="btn" data-act="open-ceremony" data-id="${latest.id}">${icon3d('play', 14)} Replay ${latest.year}</button>` : ''}<span class="pill ${s.pendingCeremony ? 'brand' : 'gold'}">${s.pendingCeremony ? 'Ceremony live' : `Next in ${nextIn} week${nextIn === 1 ? '' : 's'}`}</span></div>
+  </div>
+  <div class="scene-card mb-16">
+    ${sceneCanvas('awards', { accent: s.label.color, eventName: 'THE ANNUAL AWARDS', auto: true })}
+    <div class="scene-hud"><span class="live-badge"><i></i> AWARDS VENUE</span><span class="pill">${latest ? `${latest.year} ceremony` : 'Season 1'}</span></div>
+    <div class="scene-tools">
+      <button class="scene-tool" data-act="scene-preset" data-scene="awards" data-preset="stage">Stage</button>
+      <button class="scene-tool" data-act="scene-preset" data-scene="awards" data-preset="wide">Wide</button>
+      <button class="scene-tool" data-act="scene-preset" data-scene="awards" data-preset="orbit">Orbit</button>
+    </div>
+    <div class="scene-hint">${icon('search', 11)} Drag to look around the venue</div>
+  </div>
+  <div class="stat-grid mb-16">
+    <div class="stat"><div class="stat-label">${icon3d('trophy', 16)} Total wins</div><div class="stat-val">${s.totals.awards || 0}</div><div class="stat-foot">${s.awardsHistory.length} ceremony${s.awardsHistory.length === 1 ? '' : 's'} attended</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('star', 16)} Artist of the Year</div><div class="stat-val">${winsByCat.artist || 0}</div><div class="stat-foot">${winsByCat.song || 0} song · ${winsByCat.album || 0} album wins</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('sparkle', 16)} Best New Artist</div><div class="stat-val">${winsByCat.new || 0}</div><div class="stat-foot">${winsByCat.producer || 0} producer wins</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('crown', 16)} Reputation</div><div class="stat-val">${Math.round(s.reputation)}</div><div class="stat-foot">Awards add lasting prestige</div></div>
+  </div>
+  <div class="split">
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">${icon3d('crown', 18)} ${latest ? `${latest.year} winners` : 'Latest ceremony'}</div><div class="card-sub">${latest ? `Broadcast from the Music Empire Awards · week ${latest.week}` : 'The first ceremony arrives at the end of the year'}</div></div><span class="pill ${latest?.playerWins ? 'gold' : ''}">${latest ? `${latest.playerWins} for you` : 'Upcoming'}</span></div>
+        ${latest ? latest.categories.map((cat) => `<div class="award-category">
+          <div class="award-cat-head"><span class="award-cat-icon">${icon3d(cat.icon || 'trophy', 26)}</span><div><b>${esc(cat.name)}</b><div class="tiny dim">${esc(cat.blurb || '')}</div></div>${cat.winner?.isPlayer ? '<span class="pill gold">Your win</span>' : '<span class="pill">Industry</span>'}</div>
+          ${cat.winner ? `<div class="award-winner ${cat.winner.isPlayer ? 'is-you' : ''}">${icon3d('trophy', 30)}<div><div class="small" style="font-weight:750">${esc(cat.winner.name)}</div><div class="tiny dim">${esc(cat.winner.artistName || '')}${cat.winner.labelName ? ` · ${esc(cat.winner.labelName)}` : ''}</div></div><div class="tiny dim">${esc(cat.winner.detail || '')}</div></div>` : `<div class="tiny dim">No eligible entries this year.</div>`}
+          <div class="award-nominees">${(cat.nominees || []).filter((n) => n.id !== cat.winner?.id).slice(0, 4).map((n) => `<span class="nominee-chip">${esc(n.name)} <i>${esc(n.labelName || '')}</i></span>`).join('')}</div>
+        </div>`).join('') : `<div class="empty"><div class="empty-icon">${icon3d('crown', 26)}</div><b>No ceremony yet</b><p>The first annual awards take place in week 52. Release music, build popularity and give the voters a reason.</p><div class="row mt-8" style="justify-content:center"><span class="pill">Next in ${nextIn} weeks</span></div></div>`}
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">${icon3d('calendar', 18)} History of winners</div><div class="card-sub">Every ceremony is preserved in the record books</div></div></div>
+        ${s.awardsHistory.length ? s.awardsHistory.map((season) => `<div class="season-row"><div class="season-year">${season.year}</div><div class="season-cats">${season.categories.map((c) => `<span class="season-cat"><b>${esc(awardById(c.id)?.name || c.name)}</b> ${esc(c.winner?.name || '—')}</span>`).join('')}</div><span class="pill ${season.playerWins ? 'gold' : ''}">${season.playerWins} wins</span></div>`).join('') : `<div class="tiny dim">The record books are waiting for their first entry.</div>`}
+      </div>
+    </div>
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">${icon3d('scale', 18)} How winners are chosen</div></div></div>
+        <div class="stack" style="gap:10px">
+          <div class="row small muted" style="align-items:flex-start"><span class="news-dot award" style="margin-top:5px"></span><span>Streams and sales carry the most weight, followed by chart peak, quality and critical reception.</span></div>
+          <div class="row small muted" style="align-items:flex-start"><span class="news-dot award" style="margin-top:5px"></span><span>Every label competes: your roster, AI artists and in-house producers are all eligible.</span></div>
+          <div class="row small muted" style="align-items:flex-start"><span class="news-dot award" style="margin-top:5px"></span><span>Winning raises popularity, morale and commercial value. Trophies enter your legacy collection.</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">${icon3d('star', 18)} Your nominees</div><div class="card-sub">Artists currently in contention</div></div></div>
+        ${latest ? (() => {
+          const names = new Set();
+          latest.categories.forEach((c) => c.nominees.forEach((n) => { if (n.isPlayer && n.artistName) names.add(n.artistName); }));
+          return [...names].slice(0, 6).map((n) => `<div class="between" style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,.045)"><span class="small">${esc(n)}</span><span class="pill gold">Nominee</span></div>`).join('') || `<div class="tiny dim">No nominations last season.</div>`;
+        })() : `<div class="tiny dim">Advance to week 52 to see the first nomination list.</div>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* -------------------------------- festivals -------------------------------- */
+function festivalSceneOpts(f, s) {
+  const theme = festivalThemeById(f?.theme || 'neon');
+  return { accent: theme.accent, accent2: theme.accent2, auto: true, festName: f?.name || 'FESTIVAL' };
+}
+function festivalCard(f, s) {
+  const loc = festivalLocationById(f.location);
+  const theme = festivalThemeById(f.theme);
+  const est = f.status === 'planned' ? G.estimateFestival(f) : null;
+  const att = f.status === 'completed' ? f.attendance : est?.attendance || 0;
+  const profit = f.status === 'completed' ? f.profit : est?.profit || 0;
+  return `<div class="festival-card" style="--fc:${theme.accent};--fc2:${theme.accent2}">
+    <div class="festival-art">
+      ${icon3d('stage', 44)}
+      <span class="pill ${f.status === 'planned' ? 'blue' : 'green'}">${f.status === 'planned' ? `Week ${f.week}` : 'Completed'}</span>
+      <div class="festival-art-meta"><span>${esc(theme.name)}</span><span>${esc(loc.name)}</span></div>
+    </div>
+    <div class="festival-main">
+      <div class="between"><div><b class="artist-name">${esc(f.name)}</b><div class="tiny dim">${f.lineup.length} artist${f.lineup.length === 1 ? '' : 's'} · ${esc(festivalSponsorById(f.sponsor).name)}</div></div><span class="pill">${f.status === 'planned' ? `${Math.max(0, f.week - s.week)}w away` : `Wk ${f.completedWeek}`}</span></div>
+      <div class="festival-stats">
+        <div><span>Attendance</span><b>${num(att)}</b></div>
+        <div><span>Capacity</span><b>${num(G.festivalCapacity(f))}</b></div>
+        <div><span>Satisfaction</span><b>${Math.round(f.status === 'completed' ? f.satisfaction : est?.satisfaction || 0)}%</b></div>
+        <div><span>${f.status === 'planned' ? 'Projected' : 'Profit'}</span><b class="${profit >= 0 ? 'green' : 'red'}">${money(profit)}</b></div>
+      </div>
+      <div class="row"><button class="btn btn-sm btn-primary" data-act="open-festival" data-id="${f.id}">${f.status === 'planned' ? 'Build & book' : 'View report'}</button><span class="tiny dim">${f.lineup.slice(0, 3).map((x) => esc(x.name)).join(' · ')}${f.lineup.length > 3 ? ' …' : ''}</span></div>
+    </div>
+  </div>`;
+}
+function festivalsView(s) {
+  const planned = s.festivals.filter((f) => f.status === 'planned').sort((a, b) => a.week - b.week);
+  const completed = s.festivals.filter((f) => f.status === 'completed').sort((a, b) => b.completedWeek - a.completedWeek);
+  const next = planned[0] || completed[0];
+  const totalProfit = sum(completed, (f) => f.profit || 0);
+  const totalAttendance = sum(completed, (f) => f.attendance || 0);
+  return `
+  <div class="page-head">
+    <div><div class="eyebrow">Live events</div><h1 class="page-title">Festivals</h1><div class="page-sub">Start with a local fairground and end with an international island. Build the site, book the lineup, set the price and own the summer.</div></div>
+    <div class="head-actions"><button class="btn btn-primary" data-act="open-festival-create">${icon3d('plus', 14)} Create festival</button></div>
+  </div>
+  <div class="scene-card mb-16">
+    ${sceneCanvas('festival', festivalSceneOpts(next, s))}
+    <div class="scene-hud"><span class="live-badge"><i></i> FESTIVAL GROUNDS</span><span class="pill">${next ? esc(next.name) : 'No event booked'}</span></div>
+    <div class="scene-tools">
+      <button class="scene-tool" data-act="scene-preset" data-scene="festival" data-preset="stage">Stage</button>
+      <button class="scene-tool" data-act="scene-preset" data-scene="festival" data-preset="wide">Crowd</button>
+      <button class="scene-tool" data-act="scene-preset" data-scene="festival" data-preset="orbit">Orbit</button>
+    </div>
+    <div class="scene-hint">${icon('search', 11)} Drag to explore the grounds · stages, crowd, lights and stalls</div>
+  </div>
+  <div class="stat-grid mb-16">
+    <div class="stat"><div class="stat-label">${icon3d('stage', 16)} Festivals staged</div><div class="stat-val">${completed.length}</div><div class="stat-foot">${planned.length} in production</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('users', 16)} Total attendance</div><div class="stat-val">${num(totalAttendance)}</div><div class="stat-foot">Across every completed event</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('cash', 16)} Festival profit</div><div class="stat-val ${totalProfit >= 0 ? 'green' : 'red'}">${money(totalProfit)}</div><div class="stat-foot">Tickets, spend, sponsors and costs</div></div>
+    <div class="stat"><div class="stat-label">${icon3d('star', 16)} ${planned.length ? 'Next event' : 'Last event'}</div><div class="stat-val">${next ? `Wk ${planned.length ? next.week : next.completedWeek}` : '—'}</div><div class="stat-foot">${next ? esc(next.name) : 'Create your first festival'}</div></div>
+  </div>
+  <div class="section-head"><div><div class="section-title">In production</div><div class="small muted">Upgrade the site, book artists and set the commercial plan.</div></div><span class="pill">${planned.length}</span></div>
+  ${planned.length ? `<div class="festival-list">${planned.map((f) => festivalCard(f, s)).join('')}</div>` : `<div class="card"><div class="empty"><div class="empty-icon">${icon3d('stage', 26)}</div><b>No festival in production</b><p>Pick a location, build your stages and book a lineup. Small local events can grow into international institutions.</p><button class="btn btn-primary mt-12" data-act="open-festival-create">Create your first festival</button></div></div>`}
+  <div class="section-head mt-16"><div><div class="section-title">Past events</div><div class="small muted">Attendance, satisfaction and the final numbers.</div></div><span class="pill">${completed.length}</span></div>
+  ${completed.length ? `<div class="festival-list">${completed.slice(0, 6).map((f) => festivalCard(f, s)).join('')}</div>` : `<div class="tiny dim">No completed festivals yet.</div>`}
+  `;
 }
 
 /* ---------------------------------- charts -------------------------------- */
@@ -1108,11 +1434,13 @@ function modalShell({ title, sub, body, foot = '', wide = false, iconName = 'mus
 function renderModal() {
   const root = document.getElementById('modal-root');
   if (!root) return;
+  cleanupScenes();
   const s = G.getState();
   if (!s) { root.innerHTML = ''; return; }
-  if (s.gameOver) { root.innerHTML = gameOverModal(s); return; }
+  if (s.gameOver) { root.innerHTML = gameOverModal(s); mountScenesIn(root); return; }
+  if (s.pendingCeremony) { root.innerHTML = ceremonyModal(s.pendingCeremony); mountScenesIn(root); return; }
   const ev = G.currentEvent();
-  if (ev) { root.innerHTML = eventModal(ev, s); return; }
+  if (ev) { root.innerHTML = eventModal(ev, s); mountScenesIn(root); return; }
   if (!ui.modal) { root.innerHTML = ''; return; }
   const { type, data } = ui.modal;
   let html = '';
@@ -1133,6 +1461,9 @@ function renderModal() {
       case 'help': html = helpModal(); break;
       case 'more': html = moreModal(s); break;
       case 'event': html = ev ? eventModal(ev, s) : ''; break;
+      case 'ceremony': html = ceremonyModal(data?.seasonId ? s.awardsHistory.find((x) => x.id === data.seasonId) : s.awardsHistory[0]); break;
+      case 'festival-create': html = festivalCreateModal(s); break;
+      case 'festival': html = festivalModal(data.id); break;
       default: html = '';
     }
   } catch (err) {
@@ -1140,6 +1471,7 @@ function renderModal() {
     html = modalShell({ title: 'Something went wrong', body: `<div class="empty"><b>This panel hit a snag.</b><p>Close it and try again.</p></div>`, foot: `<button class="btn" data-act="close">Close</button>` });
   }
   root.innerHTML = html;
+  mountScenesIn(root);
   if (type === 'record') setTimeout(updateSongPreview, 0);
   if (type === 'tour') setTimeout(updateTourPreview, 0);
   if (type === 'brand') setTimeout(bindBrandPreview, 0);
@@ -1185,6 +1517,35 @@ function eventModal(ev, s) {
       <div class="stack" style="gap:8px">${opts}</div>
       <div class="row mt-16 tiny dim">${icon('cash', 12)} Available cash: ${money(s.cash)}</div>`,
   });
+}
+
+function careerSection(a, s) {
+  const info = G.artistCareerInfo(a);
+  const stage = info.stage || { name: 'Rising', id: 'rising' };
+  const timeline = a.careerTimeline || [];
+  const rel = info.relationships || [];
+  return `<div class="section-head" style="margin:20px 0 8px"><div class="section-title" style="font-size:14px">Career</div><span class="pill">${esc(stage.name)} · ${info.careerWeeks} weeks</span></div>
+    <div class="career-panel">
+      <div class="career-main">
+        <div class="between"><div class="tiny dim">AMBITION</div><div class="pill">${esc(info.ambition?.name || 'Undefined')}</div></div>
+        <div class="tiny dim mt-8">PERSONALITY</div>
+        <div class="small mt-4">${esc(info.personality?.name || 'Independent')} · ${esc(info.personality?.desc || '')}</div>
+        <div class="row wrap mt-12" style="gap:5px">${(info.strengths || []).map((x) => `<span class="pill green">${esc(x)}</span>`).join('')}${(info.weaknesses || []).map((x) => `<span class="pill red">${esc(x)}</span>`).join('')}</div>
+        <div class="tiny dim mt-12">CAREER TIMELINE</div>
+        <div class="career-timeline">${timeline.length ? timeline.slice(0, 5).map((t) => `<div class="career-event"><span>Wk ${t.week}</span><b>${esc(t.text)}</b></div>`).join('') : `<div class="tiny dim">Their story is still being written.</div>`}</div>
+      </div>
+      <div class="career-side">
+        <div class="tiny dim">RELATIONSHIPS</div>
+        ${rel.length ? rel.slice(0, 5).map((r) => `<div class="relationship-row"><span class="pill ${r.type === 'rival' ? 'red' : r.type === 'friend' ? 'green' : 'blue'}">${esc(r.type)}</span><div class="grow"><b class="tiny">${esc(r.name)}</b>${progressBar(clamp((r.score + 100) / 2, 0, 100), 100, r.type === 'rival' ? 'red' : 'green')}</div></div>`).join('') : `<div class="tiny dim mt-4">No industry relationships yet.</div>`}
+        <div class="tiny dim mt-12">ARTIST MEETINGS</div>
+        <div class="meeting-grid">
+          <button class="btn btn-sm" data-act="artist-meeting" data-id="${a.id}" data-topic="vision">Creative vision · ${money(5000)}</button>
+          <button class="btn btn-sm" data-act="artist-meeting" data-id="${a.id}" data-topic="royalty">Royalty bump · ${money(15000)}</button>
+          <button class="btn btn-sm" data-act="artist-meeting" data-id="${a.id}" data-topic="break">Rest week · free</button>
+          <button class="btn btn-sm" data-act="artist-meeting" data-id="${a.id}" data-topic="hype">Press moment · ${money(20000)}</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 function artistModal(id) {
@@ -1238,6 +1599,7 @@ function artistModal(id) {
         <div class="tiny dim mt-8">Renewals are available in the final 12 weeks or when the contract expires.</div>
       </div>
     </div>
+    ${isRoster ? careerSection(a, s) : ''}
     <div class="section-head" style="margin:20px 0 8px"><div class="section-title" style="font-size:14px">Discography</div><span class="pill">${tracks.length}</span></div>
     ${tracks.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Record</th><th>Released</th><th class="num">Weekly</th><th class="num">Lifetime</th><th class="num">Peak</th></tr></thead><tbody>${tracks.slice(0, 6).map((t) => `<tr><td style="display:flex;gap:8px;align-items:center">${coverHTML(t.cover, t.title, 'sm')}<span>${esc(t.title)}</span></td><td class="dim">Wk ${t.releaseWeek}</td><td class="num">${num(t.weekly)}</td><td class="num">${num(t.streamsTotal)}</td><td class="num">${t.chartPeak ? '#' + t.chartPeak : '—'}</td></tr>`).join('')}</tbody></table></div>` : `<div class="tiny dim">No released music yet. Book a session and get something in the vault.</div>`}
     `,
@@ -1633,6 +1995,121 @@ function moreModal(s) {
   });
 }
 
+/* ------------------------------- ceremonies -------------------------------- */
+function ceremonyModal(season) {
+  if (!season) return '';
+  const s = G.getState();
+  const pending = s.pendingCeremony?.id === season.id;
+  const wins = season.categories.filter((c) => c.winner?.isPlayer);
+  return modalShell({
+    title: `${season.year} Music Empire Awards`,
+    sub: pending ? 'THE CEREMONY IS LIVE · THE INDUSTRY IS WATCHING' : `Broadcast week ${season.week} · ${season.playerWins} win${season.playerWins === 1 ? '' : 's'} for your label`,
+    iconName: 'crown',
+    wide: true,
+    close: !pending,
+    extraClass: 'ceremony-modal',
+    body: `<div class="ceremony-banner">
+      <span class="ceremony-trophy">${icon3d('trophy', 62)}</span>
+      <div><div class="eyebrow">Music Empire Awards</div><h2 class="ceremony-headline">${wins.length ? `${esc(s.label.name)} takes home ${wins.length} award${wins.length > 1 ? 's' : ''}` : 'A night owned by your rivals'}</h2>
+      <div class="small muted">Song, album, artist, breakthrough and producer of the year — decided by streams, sales and reception.</div></div>
+    </div>
+    ${pending ? `<div class="scene-card ceremony-scene">${sceneCanvas('awards', { accent: wins.length ? s.label.color : '#a78bfa', eventName: `THE ${season.year} AWARDS`, auto: true })}<div class="scene-hud"><span class="live-badge"><i></i> LIVE FROM THE VENUE</span></div></div>` : ''}
+    <div class="ceremony-cats">
+      ${season.categories.map((cat) => `<div class="ceremony-cat ${cat.winner?.isPlayer ? 'won' : ''}">
+        <span class="ceremony-icon">${icon3d(cat.icon || 'trophy', 30)}</span>
+        <div class="grow" style="min-width:0">
+          <div class="tiny dim">${esc(cat.name)}</div>
+          <div class="ceremony-winner">${esc(cat.winner?.name || 'No eligible entry')}</div>
+          <div class="tiny dim">${esc(cat.winner?.artistName && cat.winner.artistName !== cat.winner.name ? cat.winner.artistName : '')}${cat.winner?.labelName ? ` · ${esc(cat.winner.labelName)}` : ''}</div>
+        </div>
+        ${cat.winner?.isPlayer ? `<span class="pill gold">${icon('trophy', 10)} Your win</span>` : '<span class="pill">Industry</span>'}
+      </div>`).join('')}
+    </div>
+    ${wins.length ? `<div class="ceremony-note">${icon3d('sparkle', 18)} Trophies have been added to your Legacy collection. Winning raises artist popularity, morale and label prestige.</div>` : `<div class="ceremony-note dim">${icon3d('chart', 18)} Chart higher, stream harder and build artist popularity to win next season.</div>`}`,
+    foot: pending
+      ? `<button class="btn btn-primary btn-block" data-act="dismiss-ceremony">${icon('check', 14)} Take your seat for next season</button>`
+      : `<button class="btn" data-act="close">Close</button>`,
+  });
+}
+
+/* -------------------------------- festivals -------------------------------- */
+function festivalCreateModal(s) {
+  const loc = FESTIVAL_LOCATIONS.find((l) => s.reputation >= l.minRep) || FESTIVAL_LOCATIONS[0];
+  return modalShell({
+    title: 'Create a festival',
+    sub: 'Choose a site, set the date and build the production',
+    iconName: 'stage',
+    wide: true,
+    body: `<form id="festival-form" onsubmit="return false">
+      <div class="form-grid">
+        <div class="field full"><label>Festival name</label><input type="text" data-field="fest-name" maxlength="34" value="${esc(`${s.label.name} Live`)}" placeholder="Afterglow Live" /></div>
+        <div class="field"><label>Location</label><select data-field="fest-location">${FESTIVAL_LOCATIONS.map((l) => `<option value="${l.id}" ${l.id === loc.id ? 'selected' : ''} ${s.reputation < l.minRep ? 'disabled' : ''}>${esc(l.name)} · ${money(l.baseCost)}${s.reputation < l.minRep ? ` · ${l.minRep} rep` : ''}</option>`).join('')}</select></div>
+        <div class="field"><label>Theme</label><select data-field="fest-theme">${FESTIVAL_THEMES.map((t) => `<option value="${t.id}">${esc(t.name)} — ${esc(t.blurb)}</option>`).join('')}</select></div>
+        <div class="field"><label>Weeks until doors open</label><input type="number" data-field="fest-lead" min="3" max="16" value="6" /></div>
+        <div class="field"><label>Ticket price</label><input type="number" data-field="fest-price" min="12" max="400" value="${loc.basePrice}" /></div>
+        <div class="field full"><label>Launch marketing</label><input type="range" data-field="fest-marketing" min="0" max="300000" step="5000" value="30000" data-out="fest-mkt" /><div class="range-out"><span class="tiny dim">Spend up to ${money(300000)}</span><b data-out="fest-mkt">${money(30000)}</b></div></div>
+      </div>
+      <div class="preview-panel mt-16"><b class="small">Site build costs</b><div class="tiny dim mt-4">Local Fairground ${money(32000)} · City Park ${money(85000)} ${s.reputation < 14 ? '(needs 14 rep)' : ''} · National Arena Grounds ${money(260000)} ${s.reputation < 30 ? '(needs 30 rep)' : ''} · International Island ${money(720000)} ${s.reputation < 48 ? '(needs 48 rep)' : ''}. Build cost plus marketing is paid now. Upgrades, artists and sponsors are added on the festival page.</div></div>
+    </form>`,
+    foot: `<button class="btn btn-ghost" data-act="close">Cancel</button><button class="btn btn-primary" data-act="create-festival">${icon3d('stage', 14)} Announce festival</button>`,
+  });
+}
+function festivalModal(id) {
+  const s = G.getState();
+  const f = G.festivalById(id);
+  if (!f) return '';
+  const theme = festivalThemeById(f.theme);
+  const loc = festivalLocationById(f.location);
+  const est = G.estimateFestival(f);
+  const planned = f.status === 'planned';
+  const candidates = planned ? [
+    ...s.roster.map((a) => ({ id: a.id, name: a.name, label: s.label.name, pop: a.popularity, own: true })),
+    ...s.competitors.flatMap((c) => c.artists.map((a) => ({ id: a.id, name: a.name, label: c.name, pop: a.popularity, own: false }))),
+  ].filter((a) => !f.lineup.some((x) => x.artistId === a.id)) : [];
+  return modalShell({
+    title: f.name,
+    sub: `${loc.name} · week ${f.week} · ${theme.name}`,
+    iconName: 'stage',
+    wide: true,
+    extraClass: 'festival-modal',
+    body: `<div class="scene-card festival-detail-scene">${sceneCanvas('festival', festivalSceneOpts(f, s))}
+      <div class="scene-hud"><span class="live-badge"><i></i> ${planned ? 'IN PRODUCTION' : 'EVENT COMPLETE'}</span><span class="pill">${esc(theme.name)}</span></div>
+      <div class="scene-tools"><button class="scene-tool" data-act="scene-preset" data-scene="festival-detail" data-preset="stage">Stage</button><button class="scene-tool" data-act="scene-preset" data-scene="festival-detail" data-preset="wide">Crowd</button><button class="scene-tool" data-act="scene-preset" data-scene="festival-detail" data-preset="orbit">Orbit</button></div>
+    </div>
+    <div class="festival-kpis">
+      <div><span>Attendance</span><b>${num(planned ? est.attendance : f.attendance)}</b></div>
+      <div><span>Capacity</span><b>${num(est.cap)}</b></div>
+      <div><span>Satisfaction</span><b>${Math.round(planned ? est.satisfaction : f.satisfaction)}%</b></div>
+      <div><span>${planned ? 'Projected profit' : 'Final profit'}</span><b class="${(planned ? est.profit : f.profit) >= 0 ? 'green' : 'red'}">${money(planned ? est.profit : f.profit)}</b></div>
+      <div><span>Tickets</span><b>${money(f.ticketPrice)}</b></div>
+      <div><span>Sponsor</span><b>${esc(festivalSponsorById(f.sponsor).name)}</b></div>
+    </div>
+    ${planned ? `<div class="section-head" style="margin:18px 0 8px"><div class="section-title" style="font-size:14px">Build the site</div><span class="pill">${money(est.spent)} committed</span></div>
+      <div class="festival-upgrades">${FESTIVAL_UPGRADES.map((up) => {
+        const lvl = G.festivalUpgradeLevel(f, up.id);
+        const cost = G.festivalUpgradeCost(f, up.id);
+        const next = cost !== null ? up.levels[lvl + 1] : null;
+        return `<div class="fest-upgrade">
+          <div class="between"><span style="color:${theme.accent}">${icon3d(up.icon || 'stage', 26)}</span>${wingPips(lvl, up.levels.length - 1)}</div>
+          <b class="small">${esc(up.name)}</b><div class="tiny dim">${esc(up.levels[lvl].name)}</div>
+          <div class="between"><span class="tiny dim">${next ? money(cost) : 'Maxed'}</span><button class="btn btn-sm" data-act="festival-upgrade" data-id="${up.id}" ${cost === null || s.cash < cost ? 'disabled' : ''}>${lvl === 0 ? 'Build' : 'Upgrade'}</button></div>
+        </div>`;
+      }).join('')}</div>
+      <div class="section-head" style="margin:18px 0 8px"><div class="section-title" style="font-size:14px">Lineup</div><span class="pill">${num(est.draw)} total draw</span></div>
+      <div class="lineup-list">${f.lineup.length ? f.lineup.map((x) => `<div class="lineup-row"><span class="lineup-art">${icon3d('star', 24)}</span><div class="grow"><b class="small">${esc(x.name)}</b><div class="tiny dim">${esc(x.labelName)} · ${num(x.popularity)} popularity</div></div><span class="tiny dim">${money(x.fee)}</span><button class="icon-btn" data-act="festival-remove" data-id="${x.artistId}" aria-label="Remove">${icon('x', 14)}</button></div>`).join('') : `<div class="tiny dim">No artists booked. A lineup drives attendance and satisfaction.</div>`}</div>
+      <div class="row mt-12" style="gap:8px;align-items:flex-end"><div class="field grow"><label>Book an artist</label><select data-field="fest-artist">${candidates.map((a) => `<option value="${a.id}">${esc(a.name)} · ${esc(a.label)} · ${num(a.pop)} pop</option>`).join('') || '<option value="">No artists available</option>'}</select></div><button class="btn btn-primary" data-act="festival-book" ${candidates.length ? '' : 'disabled'}>${icon('plus', 14)} Add to lineup</button></div>
+      <div class="form-grid mt-16">
+        <div class="field"><label>Ticket price</label><div class="row"><input type="number" data-field="fest-ticket" min="12" max="400" value="${f.ticketPrice}" /><button class="btn btn-sm" data-act="festival-price">Set</button></div></div>
+        <div class="field"><label>Sponsor</label><div class="row"><select data-field="fest-sponsor">${FESTIVAL_SPONSORS.map((sp) => `<option value="${sp.id}" ${sp.id === f.sponsor ? 'selected' : ''} ${s.reputation < sp.minRep ? 'disabled' : ''}>${esc(sp.name)}${sp.amount ? ` · ${money(sp.amount)}` : ''}${s.reputation < sp.minRep ? ` (${sp.minRep} rep)` : ''}</option>`).join('')}</select><button class="btn btn-sm" data-act="festival-sponsor">Sign</button></div></div>
+      </div>`
+    : `<div class="section-head" style="margin:18px 0 8px"><div class="section-title" style="font-size:14px">Final report</div><span class="pill green">${num(f.attendance)} attended</span></div>
+      <div class="preview-grid" style="grid-template-columns:repeat(4,1fr)"><div class="preview-cell"><div class="l">Revenue</div><div class="v" style="font-size:14px">${money(f.revenue)}</div></div><div class="preview-cell"><div class="l">Costs</div><div class="v" style="font-size:14px">${money(f.costs)}</div></div><div class="preview-cell"><div class="l">Profit</div><div class="v" style="font-size:14px" class="${f.profit >= 0 ? 'green' : 'red'}">${money(f.profit)}</div></div><div class="preview-cell"><div class="l">Satisfaction</div><div class="v" style="font-size:14px">${Math.round(f.satisfaction)}%</div></div></div>
+      <div class="tiny dim mt-12">Lineup: ${f.lineup.map((x) => esc(x.name)).join(' · ') || 'No artists'}</div>
+      <div class="festival-note mt-12">${icon3d('disc', 18)} A commemorative poster was added to your Legacy collection.</div>`}`,
+    foot: `<button class="btn" data-act="close">Close</button>`,
+  });
+}
+
 /* -------------------------------- actions --------------------------------- */
 function handleAction(act, el) {
   const s = G.getState();
@@ -1653,6 +2130,12 @@ function handleAction(act, el) {
     case 'open-more': openModal('more'); return;
     case 'open-help': openModal('help'); return;
     case 'open-artist': openModal('artist', { id: el.dataset.id }); return;
+    case 'artist-meeting': {
+      const r = G.artistMeeting(el.dataset.id, el.dataset.topic);
+      if (r.error) { showToast(r.error, 'error'); return; }
+      showToast('Meeting done. The relationship moved.', 'gold');
+      render(); return;
+    }
     case 'open-sign': openModal('sign', { id: el.dataset.id }); return;
     case 'open-record': openModal('record', { id: el.dataset.id }); return;
     case 'open-release': openModal('release', { id: el.dataset.id, demo: el.dataset.demo }); return;
@@ -1850,6 +2333,108 @@ function handleAction(act, el) {
       if (r.message) showToast(r.message, 'gold', 4200);
       render(); return;
     }
+    case 'upgrade-wing': {
+      const r = G.upgradeWing(el.dataset.id);
+      if (r.error) { showToast(r.error, 'error'); render(); return; }
+      showToast('Studio wing upgraded. Better rooms, better records.', 'gold');
+      render(); return;
+    }
+    case 'complex-theme': {
+      G.setComplexDesign({ theme: el.dataset.id });
+      render(); return;
+    }
+    case 'complex-floor': {
+      G.setComplexDesign({ floor: el.value });
+      render(); return;
+    }
+    case 'complex-light': {
+      G.setComplexDesign({ lighting: el.value });
+      render(); return;
+    }
+    case 'scene-preset': {
+      const scope = el.closest('.scene-card') || el.closest('.complex-scene') || document;
+      const canvas = scope.querySelector('canvas[data-scene]') || document.querySelector(`canvas[data-scene="${el.dataset.scene}"]`);
+      const scene = canvas ? sceneFor(canvas) : null;
+      if (scene) scene.setPreset(el.dataset.preset);
+      return;
+    }
+    case 'legacy-theme': {
+      G.setLegacyRoom({ trophyTheme: el.dataset.id });
+      render(); return;
+    }
+    case 'legacy-layout': {
+      G.setLegacyRoom({ layout: el.value });
+      render(); return;
+    }
+    case 'toggle-display': {
+      const r = G.toggleCollectibleDisplay(el.dataset.id);
+      if (r.error) { showToast(r.error, 'error'); return; }
+      render(); return;
+    }
+    case 'auto-display': {
+      const r = G.autoDisplayCollectibles();
+      showToast(r.displayed ? `${r.displayed} pieces curated into the Hall of Fame.` : 'Nothing to display yet.', 'success');
+      render(); return;
+    }
+    case 'open-ceremony': openModal('ceremony', { seasonId: el.dataset.id }); return;
+    case 'dismiss-ceremony': {
+      G.dismissCeremony();
+      showToast('A new season begins. The industry is already talking.', 'gold');
+      render(); return;
+    }
+    case 'open-festival-create': openModal('festival-create'); return;
+    case 'create-festival': {
+      const r = G.createFestival({
+        name: readField('fest-name'),
+        location: readField('fest-location'),
+        theme: readField('fest-theme'),
+        leadWeeks: readNum('fest-lead', 6),
+        ticketPrice: readNum('fest-price', 40),
+        marketing: readNum('fest-marketing', 0),
+      });
+      if (r.error) { showToast(r.error, 'error'); return; }
+      closeModal();
+      showToast(`${r.festival.name} announced for week ${r.festival.week}.`, 'gold');
+      setScreen('festivals');
+      return;
+    }
+    case 'open-festival': openModal('festival', { id: el.dataset.id }); return;
+    case 'festival-upgrade': {
+      const fid = ui.modal?.data?.id;
+      const r = G.upgradeFestival(fid, el.dataset.id);
+      if (r.error) { showToast(r.error, 'error'); return; }
+      showToast('Festival infrastructure upgraded.', 'success');
+      render(); return;
+    }
+    case 'festival-book': {
+      const fid = ui.modal?.data?.id;
+      const artistId = readField('fest-artist');
+      if (!artistId) { showToast('Choose an artist first.', 'error'); return; }
+      const r = G.bookFestivalArtist(fid, artistId);
+      if (r.error) { showToast(r.error, 'error'); return; }
+      showToast(`${r.artist.name} added to the lineup.`, 'success');
+      render(); return;
+    }
+    case 'festival-remove': {
+      const fid = ui.modal?.data?.id;
+      const r = G.removeFestivalArtist(fid, el.dataset.id);
+      if (r.error) { showToast(r.error, 'error'); return; }
+      showToast(`Removed from the lineup. ${money(r.refund)} refunded.`, 'info');
+      render(); return;
+    }
+    case 'festival-sponsor': {
+      const fid = ui.modal?.data?.id;
+      const r = G.setFestivalSponsor(fid, readField('fest-sponsor'));
+      if (r.error) { showToast(r.error, 'error'); return; }
+      showToast('Sponsorship signed.', 'gold');
+      render(); return;
+    }
+    case 'festival-price': {
+      const fid = ui.modal?.data?.id;
+      const r = G.updateFestival(fid, { ticketPrice: readNum('fest-ticket', 40) });
+      if (r.error) { showToast(r.error, 'error'); return; }
+      render(); return;
+    }
     case 'intro-color': {
       ui.intro.color = el.dataset.color;
       document.querySelectorAll('.intro .swatch-btn').forEach((b) => b.classList.toggle('active', b.dataset.color === el.dataset.color));
@@ -1922,6 +2507,7 @@ function updateIntroLogo() {
 export function render() {
   const app = document.getElementById('app');
   if (!app) return;
+  cleanupScenes();
   const s = G.getState();
   if (!s) {
     document.documentElement.style.setProperty('--brand', '#ff2e63');
@@ -1932,4 +2518,5 @@ export function render() {
   document.documentElement.style.setProperty('--brand', s.label.color || '#ff2e63');
   app.innerHTML = renderShell(s);
   renderModal();
+  mountScenesIn(app);
 }
