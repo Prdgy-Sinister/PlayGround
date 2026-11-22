@@ -1,10 +1,13 @@
-/* Canvas presentation layer: mobile-first broadcast-style top-down rugby. */
+/* Presentation layer. The 3D broadcast view is preferred; this file also
+   keeps a complete Canvas renderer as an automatic fallback. */
+import { MatchRenderer3D } from './renderer3d.js';
+
 const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 const lerp = (a,b,t)=>a+(b-a)*t;
 
 const SKIN = ['#f2c9a0','#d79b6c','#a96843','#7a452a','#efd4b5','#c88c61'];
 
-export class MatchRenderer {
+export class CanvasMatchRenderer {
   constructor(canvas, game, settings={}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
@@ -439,5 +442,56 @@ export class MatchRenderer {
     let r=(num>>16)+amt,g=((num>>8)&255)+amt,b=(num&255)+amt;
     r=clamp(r,0,255);g=clamp(g,0,255);b=clamp(b,0,255);
     return `rgb(${r},${g},${b})`;
+  }
+}
+
+function webglAvailable() {
+  try {
+    const probe = document.createElement('canvas');
+    return !!(window.WebGLRenderingContext && (probe.getContext('webgl2') || probe.getContext('webgl')));
+  } catch { return false; }
+}
+
+export class MatchRenderer {
+  constructor(canvas, game, settings={}) {
+    this.game = game;
+    this.settings = settings;
+    this.impl = null;
+    if (webglAvailable()) {
+      try {
+        this.impl = new MatchRenderer3D(canvas, game, settings);
+      } catch (err) {
+        console.warn('3D presentation unavailable — falling back to Canvas.', err);
+      }
+    }
+    if (!this.impl) {
+      const fresh = canvas.cloneNode(false);
+      if (canvas.parentElement) canvas.replaceWith(fresh);
+      this.canvas = fresh;
+      this.impl = new CanvasMatchRenderer(fresh, game, settings);
+    } else {
+      this.canvas = canvas;
+    }
+    this.is3D = !!this.impl.is3D;
+    const r = this.canvas.getBoundingClientRect();
+    this._lastW = r.width; this._lastH = r.height;
+  }
+
+  resize() {
+    this.impl?.resize();
+  }
+
+  render(dt=1/60) {
+    const r = this.canvas.getBoundingClientRect();
+    if (Math.abs(r.width-this._lastW)>1 || Math.abs(r.height-this._lastH)>1) {
+      this._lastW = r.width; this._lastH = r.height;
+      this.impl?.resize();
+    }
+    this.impl?.render(dt);
+  }
+
+  dispose() {
+    this.impl?.dispose?.();
+    this.impl = null;
   }
 }
