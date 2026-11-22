@@ -593,8 +593,7 @@ a{color:inherit}
 .rotate-lock div{max-width:360px}
 .rotate-lock h2{font-family:var(--font-head);font-size:26px;letter-spacing:.08em;margin:0 0 10px;color:var(--gold-2)}
 .rotate-lock p{font-size:12px;line-height:1.6;color:var(--muted)}
-@media (orientation: portrait){.rotate-lock{display:flex}.screen{display:none}}
-@media (orientation: landscape){.rotate-hint{display:none}}
+.rotate-lock{display:none!important}
 
 /* Defensive pad: switch plus five distinct techniques */
 .defense-pad{height:calc(232px * var(--ctrl))}

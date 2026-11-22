@@ -65,8 +65,11 @@ export class MatchRenderer3D {
     this.scene.background = this.makeSkyTexture();
     if (this.quality() !== 'low') this.scene.fog = new THREE.FogExp2(0x07130e, 0.0038);
 
-    this.camera = new THREE.PerspectiveCamera(52, 0.66, 0.1, 520);
-    this.camera.position.set(9, 20, -12);
+    const aspect = (this.w || 1) / (this.h || 1);
+    const viewSize = 46;
+    this.viewSize = viewSize;
+    this.camera = new THREE.OrthographicCamera(-viewSize * aspect / 2, viewSize * aspect / 2, viewSize / 2, -viewSize / 2, 0.1, 500);
+    this.camera.position.set(0, 52, -8);
 
     this.gl = new THREE.WebGLRenderer({
       canvas, antialias: this.quality() !== 'low', alpha: false, powerPreference: 'high-performance',
@@ -958,8 +961,12 @@ export class MatchRenderer3D {
     this.lastSize = { w: this.w, h: this.h };
     this.gl.setPixelRatio(this.dpr);
     this.gl.setSize(this.w, this.h, false);
-    this.camera.aspect = this.w / this.h;
-    this.camera.fov = this.w / this.h < .8 ? 52 : 48;
+    const aspect = this.w / this.h;
+    const viewSize = this.viewSize || 46;
+    this.camera.left = -viewSize * aspect / 2;
+    this.camera.right = viewSize * aspect / 2;
+    this.camera.top = viewSize / 2;
+    this.camera.bottom = -viewSize / 2;
     this.camera.updateProjectionMatrix();
   }
 
@@ -1003,13 +1010,17 @@ export class MatchRenderer3D {
     // the focus into world space before placing the camera.
     const worldX = this.focus.x - 35;
     const worldZ = this.focus.z - 50;
-    const camX = worldX + 9;
-    const camY = 20 - (zoom - 1) * 2.4;
-    const camZ = worldZ - 12 * zoom;
-    this.camera.position.set(camX + this.shake.x, camY + this.shake.y, camZ + this.shake.z);
-    const tx = worldX;
-    const tz = worldZ + 12 * zoom;
-    this.camera.lookAt(tx, 1.2, tz);
+    const targetX = worldX;
+    const targetZ = worldZ;
+    this.camera.position.set(targetX + this.shake.x, 52 + this.shake.y, targetZ - 8 + this.shake.z);
+    this.camera.lookAt(targetX, 0, targetZ + 4);
+    this.viewSize = 46 / Math.max(.78, zoom);
+    const aspect = this.w / this.h;
+    this.camera.left = -this.viewSize * aspect / 2;
+    this.camera.right = this.viewSize * aspect / 2;
+    this.camera.top = this.viewSize / 2;
+    this.camera.bottom = -this.viewSize / 2;
+    this.camera.updateProjectionMatrix();
     this.camera.fov = (this.w / this.h < .8 ? 52 : 48) * (1 / Math.max(.74, zoom));
     this.camera.updateProjectionMatrix();
   }
