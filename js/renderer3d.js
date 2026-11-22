@@ -66,7 +66,7 @@ export class MatchRenderer3D {
     if (this.quality() !== 'low') this.scene.fog = new THREE.FogExp2(0x07130e, 0.0038);
 
     this.camera = new THREE.PerspectiveCamera(52, 0.66, 0.1, 520);
-    this.camera.position.set(52, 26, -14);
+    this.camera.position.set(40, 16, -8);
 
     this.gl = new THREE.WebGLRenderer({
       canvas, antialias: this.quality() !== 'low', alpha: false, powerPreference: 'high-performance',
@@ -1003,13 +1003,13 @@ export class MatchRenderer3D {
     // the focus into world space before placing the camera.
     const worldX = this.focus.x - 35;
     const worldZ = this.focus.z - 50;
-    const camX = 52 + worldX * .16;
-    const camY = 26 - (zoom - 1) * 3;
-    const camZ = worldZ - 13 * zoom;
+    const camX = 40 + worldX * .28;
+    const camY = 16 - (zoom - 1) * 2.2;
+    const camZ = worldZ - 8 * zoom;
     this.camera.position.set(camX + this.shake.x, camY + this.shake.y, camZ + this.shake.z);
-    const tx = worldX - 7;
-    const tz = worldZ + 15 * zoom;
-    this.camera.lookAt(tx, 1.4, tz);
+    const tx = worldX - 4;
+    const tz = worldZ + 10 * zoom;
+    this.camera.lookAt(tx, 1.1, tz);
     this.camera.fov = (this.w / this.h < .8 ? 52 : 48) * (1 / Math.max(.74, zoom));
     this.camera.updateProjectionMatrix();
   }
