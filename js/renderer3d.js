@@ -63,21 +63,21 @@ export class MatchRenderer3D {
 
     this.scene = new THREE.Scene();
     this.scene.background = this.makeSkyTexture();
-    this.scene.fog = new THREE.FogExp2(0x07130e, 0.0038);
+    if (this.quality() !== 'low') this.scene.fog = new THREE.FogExp2(0x07130e, 0.0038);
 
     this.camera = new THREE.PerspectiveCamera(52, 0.66, 0.1, 520);
-    this.camera.position.set(52, 30, -18);
+    this.camera.position.set(52, 26, -14);
 
     this.gl = new THREE.WebGLRenderer({
-      canvas, antialias: true, alpha: false, powerPreference: 'high-performance',
+      canvas, antialias: this.quality() !== 'low', alpha: false, powerPreference: 'high-performance',
       preserveDrawingBuffer: true
     });
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-    this.gl.shadowMap.enabled = true;
+    this.gl.setPixelRatio(this.pixelRatioCap());
+    this.gl.shadowMap.enabled = this.quality() !== 'low';
     this.gl.shadowMap.type = THREE.PCFSoftShadowMap;
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
     this.gl.toneMapping = THREE.ACESFilmicToneMapping;
-    this.gl.toneMappingExposure = 1.08;
+    this.gl.toneMappingExposure = this.quality() === 'ultra' ? 1.12 : 1.08;
 
     this.buildLights();
     this.buildGround();
@@ -136,7 +136,7 @@ export class MatchRenderer3D {
     const key = new THREE.DirectionalLight(0xfff0cf, 2.15);
     key.position.set(46, 76, 34);
     key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.mapSize.set(this.shadowMapSize(), this.shadowMapSize());
     key.shadow.camera.left = -58;
     key.shadow.camera.right = 58;
     key.shadow.camera.top = 78;
@@ -936,13 +936,24 @@ export class MatchRenderer3D {
     }
   }
 
+  quality() { return this.settings?.graphics || 'medium'; }
+  pixelRatioCap() {
+    const q = this.quality();
+    const device = window.devicePixelRatio || 1;
+    const cap = q === 'low' ? 1 : q === 'medium' ? 1.25 : q === 'high' ? 1.5 : 1.75;
+    return Math.min(device, cap);
+  }
+  shadowMapSize() {
+    const q = this.quality();
+    return q === 'low' ? 512 : q === 'medium' ? 1024 : q === 'high' ? 2048 : 4096;
+  }
   resize() {
     const r = this.canvas.getBoundingClientRect();
     const parent = this.canvas.parentElement;
     const pr = parent?.getBoundingClientRect();
     this.w = Math.max(1, r.width || pr?.width || 1);
     this.h = Math.max(1, r.height || pr?.height || 1);
-    this.dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    this.dpr = this.pixelRatioCap();
     if (this.w === this.lastSize.w && this.h === this.lastSize.h) return;
     this.lastSize = { w: this.w, h: this.h };
     this.gl.setPixelRatio(this.dpr);
@@ -957,12 +968,23 @@ export class MatchRenderer3D {
     let fx = b.x, fz = b.y;
     if (g.phase === 'try' && g.tryInfo) { fx = g.tryInfo.x; fz = g.tryInfo.y; }
     else if (g.phase === 'goal' || g.phase === 'conversion') { fx = 35; fz = g.goal?.side === 'home' ? 100 : 0; }
+    else {
+      const carrier = b.holder;
+      const userDefending = carrier && carrier.side !== g.userTeam && g.userTeam !== 'none';
+      if (userDefending) {
+        const defender = g.byId(g.controlledId);
+        if (defender && defender.side === g.userTeam && defender.down <= 0) {
+          fx = (b.x + defender.x) * .5;
+          fz = (b.y + defender.y) * .5;
+        }
+      }
+    }
     fx = clamp(fx, 10, 60);
     fz = clamp(fz, -4, 104);
     if (force) { this.focus.x = fx; this.focus.z = fz; }
     else {
-      this.focus.x = damp(this.focus.x, fx, 2.2, dt);
-      this.focus.z = damp(this.focus.z, fz, 2.6, dt);
+      this.focus.x = damp(this.focus.x, fx, 2.4, dt);
+      this.focus.z = damp(this.focus.z, fz, 2.8, dt);
     }
 
     const userZoom = this.settings.cameraZoom || 1;
@@ -976,12 +998,17 @@ export class MatchRenderer3D {
     this.shake.y = (Math.random() - .5) * shake * 1.2;
     this.shake.z = (Math.random() - .5) * shake * 1.6;
 
-    const camX = 52 + (this.focus.x - 35) * .16;
-    const camY = 30 - (zoom - 1) * 3;
-    const camZ = this.focus.z - 16 * zoom;
+    // Ball/focus coordinates run 0..70 across and 0..100 along the pitch.
+    // Player rigs and the ball mesh are centred on the origin, so convert
+    // the focus into world space before placing the camera.
+    const worldX = this.focus.x - 35;
+    const worldZ = this.focus.z - 50;
+    const camX = 52 + worldX * .16;
+    const camY = 26 - (zoom - 1) * 3;
+    const camZ = worldZ - 13 * zoom;
     this.camera.position.set(camX + this.shake.x, camY + this.shake.y, camZ + this.shake.z);
-    const tx = this.focus.x - 7;
-    const tz = this.focus.z + 18 * zoom;
+    const tx = worldX - 7;
+    const tz = worldZ + 15 * zoom;
     this.camera.lookAt(tx, 1.4, tz);
     this.camera.fov = (this.w / this.h < .8 ? 52 : 48) * (1 / Math.max(.74, zoom));
     this.camera.updateProjectionMatrix();

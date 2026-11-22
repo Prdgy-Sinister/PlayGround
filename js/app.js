@@ -41,7 +41,7 @@ const S = {
   route: 'home',
   settings: Object.assign({
     sound: true, haptics: true, controlScale: 1, sensitivity: 1, cameraZoom: 1,
-    layout: 'right', difficulty: 'pro', commentary: true
+    layout: 'right', difficulty: 'pro', commentary: true, graphics: 'medium'
   }, saved.settings || {}),
   tournament: saved.tournament || null,
   career: saved.career || null,
@@ -381,6 +381,7 @@ function settingsScreen() {
         <h3 class="panel-title">GAMEPLAY</h3>
         <div class="panel-row"><div><label>DIFFICULTY</label><small>Default for quick matches</small></div><div class="segmented">${[['amateur','ROOKIE'],['pro','PRO'],['elite','ELITE']].map(([k,l])=>`<button class="${S.settings.difficulty===k?'active':''}" data-action="setting:difficulty" data-val="${k}">${l}</button>`).join('')}</div></div>
         <div class="panel-row"><div><label>CAMERA ZOOM</label><small>Match framing</small></div><div class="segmented">${[['close','CLOSE'],['normal','NORMAL'],['wide','WIDE']].map(([k,l])=>`<button class="${S.settings.cameraZoom===(k==='close'?1.12:k==='wide'?.9:1)?'active':''}" data-action="setting:camera" data-val="${k}">${l}</button>`).join('')}</div></div>
+        <div class="panel-row"><div><label>GRAPHICS QUALITY</label><small>Low to Ultra for device performance</small></div><div class="segmented">${[['low','LOW'],['medium','MED'],['high','HIGH'],['ultra','ULTRA']].map(([k,l])=>`<button class="${S.settings.graphics===k?'active':''}" data-action="setting:graphics" data-val="${k}">${l}</button>`).join('')}</div></div>
       </section>
       <section class="settings-panel">
         <h3 class="panel-title">DATA</h3>
@@ -1026,6 +1027,7 @@ function matchScreen() {
       <div class="action-pad defense-pad hidden" id="defense-pad">
         <button class="round-btn switch" data-action="match:switch" aria-label="Switch defender">${icon('swap',19)}<span>SWITCH</span></button>
         <button class="round-btn tackle" data-action="match:tackle" data-type="normal" aria-label="Normal tackle">${icon('shield',19)}<span>TACKLE</span></button>
+        <button class="round-btn low" data-action="match:tackle" data-type="low" aria-label="Low tackle">${icon('shield',19)}<span>LOW</span></button>
         <button class="round-btn dive" data-action="match:tackle" data-type="dive" aria-label="Dive tackle">${icon('bolt',19)}<span>DIVE</span></button>
         <button class="round-btn big" data-action="match:tackle" data-type="big" aria-label="Big tackle">${icon('shield',19)}<span>BIG</span></button>
         <button class="round-btn intercept" data-action="match:tackle" data-type="intercept" aria-label="Intercept">${icon('arrow',19)}<span>INTERCEPT</span></button>
@@ -1361,7 +1363,7 @@ function showSubTargets(benchId) {
   const team=g[g.userTeam], bench=team.bench.find(p=>p.id===benchId);
   if(!bench)return;
   showModal(`${modalHead('Who comes off?',`${esc(bench.name)} • ${esc(bench.posName)}`)}
-    <div class="sub-list">${team.lineup.filter(p=>p.onField).sort((a,b)=>a.number-b.number).map(p=>`<div class="sub-row"><span class="pnum">${p.number}</span><div><b>${esc(p.name)}</b><small>${esc(p.posName)} • ${p.stamina}% stamina</small></div><button class="btn ghost sm" data-action="pause:subDo" data-on="${benchId}" data-off="${p.id}">REPLACE</button></div>`).join('')}</div>`, 'tall');
+    <div class="sub-list">${team.lineup.filter(p=>p.onField).sort((a,b)=>a.number-b.number).map(p=>`<div class="sub-row"><span class="pnum">${p.number}</span><div><b>${esc(p.name)}</b><small>${esc(p.posName)} • ${Math.round(p.stamina)}% stamina</small></div><button class="btn ghost sm" data-action="pause:subDo" data-on="${benchId}" data-off="${p.id}">REPLACE</button></div>`).join('')}</div>`, 'tall');
 }
 
 function showMatchTactics() {
@@ -1525,6 +1527,7 @@ function handleAction(action,data,el,ev) {
     case 'setting:layout': S.settings.layout=data.val;save();render();break;
     case 'setting:difficulty': S.settings.difficulty=data.val;save();render();break;
     case 'setting:camera': S.settings.cameraZoom=data.val==='close'?1.12:data.val==='wide'?.9:1;save();render();break;
+    case 'setting:graphics': S.settings.graphics=data.val;save();render();toast('Graphics quality saved for next match.','info');break;
     case 'settings:save': save();toast('Progress saved.','success');break;
     case 'settings:reset': confirmReset();break;
     case 'settings:resetDo': localStorage.removeItem(SAVE_KEY);location.reload();break;
