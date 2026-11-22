@@ -589,6 +589,13 @@ a{color:inherit}
 .round-btn.fend{width:calc(44px * var(--ctrl));height:calc(44px * var(--ctrl));left:58px;top:116px;background:linear-gradient(145deg,#6d4a1f,#3b2710);color:#ffe7b0;border-color:rgba(217,180,91,.4)}
 .round-btn.step{width:calc(42px * var(--ctrl));height:calc(42px * var(--ctrl));right:4px;top:124px;background:linear-gradient(145deg,#4a2f66,#291a3a);color:#e3cdff;border-color:rgba(174,132,224,.4)}
 
+.rotate-lock{display:none;position:fixed;inset:0;z-index:9999;background:linear-gradient(180deg,#071710,#040d09);color:var(--cream);align-items:center;justify-content:center;text-align:center;padding:24px}
+.rotate-lock div{max-width:360px}
+.rotate-lock h2{font-family:var(--font-head);font-size:26px;letter-spacing:.08em;margin:0 0 10px;color:var(--gold-2)}
+.rotate-lock p{font-size:12px;line-height:1.6;color:var(--muted)}
+@media (orientation: portrait){.rotate-lock{display:flex}.screen{display:none}}
+@media (orientation: landscape){.rotate-hint{display:none}}
+
 /* Defensive pad: switch plus five distinct techniques */
 .defense-pad{height:calc(232px * var(--ctrl))}
 .round-btn.switch{width:calc(54px * var(--ctrl));height:calc(54px * var(--ctrl));left:0;top:6px;background:linear-gradient(145deg,#2b4e69,#142c3d);color:#c7eaff;border-color:rgba(134,200,237,.4)}
