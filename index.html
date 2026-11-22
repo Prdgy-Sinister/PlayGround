@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#02050b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>TRON: NEON OVERDRIVE</title>
+  <link rel="stylesheet" href="assets/fonts/fonts.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+    <div id="bg-grid"></div>
+    <div id="ui"></div>
+
+    <div id="hud" class="hidden">
+      <div class="hud-top">
+        <div class="hud-mode-block">
+          <div class="hud-mode" id="hud-mode">CLASSIC</div>
+          <div class="hud-track" id="hud-track">NEON GRID CITY</div>
+        </div>
+        <div class="hud-center-block">
+          <div class="hud-objective" id="hud-objective">BE THE LAST LIGHT CYCLE</div>
+          <div class="hud-timer" id="hud-timer">00:00.000</div>
+        </div>
+        <div class="hud-right-block">
+          <div class="hud-pos"><span id="hud-position">1</span><small id="hud-total">/6</small></div>
+          <button class="hud-pause" id="hud-pause" aria-label="Pause">❚❚</button>
+        </div>
+      </div>
+
+      <div class="hud-standings" id="hud-standings"></div>
+      <div class="hud-minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas><span class="hud-map-label">GRID MAP</span></div>
+
+      <div class="hud-message" id="hud-message"></div>
+      <div class="hud-countdown" id="hud-countdown"></div>
+      <div class="hud-warning" id="hud-warning">⚠ WALL PROXIMITY</div>
+
+      <div class="hud-bottom">
+        <div class="hud-speed-block">
+          <div class="hud-speed" id="hud-speed">0</div>
+          <div class="hud-speed-label">KM/H</div>
+          <div class="hud-flags" id="hud-flags"></div>
+        </div>
+        <div class="hud-meters">
+          <div class="meter-row">
+            <span class="meter-label">BOOST</span>
+            <div class="meter"><div class="meter-fill boost-fill" id="hud-boost"></div></div>
+          </div>
+          <div class="meter-row">
+            <span class="meter-label">PULSE</span>
+            <div class="meter"><div class="meter-fill special-fill" id="hud-special"></div></div>
+          </div>
+          <div class="meter-row">
+            <span class="meter-label">TRAIL</span>
+            <div class="meter"><div class="meter-fill trail-fill" id="hud-trail"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="touch-controls" id="touch-controls">
+        <div class="steer-pad">
+          <button class="touch-btn steer-btn" data-touch="left">◀</button>
+          <button class="touch-btn steer-btn" data-touch="right">▶</button>
+        </div>
+        <div class="action-pad">
+          <button class="touch-btn small" data-touch="brake">BRAKE</button>
+          <button class="touch-btn small" data-touch="drift">DRIFT</button>
+          <button class="touch-btn small" data-touch="jump">JUMP</button>
+          <button class="touch-btn small pulse" data-touch="special">PULSE</button>
+          <button class="touch-btn boost" data-touch="boost">BOOST</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-stack"></div>
+    <div id="rotate-hint" class="hidden">⟳ ROTATE YOUR DEVICE FOR THE FULL OVERDRIVE EXPERIENCE</div>
+
+    <div id="boot">
+      <div class="boot-inner">
+        <div class="boot-logo">TRON<span>:</span> NEON OVERDRIVE</div>
+        <div class="boot-bar"><div id="boot-progress"></div></div>
+        <div class="boot-status" id="boot-status">INITIALISING GRID…</div>
+        <button id="boot-enter" class="btn primary hidden">TAP TO ENTER THE GRID</button>
+        <div class="boot-small">BEST EXPERIENCED IN LANDSCAPE • HEADPHONES RECOMMENDED</div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
