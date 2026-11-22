@@ -258,7 +258,8 @@ export class CanvasMatchRenderer {
     if (g.ruck) {
       const r=g.ruck;
       c.save();c.strokeStyle='rgba(143,232,255,.22)';c.setLineDash([6,6]);c.lineWidth=1.5;
-      c.beginPath();c.moveTo(this.sx(0),this.sy(r.y+1.2));c.lineTo(this.sx(70),this.sy(r.y+1.2));c.stroke();c.restore();
+      const offY=r.y+(r.side==='home'?-1.2:1.2);
+      c.beginPath();c.moveTo(this.sx(0),this.sy(offY));c.lineTo(this.sx(70),this.sy(offY));c.stroke();c.restore();
     }
     for (const p of players) this.drawPlayer(c,p);
     this.drawReferee(c);
@@ -402,9 +403,34 @@ export class CanvasMatchRenderer {
   }
 
   drawAtmosphere(c) {
+    const fx=this.game.weatherFx;
+    if (fx?.wetness > 0) {
+      c.save();
+      c.globalAlpha = Math.min(.26, fx.wetness * .22);
+      c.fillStyle = '#6d8d95';
+      c.fillRect(this.sx(0), this.sy(-10), this.sx(70)-this.sx(0), this.sy(110)-this.sy(-10));
+      c.globalAlpha = Math.min(.38, fx.mud * .3);
+      c.fillStyle = '#4b3a24';
+      for(let i=0;i<9;i++){
+        const px=this.sx(35+((i*31)%60)-30), py=this.sy(50+((i*47)%88)-44);
+        c.beginPath();c.ellipse(px,py,(8+i%4*6)*this.cam.scale/4,(3+i%3*2)*this.cam.scale/4,0,0,Math.PI*2);c.fill();
+      }
+      c.restore();
+    }
     const vg=c.createRadialGradient(this.w/2,this.h*.45,this.h*.15,this.w/2,this.h*.45,this.h*.8);
-    vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.4)');
+    vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,`rgba(0,0,0,${.28+((fx?.visibility!=null?1-fx.visibility:0)*.28).toFixed(2)})`);
     c.fillStyle=vg;c.fillRect(0,0,this.w,this.h);
+    if (fx?.rain > 0) {
+      const count = fx.rain > 1.2 ? 120 : 70;
+      const t=this.game.animTime||0;
+      c.save();c.strokeStyle='rgba(190,220,235,.42)';c.lineWidth=1;
+      for(let i=0;i<count;i++){
+        const x=(i*137+t*(90+fx.windX*30))%this.w;
+        const y=(i*83+t*(420+fx.rain*160))%this.h;
+        c.beginPath();c.moveTo(x,y);c.lineTo(x-fx.windX*3,y+9);c.stroke();
+      }
+      c.restore();
+    }
     // subtle film grain
     c.globalAlpha=.035;
     for(let i=0;i<60;i++){c.fillStyle=i%2?'#fff':'#000';c.fillRect((i*97)%this.w,(i*53)%this.h,1.3,1.3);}

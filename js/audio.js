@@ -6,6 +6,10 @@ export class Sound {
     this.crowdGain = null;
     this.crowdSource = null;
     this.master = null;
+    this.anthemNodes = [];
+    this.anthemEl = null;
+    this.anthemToken = 0;
+    this.anthemVolume = .8;
   }
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
@@ -21,6 +25,7 @@ export class Sound {
   setEnabled(v) {
     this.enabled = !!v;
     if (this.master) this.master.gain.setTargetAtTime(v ? .55 : 0, this.ctx.currentTime, .05);
+    if (!v) this.stopAnthem(0);
   }
   tone(freq, dur=.12, type='sine', vol=.12, when=0, slide=0) {
     if (!this.ctx || !this.enabled) return;
@@ -35,6 +40,7 @@ export class Sound {
     g.gain.exponentialRampToValueAtTime(.0001, t + dur);
     o.connect(g); g.connect(this.master);
     o.start(t); o.stop(t + dur + .02);
+    return o;
   }
   noise(dur=.15, vol=.1, low=900, when=0) {
     if (!this.ctx || !this.enabled) return;
@@ -101,20 +107,115 @@ export class Sound {
       this.crowdGain.gain.setTargetAtTime(0,this.ctx.currentTime,.25);
     }
   }
-  anthem(teamId='en') {
+  setCrowdLevel(level=.05, seconds=.3) {
+    if (!this.ctx || !this.crowdGain) return;
+    const target = Math.max(0, Math.min(.2, level));
+    this.crowdGain.gain.setTargetAtTime(target, this.ctx.currentTime, Math.max(.01, seconds));
+  }
+
+  setAnthemVolume(v) {
+    this.anthemVolume = Math.max(0, Math.min(1, Number(v) || 0));
+    if (this.anthemEl) this.anthemEl.volume = this.anthemVolume;
+  }
+
+  /* Original, rights-free ceremonial fanfare. Kept as the default for every
+     nation; the manifest may provide a cleared recording later. */
+  anthemSting(teamId='en', spec=null, opts={}) {
     this.init();
-    if (!this.ctx || !this.enabled) return;
-    // A short, stately original fanfare rather than a copyrighted anthem.
-    const melodies = {
+    if (!this.ctx || !this.enabled) return { ok:false, mode:'none', reason:'disabled' };
+    this.stopAnthem(0);
+    const token = ++this.anthemToken;
+    const notes = spec?.fanfare || {
       en:[392,523,659,587,523,392,440,523],
       nz:[440,554,659,880,659,554,440,392],
       za:[349,440,523,466,440,349,392,440],
       fr:[392,494,587,784,698,587,494,392],
       default:[392,523,659,523,440,523,659,784]
+    }[teamId] || [392,523,659,523,440,523,659,784];
+    const vol = Math.max(0, this.anthemVolume);
+    notes.forEach((f,i)=>{
+      const node = this.tone(f,.42,'triangle',.05*vol,i*.34, i%2?10:-8);
+      if (node) this.anthemNodes.push(node);
+    });
+    notes.slice(0,4).forEach((f,i)=>{
+      const node = this.tone(f/2,.8,'sine',.03*vol,i*.34);
+      if (node) this.anthemNodes.push(node);
+    });
+    if (opts.cheer !== false && vol > 0) this.cheer(.4);
+    return { ok:true, mode:'fanfare', token };
+  }
+
+  /* Optional external recording support. Assets are only loaded when the
+     manifest explicitly marks a recording as cleared. */
+  playAnthemRecording(spec={}, opts={}) {
+    this.init();
+    if (!this.enabled || !spec.src?.length) return Promise.resolve({ ok:false, mode:'none', reason:'no-cleared-recording' });
+    if (!('Audio' in window)) return Promise.resolve({ ok:false, mode:'none', reason:'unsupported' });
+    const token = ++this.anthemToken;
+    this.stopAnthem(0);
+    const el = new Audio();
+    el.preload = 'auto';
+    el.volume = Math.max(0, Math.min(1, opts.volume ?? this.anthemVolume));
+    for (const source of spec.src) {
+      const s = document.createElement('source');
+      s.src = source.url; s.type = source.type || '';
+      el.appendChild(s);
+    }
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = result => {
+        if (settled || token !== this.anthemToken) return;
+        settled = true;
+        el.removeEventListener('ended', onEnded);
+        el.removeEventListener('error', onError);
+        if (this.anthemEl === el) this.anthemEl = null;
+        resolve(result);
+      };
+      const onEnded = () => finish({ ok:true, mode:'recording', reason:'ended' });
+      const onError = () => finish({ ok:false, mode:'none', reason:'load-error' });
+      el.addEventListener('ended', onEnded);
+      el.addEventListener('error', onError);
+      this.anthemEl = el;
+      try {
+        if (spec.startMs) el.currentTime = spec.startMs / 1000;
+        const p = el.play();
+        if (p?.catch) p.catch(err => finish({ ok:false, mode:'none', reason:err?.name || 'play-error' }));
+      } catch (err) { finish({ ok:false, mode:'none', reason:err?.name || 'play-error' }); }
+    });
+  }
+
+  stopAnthem(seconds=.2) {
+    this.anthemToken++;
+    const el = this.anthemEl;
+    this.anthemEl = null;
+    const killSynth = () => {
+      for (const node of this.anthemNodes) { try { node.stop(); } catch {} }
+      this.anthemNodes = [];
     };
-    const notes = melodies[teamId] || melodies.default;
-    notes.forEach((f,i)=>this.tone(f,.42,'triangle',.05,i*.34, i%2?10:-8));
-    notes.slice(0,4).forEach((f,i)=>this.tone(f/2,.8,'sine',.03,i*.34));
-    this.cheer(.4);
+    const killElement = () => {
+      if (!el) return;
+      try { el.pause(); } catch {}
+      try { el.removeAttribute('src'); el.load(); } catch {}
+    };
+    if (seconds > 0) {
+      if (el) {
+        const from = el.volume, t = performance.now();
+        const fade = () => {
+          const left = Math.max(0, 1 - (performance.now() - t) / (seconds * 1000));
+          el.volume = from * left;
+          if (left > 0 && this.anthemEl !== el) return requestAnimationFrame(fade);
+          killElement(); killSynth();
+        };
+        fade();
+      } else {
+        killSynth();
+      }
+    } else {
+      killElement(); killSynth();
+    }
+  }
+
+  anthem(teamId='en', spec=null) {
+    return this.anthemSting(teamId, spec);
   }
 }

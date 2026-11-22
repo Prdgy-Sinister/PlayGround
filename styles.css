@@ -865,3 +865,91 @@ a{color:inherit}
 .empty-state h3{font-family:var(--font-head);font-size:22px;margin:0 0 5px}
 .empty-state p{font-size:9px;color:var(--muted);max-width:280px;margin:0 auto 12px;line-height:1.6}
 .rotate-hint{display:none}
+
+/* ---------- Custom teams, competition creator and ceremonies ---------- */
+.bottom-nav{grid-template-columns:repeat(5,1fr)}
+.nav-item span{font-size:7px}
+.weather-picker{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px;width:100%}
+.weather-chip{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:48px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.03);color:var(--muted)}
+.weather-chip span{font-size:14px;line-height:1}
+.weather-chip b{font-family:var(--font-head);font-size:7px;letter-spacing:.07em}
+.weather-chip.active{border-color:rgba(217,180,91,.55);background:rgba(217,180,91,.12);color:var(--gold-2)}
+.creator-entry{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(217,180,91,.22);border-radius:14px;padding:12px;background:linear-gradient(120deg,rgba(217,180,91,.1),rgba(255,255,255,.02));margin:12px 0}
+.creator-entry h3{font-family:var(--font-head);font-size:15px;margin:2px 0 3px}
+.creator-entry p{font-size:7.5px;line-height:1.5;color:var(--muted);margin:0;max-width:220px}
+.format-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:9px;width:100%}
+.format-chip{border:1px solid var(--line);border-radius:9px;padding:8px 5px;background:rgba(255,255,255,.03);font-family:var(--font-head);font-size:8px;letter-spacing:.04em;color:var(--muted)}
+.format-chip.active{border-color:rgba(217,180,91,.55);background:rgba(217,180,91,.12);color:var(--gold-2)}
+.custom-user-pick{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:11px;padding:8px 10px;background:rgba(255,255,255,.025);margin:10px 0}
+.custom-user-pick>span{font-family:var(--font-head);font-size:7px;letter-spacing:.1em;color:var(--gold)}
+.custom-user-pick>div{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.custom-user-pick b{font-family:var(--font-head);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.custom-team-list{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.custom-team-card{border:1px solid var(--line);border-radius:14px;padding:11px;background:linear-gradient(130deg,rgba(255,255,255,.045),rgba(255,255,255,.015))}
+.ctc-top{display:flex;align-items:center;gap:9px}
+.ctc-top>div{flex:1;min-width:0}
+.ctc-top h3{font-family:var(--font-head);font-size:15px;line-height:1.15;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctc-top p{font-size:7px;color:var(--muted);margin:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctc-flag{font-size:22px;line-height:1}
+.ctc-kit{display:flex;align-items:center;gap:5px;margin:9px 0}
+.ctc-kit i{width:24px;height:8px;border-radius:4px;border:1px solid rgba(255,255,255,.16)}
+.ctc-kit span{margin-left:auto;font-family:var(--font-head);font-size:6px;letter-spacing:.08em;color:var(--muted-2);text-transform:uppercase}
+.ctc-actions{display:flex;gap:5px}
+.ctc-actions .btn{flex:1}
+.icon-btn.danger{color:#ffb4aa;border-color:rgba(232,110,96,.3)}
+.editor-hero{display:flex;align-items:center;gap:12px;border:1px solid rgba(217,180,91,.22);border-radius:16px;padding:12px;background:linear-gradient(120deg,rgba(217,180,91,.1),rgba(255,255,255,.02));margin:12px 0}
+.editor-hero>div{min-width:0}
+.editor-hero h2{font-family:var(--font-head);font-size:22px;line-height:1.05;margin:3px 0}
+.editor-hero p{font-size:8px;color:var(--muted);margin:0}
+.editor-tabs{margin-bottom:8px}
+.editor-panel{padding:12px 14px}
+.form-grid,.kit-editor{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:8px 0}
+.field{display:block;min-width:0}
+.field.wide{grid-column:1/-1}
+.field>span{display:block;font-family:var(--font-head);font-size:7px;letter-spacing:.1em;color:var(--muted)}
+.field .text-input,.field .select{width:100%;max-width:none;margin:4px 0 0;font-size:12px}
+.field input[type=color]{width:100%;height:38px;margin-top:4px;border:1px solid var(--line);border-radius:9px;background:rgba(0,0,0,.24);padding:3px}
+.modal-body{padding:0 2px}
+.modal-actions{display:flex;gap:7px;margin-top:12px}
+.modal-actions .btn{flex:1;padding:0 10px}
+.attr-field{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px;border:1px solid var(--line);border-radius:9px;padding:6px 8px;background:rgba(255,255,255,.025)}
+.attr-field span{font-size:7px;color:var(--muted)}
+.attr-field input{grid-row:2;width:100%;background:none;border:0;color:var(--gold-2);font-family:var(--font-head);font-size:13px;outline:none}
+.attr-field b{grid-row:2;font-family:var(--font-head);font-size:13px;color:var(--gold-2);text-align:right}
+.squad-list{display:flex;flex-direction:column;gap:4px;margin:8px 0}
+.squad-list.bench{margin-bottom:12px}
+.squad-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:1px solid var(--line);border-radius:9px;padding:7px 9px;background:rgba(255,255,255,.025)}
+.squad-row b{font-family:var(--font-head);font-size:11px;color:var(--gold);width:18px}
+.squad-row>span{flex:1;min-width:0}
+.squad-row strong{display:block;font-family:var(--font-head);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.squad-row small{display:block;font-size:6.5px;color:var(--muted-2)}
+.squad-row em{font-style:normal;font-family:var(--font-head);font-size:12px;color:var(--gold-2)}
+.squad-row i{font-style:normal;font-family:var(--font-head);font-size:7px;color:#122018;background:var(--gold);border-radius:3px;padding:1px 4px}
+.squad-row.captain{border-color:rgba(217,180,91,.4)}
+.tactic-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;margin:10px 0}
+.tactic-row label{font-family:var(--font-head);font-size:7px;color:var(--muted);text-transform:capitalize}
+.tactic-row b{font-family:var(--font-head);font-size:9px;color:var(--gold-2)}
+.tactic-row .range{margin:5px 0}
+.crest.badge-circle .crest-inner{border-radius:50%;clip-path:none}
+.crest.badge-diamond .crest-inner{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.crest.badge-crest .crest-inner{clip-path:polygon(50% 0,100% 18%,92% 72%,50% 100%,8% 72%,0 18%)}
+.crest.kit-hoops .crest-inner{background:repeating-linear-gradient(0deg,var(--c1) 0 22%,var(--c2) 22% 34%)}
+.crest.kit-stripes .crest-inner{background:repeating-linear-gradient(90deg,var(--c1) 0 20%,var(--c2) 20% 32%)}
+.crest.kit-diagonal .crest-inner{background:repeating-linear-gradient(135deg,var(--c1) 0 25%,var(--c2) 25% 36%)}
+.crest.kit-bands .crest-inner{background:linear-gradient(180deg,var(--c1) 0 38%,var(--c3) 38% 46%,var(--c2) 46% 100%)}
+.team-pick-row.custom{border-color:rgba(217,180,91,.35);background:rgba(217,180,91,.06)}
+.ceremony-team{position:relative;border-radius:12px;padding:8px 4px;transition:.25s;min-width:0}
+.ceremony-team.active{background:rgba(217,180,91,.12);box-shadow:0 0 0 1px rgba(217,180,91,.45),0 0 22px rgba(217,180,91,.14)}
+.ceremony-flag{font-size:19px;line-height:1}
+.ceremony-team>small{font-family:var(--font-head);font-size:6px;line-height:1.3;color:var(--gold);margin-top:3px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ceremony-lineup{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;margin-top:6px;max-height:78px;overflow:hidden}
+.ceremony-lineup span{font-size:5.5px;line-height:1;color:var(--muted-2);background:rgba(255,255,255,.05);border-radius:3px;padding:2px 3px;white-space:nowrap}
+.ceremony-lineup b{color:var(--gold-2);margin-right:2px}
+.ceremony-status{min-height:20px;display:flex;align-items:center;justify-content:center;gap:5px;font-family:var(--font-head);font-size:7px;line-height:1.4;letter-spacing:.05em;color:var(--muted);margin:6px 0}
+.ceremony-status .ic{color:var(--gold);flex:none}
+.ceremony-status small{font-size:5px;color:var(--gold-2);opacity:.85}
+.ceremony-status .live-dot{width:5px;height:5px;border-radius:50%;background:var(--red);flex:none;animation:pulse 1.2s infinite}
+.ceremony-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:6px}
+.ceremony-actions .btn{min-height:32px;padding:0 5px;font-size:9px;border-radius:9px}
+.prematch-note{display:block;font-family:var(--font-head);font-size:6px;letter-spacing:.1em;color:var(--muted-2);margin-top:8px}
+

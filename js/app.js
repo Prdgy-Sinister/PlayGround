@@ -1,5 +1,8 @@
-import { TEAMS, TEAM_MAP, makeSquad, overallFor, ATTRS, ATTR_LABELS, POSITIONS, HISTORIC_EDITIONS, LEGENDS, STADIUMS } from './data.js';
+import { TEAMS, TEAM_MAP, makeSquad, overallFor, ATTRS, ATTR_LABELS, POSITIONS, HISTORIC_EDITIONS, LEGENDS, STADIUMS, STYLE_LABEL } from './data.js';
 import { RugbyGame, simulateMatch } from './engine.js';
+import { createCustomTeam, duplicateCustomTeam, normaliseCustomTeam, registerCustomTeams, refreshCustomTeam, customSquad, unregisterCustomTeam, FORMATIONS, TACTIC_KEYS, KIT_PATTERNS, BADGE_STYLES } from './custom.js';
+import { ANTHEMS, ceremonyOrder, resolveAnthem, canPlayRecording } from './anthems.js';
+import { WEATHER_TYPES, WEATHER_CHOICES, weatherLabel } from './weather.js';
 import { MatchRenderer } from './renderer.js';
 import {
   ERAS, RWC_RECORDS, RWC_FINALS, CHAMPIONSHIP_HISTORY, DREAM_MATCHES,
@@ -36,18 +39,25 @@ function loadSave() {
   try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'); } catch { return {}; }
 }
 const saved = loadSave();
+// Rehydrate saved custom nations before any screen or tournament resolves ids.
+// Custom teams are persisted as full objects; old id-only entries are ignored.
+const savedCustomTeams = [...new Map((saved.customTeams || [])
+  .filter(raw => raw && typeof raw === 'object' && raw.id)
+  .map(raw => [raw.id, raw])).values()].map(normaliseCustomTeam);
+registerCustomTeams(savedCustomTeams);
 
 const S = {
   route: 'home',
   settings: Object.assign({
     sound: true, haptics: true, controlScale: 1, sensitivity: 1, cameraZoom: 1,
-    layout: 'right', difficulty: 'pro', commentary: true, graphics: 'medium'
+    layout: 'right', difficulty: 'pro', commentary: true, graphics: 'medium',
+    anthemEnabled: true, anthemAutoPlay: false, anthemVolume: .8
   }, saved.settings || {}),
   tournament: saved.tournament || null,
   career: saved.career || null,
   selectedTeam: saved.selectedTeam || 'en',
   unlocks: saved.unlocks || [],
-  quick: Object.assign({ home:'en', away:'nz', half:3, difficulty:'pro' }, saved.quick || {}),
+  quick: Object.assign({ home:'en', away:'nz', half:3, difficulty:'pro', weather:'random', venue:STADIUMS[0] }, saved.quick || {}),
   tournamentTeam: saved.tournamentTeam || 'en',
   tournamentGroup: 0,
   careerTab: 'overview',
@@ -59,16 +69,21 @@ const S = {
   archiveCountry: saved.archiveCountry || '',
   archivePosition: saved.archivePosition || '',
   archiveTournament: saved.archiveTournament || 0,
-  custom: saved.custom || { name:'The Nations Cup', size:8, teams:['nz','za','fr','ie','en','au','ar','fj'], userTeam:'en' },
+  custom: Object.assign({ name:'The Nations Cup', size:8, format:'worldcup', groupsCount:2, qualifiers:2, legs:1, weather:'random', teams:['nz','za','fr','ie','en','au','ar','fj'], userTeam:'en' }, saved.custom || {}),
+  customTeams: savedCustomTeams,
+  teamEditor: null,
   game: null, renderer: null, raf: null, matchMeta: null, matchUi: null, matchView: 'prematch',
   lastHud: 0, goalRaf: null, goalMarker: 0, goalDir: 1, toastTimer: null, audio: new Sound(),
-  prematchAnimated: false, showTrophyFor: null, lastFrame: 0, pausedFrom: null
+  uiTimers: [],
+  anthem: { active:false, status:'idle', queue:[], index:0, currentSide:null, token:0, mode:null },
+  prematchAnimated: false, showTrophyFor: null, lastFrame: 0, pausedFrom: null, coachName: saved.coachName || ''
 };
 
 function save() {
   const data = {
     settings:S.settings, tournament:S.tournament, career:S.career, selectedTeam:S.selectedTeam,
     unlocks:S.unlocks, quick:S.quick, tournamentTeam:S.tournamentTeam, custom:S.custom,
+    customTeams:S.customTeams, coachName:S.coachName,
     archiveTab:S.archiveTab, archiveYear:S.archiveYear, archiveTeam:S.archiveTeam, archiveEra:S.archiveEra,
     archiveFilterYear:S.archiveFilterYear, archiveCountry:S.archiveCountry, archivePosition:S.archivePosition,
     archiveTournament:S.archiveTournament
@@ -76,9 +91,24 @@ function save() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch {}
 }
 
+function uiTimeout(fn, ms) {
+  const id = setTimeout(() => {
+    S.uiTimers = S.uiTimers.filter(x => x !== id);
+    fn();
+  }, ms);
+  S.uiTimers.push(id);
+  return id;
+}
+function clearUiTimers() {
+  for (const id of S.uiTimers) clearTimeout(id);
+  S.uiTimers = [];
+}
+
 function squadFor(teamId, seed=0) {
+  const t = TEAM_MAP[teamId] || TEAMS[0];
+  if (t.custom) return customSquad(t, seed);
   const key = `${teamId}:${seed}`;
-  if (!squadCache.has(key)) squadCache.set(key, makeSquad(TEAM_MAP[teamId] || TEAMS[0], seed));
+  if (!squadCache.has(key)) squadCache.set(key, makeSquad(t, seed));
   return squadCache.get(key).map(p=>({...p}));
 }
 function squadRating(teamId) {
@@ -90,7 +120,8 @@ function team(id) { return TEAM_MAP[id] || TEAMS[0]; }
 function crest(t, size=48, extra='') {
   if (!t) return '';
   const c1=t.colors?.[0]||'#235c43', c2=t.colors?.[1]||'#fff', c3=t.colors?.[2]||'#d9b45b';
-  return `<span class="crest ${extra}" style="--c1:${c1};--c2:${c2};--c3:${c3};--crest:${size}px">
+  const badge = t.custom ? ` badge-${t.badge||'shield'} kit-${t.kitPattern||'solid'}` : '';
+  return `<span class="crest ${extra}${badge}" style="--c1:${c1};--c2:${c2};--c3:${c3};--crest:${size}px">
     <span class="crest-inner"><span class="crest-stripe"></span><b>${esc(t.abbr)}</b></span>
   </span>`;
 }
@@ -153,7 +184,8 @@ function emptyState(title, body, action, label) {
 
 function navBar() {
   const items = [
-    ['home','Home','home'],['tournament','World Cup','trophy'],['career','Career','career'],['settings','More','settings']
+    ['home','Home','home'],['tournament','World Cup','trophy'],['career','Career','career'],
+    ['teams','Teams','shield'],['settings','More','settings']
   ];
   return items.map(([r,label,ic])=>`<button class="nav-item ${S.route===r?'active':''}" data-action="nav:${r}" aria-label="${label}">
     ${icon(ic,21)}<span>${label}</span></button>`).join('');
@@ -248,7 +280,7 @@ function homeScreen() {
       </section>`:''}
 
       <section class="section">
-        <div class="section-head"><div><span class="kicker">CHOOSE YOUR PATH</span><h2>Game Modes</h2></div><span class="section-count">08</span></div>
+        <div class="section-head"><div><span class="kicker">CHOOSE YOUR PATH</span><h2>Game Modes</h2></div><span class="section-count">09</span></div>
         <div class="mode-grid">
           <button class="mode-card mode-large" data-action="nav:tournament">
             <span class="mode-icon gold-bg">${icon('trophy',25)}</span>
@@ -263,6 +295,7 @@ function homeScreen() {
           <button class="mode-card" data-action="nav:training"><span class="mode-icon">${icon('medal',22)}</span><span class="mode-text"><b>Training</b><small>Sharpen your game</small></span></button>
           <button class="mode-card" data-action="quick:open"><span class="mode-icon">${icon('shield',22)}</span><span class="mode-text"><b>Exhibition</b><small>Any nations, any night</small></span></button>
           <button class="mode-card" data-action="nav:historical"><span class="mode-icon">${icon('star',22)}</span><span class="mode-text"><b>Legends</b><small>Historic greats</small></span></button>
+          <button class="mode-card" data-action="nav:teams"><span class="mode-icon">${icon('shield',22)}</span><span class="mode-text"><b>Team Creator</b><small>Build a nation</small></span></button>
         </div>
       </section>
 
@@ -297,12 +330,25 @@ function featuredFixtures() {
 }
 function tournamentProgress(t) {
   if(t.champion)return 100;
-  if(t.stage==='group')return clamp((t.groupRound-1)/t.maxGroupRound*55,5,55);
-  return {qf:68,sf:82,third:92,final:94,complete:100}[t.stage]||10;
+  if(['group','league'].includes(t.stage))return clamp((t.groupRound-1)/Math.max(1,t.maxGroupRound)*55,5,55);
+  return {playin:56,r16:60,qf:68,sf:82,third:92,final:94,complete:100}[t.stage]||10;
+}
+
+function weatherPicker(value, context='quick') {
+  return `<div class="weather-picker">${WEATHER_CHOICES.map(id=>{
+    const w=id==='random'?{label:'Random',short:'RND',icon:'shuffle'}:WEATHER_TYPES[id];
+    return `<button class="weather-chip ${value===id?'active':''}" data-action="weather:set" data-context="${context}" data-val="${id}" title="${esc(w?.note||'Changing conditions')}">
+      <span>${id==='random'?'🎲':weatherIcon(w?.icon)}</span><b>${esc(w?.short||id)}</b>
+    </button>`;
+  }).join('')}</div>`;
+}
+function weatherIcon(kind) {
+  return { sun:'☀️', cloud:'☁️', rain:'🌧️', storm:'⛈️', wind:'💨', snow:'❄️' }[kind] || '🌤️';
 }
 
 function quickScreen() {
   const h=team(S.quick.home),a=team(S.quick.away);
+  const w=WEATHER_TYPES[S.quick.weather];
   return `<div class="page sub-page">
     ${subHeader('Quick Match','EXHIBITION • 15 A-SIDE')}
     <div class="content-wrap">
@@ -329,14 +375,17 @@ function quickScreen() {
           <div class="segmented">${[['amateur','ROOKIE'],['pro','PRO'],['elite','ELITE']].map(([k,l])=>`<button class="${S.quick.difficulty===k?'active':''}" data-action="quick:difficulty" data-val="${k}">${l}</button>`).join('')}</div>
         </div>
         <div class="panel-row"><div><label>VENUE</label><small>Atmosphere & conditions</small></div>
-          <select class="select" id="quick-venue">${STADIUMS.map(v=>`<option>${esc(v)}</option>`).join('')}</select>
+          <select class="select" id="quick-venue">${STADIUMS.map(v=>`<option ${v===S.quick.venue?'selected':''}>${esc(v)}</option>`).join('')}</select>
+        </div>
+        <div class="panel-row column"><div><label>WEATHER</label><small>${esc(w?.note||'Random conditions decided at kick-off')}</small></div>
+          ${weatherPicker(S.quick.weather,'quick')}
         </div>
       </section>
 
       <div class="match-preview">
         <div class="preview-stat"><span>FORM</span><div class="form-dots">${formDots('en')}</div></div>
         <div class="preview-stat"><span>HEAD TO HEAD</span><b>${headToHead(h.id,a.id)}</b></div>
-        <div class="preview-stat"><span>WEATHER</span><b>Clear • 14°C</b></div>
+        <div class="preview-stat"><span>WEATHER</span><b>${esc(w?.label||'Random')}</b></div>
       </div>
 
       <button class="btn gold full xl" data-action="quick:kickoff">${icon('whistle',20)} KICK OFF</button>
@@ -366,6 +415,15 @@ function settingsScreen() {
         ${toggleRow('Sound & crowd','Stadium audio, whistles, kicks','sound',S.settings.sound)}
         ${toggleRow('Haptics','Impact feedback on tackles','haptics',S.settings.haptics)}
         ${toggleRow('Commentary ticker','Live text commentary','commentary',S.settings.commentary)}
+      </section>
+      <section class="settings-panel">
+        <h3 class="panel-title">CEREMONIES</h3>
+        ${toggleRow('National anthems','Play ceremonial music before kick-off','anthemEnabled',S.settings.anthemEnabled)}
+        ${toggleRow('Auto-play anthems','Start the ceremony when a match loads','anthemAutoPlay',S.settings.anthemAutoPlay)}
+        <div class="panel-row column"><div class="row-between"><div><label>ANTHEM VOLUME</label><small>Applies to recordings and the original fanfare</small></div><b id="anthem-vol-val">${Math.round(S.settings.anthemVolume*100)}%</b></div>
+          <input class="range" type="range" min="0" max="100" value="${Math.round(S.settings.anthemVolume*100)}" data-setting="anthemVolume" data-scale="100">
+        </div>
+        <p class="fine-print">No commercial recordings are bundled. Each nation uses an original synthesised fanfare until a cleared recording is supplied and marked in the anthem manifest.</p>
       </section>
       <section class="settings-panel">
         <h3 class="panel-title">CONTROLS</h3>
@@ -443,8 +501,10 @@ function tournamentHub(t) {
   const user=team(t.userTeamId);
   const next=nextUserFixture(t);
   const complete=!!t.champion;
-  const groupTabs=t.groups.map((g,i)=>`<button class="${S.tournamentGroup===i?'active':''}" data-action="tour:group" data-i="${i}">POOL ${'ABCD'[i]||i+1}</button>`).join('');
+  const groupLabel=t.format==='league'?'LEAGUE':t.format==='groups'?'GROUP':t.format==='knockout'?'KNOCKOUT':'POOL';
+  const groupTabs=t.groups.map((g,i)=>`<button class="${S.tournamentGroup===i?'active':''}" data-action="tour:group" data-i="${i}">${groupLabel} ${'ABCD'[i]||i+1}</button>`).join('');
   const table=standingsFor(t,S.tournamentGroup);
+  const groupStage=['group','league'].includes(t.stage);
   return `<div class="page sub-page tournament-page">
     ${subHeader(complete?'Champions':'World Cup',complete?'TOURNAMENT COMPLETE':currentStageLabel(t).toUpperCase())}
     <div class="content-wrap">
@@ -459,13 +519,13 @@ function tournamentHub(t) {
 
       ${complete?championCard(t):next?nextMatchCard(t,next):advanceCard(t)}
 
-      ${!complete?`<section class="section">
-        <div class="section-head"><div><span class="kicker">POOL STAGE</span><h2>Standings</h2></div><span class="section-count">PTS</span></div>
-        <div class="tabs pool-tabs">${groupTabs}</div>
+      ${!complete?`${groupStage&&t.groups.length?`<section class="section">
+        <div class="section-head"><div><span class="kicker">${t.format==='league'?'LEAGUE TABLE':t.format==='groups'?'GROUP STAGE':'POOL STAGE'}</span><h2>Standings</h2></div><span class="section-count">PTS</span></div>
+        ${t.groups.length>1?`<div class="tabs pool-tabs">${groupTabs}</div>`:''}
         ${groupTable(t,S.tournamentGroup)}
-      </section>
-      ${t.stage==='group'?`<section class="section"><div class="section-head"><div><span class="kicker">ROUND ${t.groupRound}</span><h2>Fixtures</h2></div><button class="text-btn" data-action="tour:simround">SIMULATE ROUND ${icon('play',12)}</button></div>${fixtureList(t)}</section>`:''}
-      ${t.stage!=='group'?bracketView(t):''}
+      </section>`:''}
+      ${groupStage?`<section class="section"><div class="section-head"><div><span class="kicker">ROUND ${t.groupRound}</span><h2>Fixtures</h2></div><button class="text-btn" data-action="tour:simround">SIMULATE ROUND ${icon('play',12)}</button></div>${fixtureList(t)}</section>`:''}
+      ${!groupStage?bracketView(t):''}
       `:''}
 
       <div class="tourney-footer-actions">
@@ -476,15 +536,25 @@ function tournamentHub(t) {
   </div>`;
 }
 
+function fixtureLabel(t,f) {
+  if (['group','league'].includes(f.stage)) {
+    const name=t.format==='league'?'LEAGUE':t.format==='groups'?'GROUP':'POOL';
+    return `${name} ${'ABCD'[f.group]||f.group+1} • ROUND ${f.round}`;
+  }
+  return { playin:'PLAY-IN ROUND', r16:'ROUND OF 16', qf:'QUARTER-FINAL', sf:'SEMI-FINAL', third:'THIRD-PLACE PLAY-OFF', final:t.format==='worldcup'?'WORLD CUP FINAL':'FINAL' }[f.stage] || f.stage?.toUpperCase() || 'MATCH';
+}
+function fixtureShort(f) {
+  return { group:'POOL', league:'LEAGUE', playin:'PLAY-IN', r16:'R16', qf:'QF', sf:'SF', third:'3RD', final:'FINAL' }[f.stage] || 'MATCH';
+}
 function nextMatchCard(t,f) {
   const h=team(f.homeId),a=team(f.awayId);
   const userIsHome=f.homeId===t.userTeamId;
-  const label=f.stage==='group'?`POOL ${'ABCD'[f.group]||f.group+1} • ROUND ${f.round}`:{qf:'QUARTER-FINAL',sf:'SEMI-FINAL',third:'THIRD-PLACE PLAY-OFF',final:'WORLD CUP FINAL'}[f.stage];
+  const label=fixtureLabel(t,f);
   return `<section class="next-match">
     <div class="next-label"><span class="live-dot"></span> ${label} <b>${esc(f.venue)}</b></div>
     <div class="next-teams">
       <div class="next-side ${userIsHome?'mine':''}">${crest(h,58)}<h3>${esc(h.abbr)}</h3><span>${esc(h.name)}</span>${userIsHome?'<em>YOU</em>':''}</div>
-      <div class="next-v"><span>V</span><small>${f.stage==='final'?'FINAL':f.stage==='qf'?'QF':f.stage==='sf'?'SF':'POOL'}</small></div>
+      <div class="next-v"><span>V</span><small>${fixtureShort(f)}</small></div>
       <div class="next-side ${!userIsHome?'mine':''}">${crest(a,58)}<h3>${esc(a.abbr)}</h3><span>${esc(a.name)}</span>${!userIsHome?'<em>YOU</em>':''}</div>
     </div>
     <div class="next-actions"><button class="btn gold" data-action="tour:play">${icon('play',17)} PLAY MATCH</button><button class="btn ghost" data-action="tour:sim">${icon('bolt',16)} SIMULATE</button></div>
@@ -498,16 +568,18 @@ function advanceCard(t) {
 
 function groupTable(t,gi) {
   const rows=standingsFor(t,gi);
+  const qn=t.config?.qualifiersPerGroup||2;
+  const note=t.format==='league'?'League champion is decided by total points':t.format==='groups'?'Best overall record wins this format':`Top ${qn} progress to the knockout stage`;
   return `<div class="table-wrap"><table class="standings-table"><thead><tr><th>#</th><th class="left">TEAM</th><th>P</th><th>W</th><th>D</th><th>L</th><th>+/-</th><th>B</th><th>PTS</th></tr></thead><tbody>
-    ${rows.map((r,i)=>{const tm=team(r.id);return `<tr class="${r.id===t.userTeamId?'user-row':''} ${i<2?'qualify':''}">
+    ${rows.map((r,i)=>{const tm=team(r.id);const qualifies=['worldcup','mixed'].includes(t.format)&&i<qn;return `<tr class="${r.id===t.userTeamId?'user-row':''} ${qualifies?'qualify':''}">
       <td>${i+1}</td><td class="left"><span class="tbl-team">${crest(tm,26)}<b>${esc(tm.abbr)}</b><span>${esc(tm.name)}</span></span></td>
       <td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.diff>0?'+':''}${r.diff}</td><td>${r.bonus}</td><td class="pts">${r.pts}</td>
     </tr>`}).join('')}
-  </tbody></table></div><div class="table-note"><span class="q-dot"></span> Top two progress to the knockout stage</div>`;
+  </tbody></table></div><div class="table-note"><span class="q-dot"></span> ${note}</div>`;
 }
 
 function fixtureList(t) {
-  const fs=t.fixtures.filter(f=>f.stage==='group'&&f.round===t.groupRound);
+  const fs=t.fixtures.filter(f=>['group','league'].includes(f.stage)&&f.round===t.groupRound);
   return `<div class="fixture-list">${fs.map(f=>{
     const h=team(f.homeId),a=team(f.awayId);
     return `<div class="fixture-row ${f.played?'played':''} ${(f.homeId===t.userTeamId||f.awayId===t.userTeamId)?'mine':''}">
@@ -519,7 +591,7 @@ function fixtureList(t) {
 }
 
 function bracketView(t) {
-  const stages=[['qf','QUARTER-FINALS'],['sf','SEMI-FINALS'],['final','FINAL']];
+  const stages=[['playin','PLAY-IN ROUND'],['r16','ROUND OF 16'],['qf','QUARTER-FINALS'],['sf','SEMI-FINALS'],['final',t.format==='worldcup'?'WORLD CUP FINAL':'FINAL']].filter(([stage])=>t.fixtures.some(f=>f.stage===stage));
   return `<section class="section"><div class="section-head"><div><span class="kicker">KNOCKOUT STAGE</span><h2>Road to the final</h2></div></div>
     <div class="bracket">${stages.map(([stage,label])=>{
       const fs=t.fixtures.filter(f=>f.stage===stage);
@@ -749,17 +821,39 @@ function startArchiveTeamMatch(id) {
   });
 }
 
+const CUSTOM_FORMATS = [
+  ['worldcup','Pools + KO','Groups, then a seeded knockout bracket.'],
+  ['league','League','One table. Every nation plays every other.'],
+  ['groups','Groups','Group stages only. Best overall record wins.'],
+  ['knockout','Knockout','Straight elimination. No group stage.'],
+  ['mixed','Mixed','Groups with custom qualifier counts, then knockouts.']
+];
+
 function customScreen() {
   const c=S.custom;
   const selected=new Set(c.teams);
+  const format=CUSTOM_FORMATS.find(f=>f[0]===(c.format||'worldcup'))||CUSTOM_FORMATS[0];
+  const groupOptions=[1,2,4,8].filter(n=>n<=c.size);
+  const needGroups=['worldcup','groups','mixed'].includes(c.format);
   return `<div class="page sub-page">
     ${subHeader('Custom Cup','BUILD YOUR OWN TOURNAMENT')}
     <div class="content-wrap">
       <section class="custom-head"><span class="kicker gold">TOURNAMENT CREATOR</span><h1>MAKE IT<br>YOURS</h1>
         <label class="field-label">TOURNAMENT NAME</label><input class="text-input" id="custom-name" value="${esc(c.name)}" maxlength="34" />
       </section>
+      <section class="creator-entry">
+        <div><span class="kicker gold">CUSTOM NATIONS</span><h3>Build your own teams</h3><p>Flags, kits, badges, squads, tactics and captains are saved with your game.</p></div>
+        <button class="btn glass sm" data-action="nav:teams">${icon('shield',16)} TEAM CREATOR</button>
+      </section>
       <div class="settings-panel">
-        <div class="panel-row"><div><label>FORMAT</label><small>Number of nations</small></div><div class="segmented"><button class="${c.size===8?'active':''}" data-action="custom:size" data-val="8">8 TEAMS</button><button class="${c.size===16?'active':''}" data-action="custom:size" data-val="16">16 TEAMS</button></div></div>
+        <div class="panel-row column"><div><label>FORMAT</label><small>${esc(format[2])}</small></div>
+          <div class="format-grid">${CUSTOM_FORMATS.map(([id,label])=>`<button class="format-chip ${c.format===id?'active':''}" data-action="custom:format" data-val="${id}">${label}</button>`).join('')}</div>
+        </div>
+        <div class="panel-row"><div><label>NUMBER OF NATIONS</label><small>4 to 24 teams</small></div><div class="segmented wrap">${[4,8,12,16,20,24].map(n=>`<button class="${c.size===n?'active':''}" data-action="custom:size" data-val="${n}">${n}</button>`).join('')}</div></div>
+        ${needGroups?`<div class="panel-row"><div><label>GROUPS / POOLS</label><small>How the draw is divided</small></div><div class="segmented wrap">${groupOptions.map(n=>`<button class="${c.groupsCount===n?'active':''}" data-action="custom:groups" data-val="${n}">${n===1?'ONE':n}</button>`).join('')}</div></div>
+        <div class="panel-row"><div><label>QUALIFIERS</label><small>Per group, into the knockouts</small></div><div class="segmented wrap">${[1,2,3,4].map(n=>`<button class="${c.qualifiers===n?'active':''}" data-action="custom:qualifiers" data-val="${n}">${n}</button>`).join('')}</div></div>`:''}
+        <div class="panel-row"><div><label>LEGS</label><small>Home and away fixtures</small></div><div class="segmented"><button class="${c.legs===1?'active':''}" data-action="custom:legs" data-val="1">SINGLE</button><button class="${c.legs===2?'active':''}" data-action="custom:legs" data-val="2">DOUBLE</button></div></div>
+        <div class="panel-row column"><div><label>WEATHER</label><small>Conditions apply to every match</small></div>${weatherPicker(c.weather,'custom')}</div>
         <div class="panel-row"><div><label>SELECTED</label><small>Tap nations below to add or remove</small></div><b class="big-count">${c.teams.length} / ${c.size}</b></div>
       </div>
       <div class="team-grid custom-grid">${TEAMS.map(t=>`<button class="team-tile ${selected.has(t.id)?'selected':''} ${c.userTeam===t.id?'user-team':''}" data-action="custom:team" data-team="${t.id}">
@@ -767,9 +861,277 @@ function customScreen() {
       </button>`).join('')}</div>
       <div class="custom-user-pick"><span>YOUR NATION</span><div>${crest(team(c.userTeam),38)}<b>${esc(team(c.userTeam).name)}</b></div><button class="text-btn" data-action="custom:user">CHANGE ${icon('swap',12)}</button></div>
       <button class="btn gold full xl" data-action="custom:create" ${c.teams.length!==c.size?'disabled':''}>${icon('trophy',19)} CREATE TOURNAMENT</button>
-      <p class="fine-print">${c.size===8?'Two pools of four, top two into the semi-finals.':'Four pools of four, top two into the quarter-finals.'}</p>
+      <p class="fine-print">${esc(format[2])} ${needGroups?`${c.groupsCount} group(s), ${c.qualifiers} qualifier(s) each.`:''}</p>
     </div>
   </div>`;
+}
+
+function teamsScreen() {
+  return `<div class="page sub-page">
+    ${subHeader('Team Creator','EDITABLE NATIONS')}
+    <div class="content-wrap">
+      <section class="creator-head"><span class="kicker gold">SQUAD BUILDER</span><h1>YOUR<br>NATIONS</h1>
+        <p>Create national sides with your own flag, badge, kit, 23-player squad and game plan. Every edit is saved.</p>
+        <button class="btn gold" data-action="team:create">${icon('shield',18)} CREATE A NATION</button>
+      </section>
+      ${S.customTeams.length?`<div class="custom-team-list">${S.customTeams.map(raw=>{
+        const t=team(raw.id||raw); if(!t?.custom) return '';
+        return `<div class="custom-team-card">
+          <div class="ctc-top">${crest(t,58)}<div><h3>${esc(t.name)}</h3><p>${esc(t.nick)} • ${esc(t.abbr)}</p><span class="rating-pill"><b>${squadRating(t.id)}</b> OVR</span></div><span class="ctc-flag">${esc(t.flag)}</span></div>
+          <div class="ctc-kit"><i style="background:${t.colors[0]}"></i><i style="background:${t.colors[1]}"></i><i style="background:${t.colors[2]}"></i><span>${esc(t.styleLabel)}</span></div>
+          <div class="ctc-actions"><button class="btn glass sm" data-action="team:edit" data-team="${t.id}">EDIT</button><button class="btn ghost sm" data-action="team:duplicate" data-team="${t.id}">COPY</button><button class="icon-btn danger" data-action="team:delete" data-team="${t.id}" aria-label="Delete">${icon('close',16)}</button></div>
+        </div>`;
+      }).join('')}</div>`:emptyState('No custom nations yet','Build a team from the badge up, then use it in quick matches and custom competitions.','team:create','CREATE A NATION')}
+      <p class="fine-print">Custom teams are stored on this device under ${SAVE_KEY}. Edit a squad any time — changes apply to new matches.</p>
+    </div>
+  </div>`;
+}
+
+function teamEditorScreen() {
+  const id=S.teamEditor?.id;
+  const t=team(id);
+  if (!t?.custom) return `<div class="page sub-page">${subHeader('Team Editor','CUSTOM NATION')}<div class="content-wrap">${emptyState('Team not found','This custom nation was removed.','nav:teams','BACK TO TEAMS')}</div></div>`;
+  const tabs=[['identity','Identity'],['squad','Squad'],['tactics','Tactics']];
+  return `<div class="page sub-page">
+    ${subHeader('Team Editor',t.name.toUpperCase())}
+    <div class="content-wrap">
+      <section class="editor-hero">${crest(t,88)}<div><span class="kicker gold">${esc(t.flag)} CUSTOM NATION</span><h2>${esc(t.name)}</h2><p>${esc(t.nick)} • ${squadRating(t.id)} OVR • ${esc(t.styleLabel)}</p></div></section>
+      <div class="segmented editor-tabs">${tabs.map(([k,l])=>`<button class="${S.teamEditor.tab===k?'active':''}" data-action="team:tab" data-val="${k}">${l}</button>`).join('')}</div>
+      ${S.teamEditor.tab==='squad'?squadTab(t):S.teamEditor.tab==='tactics'?tacticsTab(t):identityTab(t)}
+    </div>
+  </div>`;
+}
+
+function identityTab(t) {
+  return `<section class="settings-panel editor-panel">
+    <h3 class="panel-title">IDENTITY</h3>
+    <div class="form-grid">
+      <label class="field"><span>TEAM NAME</span><input class="text-input" id="ct-name" maxlength="34" value="${esc(t.name)}" /></label>
+      <label class="field"><span>NICKNAME</span><input class="text-input" id="ct-nick" maxlength="34" value="${esc(t.nick)}" /></label>
+      <label class="field"><span>ABBREVIATION</span><input class="text-input" id="ct-abbr" maxlength="3" value="${esc(t.abbr)}" /></label>
+      <label class="field"><span>FLAG / EMOJI</span><input class="text-input" id="ct-flag" maxlength="8" value="${esc(t.flag)}" /></label>
+      <label class="field wide"><span>HOME VENUE</span><input class="text-input" id="ct-venue" maxlength="48" value="${esc(t.venue)}" /></label>
+    </div>
+    <h3 class="panel-title">KIT & BADGE</h3>
+    <div class="kit-editor">
+      ${['Primary','Secondary','Trim'].map((label,i)=>`<label class="field"><span>${label}</span><input type="color" id="ct-color-${i}" value="${esc(t.colors[i])}" /></label>`).join('')}
+      <label class="field"><span>KIT PATTERN</span><select class="select" id="ct-kit">${KIT_PATTERNS.map(p=>`<option ${p===t.kitPattern?'selected':''}>${p}</option>`).join('')}</select></label>
+      <label class="field"><span>BADGE SHAPE</span><select class="select" id="ct-badge">${BADGE_STYLES.map(p=>`<option ${p===t.badge?'selected':''}>${p}</option>`).join('')}</select></label>
+    </div>
+    <h3 class="panel-title">STYLE & FORMATION</h3>
+    <div class="form-grid">
+      <label class="field"><span>PLAY STYLE</span><select class="select" id="ct-style">${Object.entries(STYLE_LABEL).map(([k,l])=>`<option value="${k}" ${k===t.style?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
+      <label class="field"><span>FORMATION</span><select class="select" id="ct-formation">${FORMATIONS.map(f=>`<option value="${f.id}" ${f.id===t.formation?'selected':''}>${esc(f.label)}</option>`).join('')}</select></label>
+      <label class="field wide"><span>ANTHEM</span><select class="select" id="ct-anthem"><option value="default" ${t.anthemKey==='default'?'selected':''}>Original ceremonial fanfare</option>${Object.values(ANTHEMS).map(a=>`<option value="${a.teamId}" ${a.teamId===t.anthemKey?'selected':''}>${esc(a.shortTitle)}</option>`).join('')}</select></label>
+    </div>
+    <button class="btn gold full" data-action="team:saveIdentity">${icon('shield',17)} SAVE IDENTITY</button>
+  </section>`;
+}
+
+function squadTab(t) {
+  const starters=t.roster.filter(p=>p.starter).sort((a,b)=>a.number-b.number);
+  const bench=t.roster.filter(p=>p.bench).sort((a,b)=>a.number-b.number);
+  const row=p=>`<button class="squad-row ${p.id===t.captain?'captain':''}" data-action="team:player" data-team="${t.id}" data-player="${p.id}">
+    <b>${p.number}</b><span><strong>${esc(p.name)}</strong><small>${esc(p.posName)} • ${p.age}yo</small></span>
+    <em>${p.overall}</em>${p.id===t.captain?'<i>C</i>':''}
+  </button>`;
+  return `<section class="settings-panel editor-panel">
+    <div class="panel-row"><div><label>STARTING XV</label><small>Tap a player to edit attributes and appearance</small></div><b class="big-count">${squadRating(t.id)} OVR</b></div>
+    <div class="squad-list">${starters.map(row).join('')}</div>
+    <h3 class="panel-title">REPLACEMENTS</h3>
+    <div class="squad-list bench">${bench.map(row).join('')}</div>
+    <button class="btn glass full" data-action="team:resetSquad" data-team="${t.id}">REGENERATE SQUAD</button>
+  </section>`;
+}
+
+function tacticsTab(t) {
+  const tac=t.tactics;
+  const slider=key=>`<div class="tactic-row"><div class="row-between"><label>${esc(key.replace(/[A-Z]/g,m=>' '+m.toLowerCase()))}</label><b id="tac-${key}-val">${tac[key]}</b></div><input class="range" type="range" min="0" max="100" value="${tac[key]}" data-tactic="${key}" data-team="${t.id}" /></div>`;
+  return `<section class="settings-panel editor-panel">
+    <h3 class="panel-title">GAME PLAN</h3>
+    <div class="panel-row"><div><label>SHAPE</label><small>Structure in open play</small></div><select class="select" data-tactic-select="shape" data-team="${t.id}">${['balanced','narrow','wide','flat','deep'].map(v=>`<option ${v===tac.shape?'selected':''}>${v}</option>`).join('')}</select></div>
+    <div class="panel-row"><div><label>DEFENSIVE LINE</label><small>Line speed and depth</small></div><select class="select" data-tactic-select="line" data-team="${t.id}">${['mixed','flat','deep'].map(v=>`<option ${v===tac.line?'selected':''}>${v}</option>`).join('')}</select></div>
+    <div class="panel-row"><div><label>KICKING MODE</label><small>Default kick choice</small></div><select class="select" data-tactic-select="kickMode" data-team="${t.id}">${['balanced','territory','attack'].map(v=>`<option ${v===tac.kickMode?'selected':''}>${v}</option>`).join('')}</select></div>
+    <div class="tactic-grid">${TACTIC_KEYS.map(slider).join('')}</div>
+    <div class="panel-row"><div><label>CAPTAIN</label><small>On-field leader</small></div><b>${esc(t.roster.find(p=>p.id===t.captain)?.name||'—')}</b></div>
+    <p class="fine-print">Tactics feed directly into the match engine. Formation choice also sets attacking shape and line speed.</p>
+  </section>`;
+}
+
+function playerEditorModal(teamId, playerId) {
+  const t=team(teamId), p=t.roster.find(x=>x.id===playerId);
+  if(!p) return '';
+  return `${modalHead(`${p.number}. ${esc(p.name)}`,'PLAYER EDITOR')}
+    <div class="modal-body">
+      <div class="form-grid">
+        <label class="field wide"><span>NAME</span><input class="text-input" id="pl-name" value="${esc(p.name)}" maxlength="34" /></label>
+        <label class="field"><span>AGE</span><input class="text-input" type="number" id="pl-age" min="18" max="42" value="${p.age}" /></label>
+        <label class="field"><span>HEIGHT (CM)</span><input class="text-input" type="number" id="pl-height" min="165" max="210" value="${p.height}" /></label>
+        <label class="field"><span>WEIGHT (KG)</span><input class="text-input" type="number" id="pl-weight" min="70" max="145" value="${p.weight}" /></label>
+        <label class="field"><span>POTENTIAL</span><input class="text-input" type="number" id="pl-potential" min="35" max="99" value="${p.potential}" /></label>
+        <label class="field"><span>FITNESS</span><input class="text-input" type="number" id="pl-fitness" min="1" max="100" value="${p.fitness}" /></label>
+        <label class="field"><span>FORM</span><input class="text-input" type="number" id="pl-form" min="1" max="99" value="${p.form}" /></label>
+      </div>
+      <h3 class="panel-title">ATTRIBUTES</h3>
+      <div class="attr-grid">${ATTRS.map(a=>`<label class="attr-field"><span>${esc(ATTR_LABELS[a]||a)}</span><input type="number" min="35" max="99" value="${p[a]}" data-attr="${a}" /><b>${p[a]}</b></label>`).join('')}</div>
+      <div class="modal-actions">
+        <button class="btn ghost" data-action="team:captain" data-team="${t.id}" data-player="${p.id}">${p.id===t.captain?'CAPTAIN ✓':'SET CAPTAIN'}</button>
+        <button class="btn gold" data-action="team:playerSave" data-team="${t.id}" data-player="${p.id}">SAVE PLAYER</button>
+      </div>
+    </div>`;
+}
+
+function commitCustomTeam(raw, rerender=false) {
+  const t=refreshCustomTeam(raw);
+  const snapshot=JSON.parse(JSON.stringify(t));
+  const idx=S.customTeams.findIndex(x=>(x.id||x)===t.id);
+  if (idx>=0) S.customTeams[idx]=snapshot; else S.customTeams.push(snapshot);
+  for (const key of [...squadCache.keys()]) if (key.startsWith(`${t.id}:`)) squadCache.delete(key);
+  save();
+  if (rerender) render();
+  return t;
+}
+
+function saveCustomIdentity() {
+  const t=team(S.teamEditor?.id);
+  if(!t?.custom) return;
+  t.name=$('#ct-name')?.value||t.name;
+  t.nick=$('#ct-nick')?.value||t.nick;
+  t.abbr=($('#ct-abbr')?.value||t.abbr).toUpperCase();
+  t.flag=$('#ct-flag')?.value||t.flag;
+  t.venue=$('#ct-venue')?.value||t.venue;
+  for(let i=0;i<3;i++) t.colors[i]=$(`#ct-color-${i}`)?.value||t.colors[i];
+  t.kitPattern=$('#ct-kit')?.value||t.kitPattern;
+  t.badge=$('#ct-badge')?.value||t.badge;
+  t.style=$('#ct-style')?.value||t.style;
+  t.anthemKey=$('#ct-anthem')?.value||t.anthemKey;
+  const formation=$('#ct-formation')?.value||t.formation;
+  if(formation!==t.formation){
+    t.formation=formation;
+    const f=FORMATIONS.find(x=>x.id===formation);
+    if(f){t.tactics.shape=f.shape;t.tactics.line=f.line;}
+  }
+  commitCustomTeam(t,true);
+  toast('Team identity saved.','success');
+}
+
+function saveCustomPlayer(teamId, playerId) {
+  const t=team(teamId), p=t?.roster?.find(x=>x.id===playerId);
+  if(!p) return;
+  p.name=$('#pl-name')?.value||p.name;
+  p.age=clamp(Number($('#pl-age')?.value)||p.age,18,42);
+  p.height=clamp(Number($('#pl-height')?.value)||p.height,165,210);
+  p.weight=clamp(Number($('#pl-weight')?.value)||p.weight,70,145);
+  p.potential=clamp(Number($('#pl-potential')?.value)||p.potential,35,99);
+  p.fitness=clamp(Number($('#pl-fitness')?.value)||p.fitness,1,100);
+  p.form=clamp(Number($('#pl-form')?.value)||p.form,1,99);
+  $$('[data-attr]').forEach(input=>{
+    const key=input.dataset.attr;
+    if(ATTRS.includes(key)) p[key]=clamp(Number(input.value)||35,35,99);
+  });
+  commitCustomTeam(t);
+  closeModal();
+  render();
+  toast('Player saved.','success');
+}
+
+function setWeatherChoice(context, value) {
+  if(!WEATHER_CHOICES.includes(value)) return;
+  if(context==='custom') S.custom.weather=value;
+  else S.quick.weather=value;
+  save();render();
+}
+
+function editCustomTeam(id) {
+  if(!team(id)?.custom) return;
+  S.teamEditor={id,tab:'identity',playerId:null};
+  S.route='teamEditor';
+  render();
+}
+function createNewCustomTeam(fromPicker=false) {
+  const t=createCustomTeam(78);
+  commitCustomTeam(t);
+  if(fromPicker&&S.pickContext){
+    const ctx=S.pickContext;
+    if(ctx.mode==='quick') S.quick[ctx.side||'home']=t.id;
+    else if(ctx.mode==='tournament') S.tournamentTeam=t.id;
+    else if(ctx.mode==='career') S.careerTeam=t.id;
+    else if(ctx.mode==='custom'){
+      if(S.custom.teams.length>=S.custom.size) toast('Tournament is full — remove a nation to use this team.','warn');
+      else S.custom.teams.push(t.id);
+      S.custom.userTeam=t.id;
+    }
+    save();
+  }
+  S.teamEditor={id:t.id,tab:'identity',playerId:null};
+  S.route='teamEditor';
+  closeModal();
+  render();
+  toast('New nation created. Edit its identity and squad.','success');
+}
+function duplicateTeam(id) {
+  const t=team(id);
+  if(!t?.custom) return;
+  const copy=duplicateCustomTeam(t,t.name.replace(/\s*\(Copy\)\s*$/,''));
+  commitCustomTeam(copy);
+  S.teamEditor={id:copy.id,tab:'identity',playerId:null};
+  S.route='teamEditor';render();
+  toast(`${copy.name} created.`,'success');
+}
+function confirmDeleteCustomTeam(id) {
+  const t=team(id);
+  if(!t?.custom) return;
+  showModal(`${modalHead(`Delete ${esc(t.name)}?`,'THIS CANNOT BE UNDONE')}
+    <p class="modal-copy">The nation, its squad and all saved tactics will be removed from this device. Existing match results keep their recorded scores.</p>
+    <div class="modal-buttons"><button class="btn ghost" data-action="modal:close">CANCEL</button><button class="btn danger" data-action="team:deleteDo" data-team="${t.id}">DELETE TEAM</button></div>`,'wide');
+}
+function deleteCustomTeam(id) {
+  const t=team(id);
+  if(!t?.custom) return;
+  S.customTeams=S.customTeams.filter(x=>(x.id||x)!==id);
+  if(S.selectedTeam===id)S.selectedTeam='en';
+  if(S.tournamentTeam===id)S.tournamentTeam='en';
+  if(S.quick.home===id)S.quick.home='en';
+  if(S.quick.away===id)S.quick.away='nz';
+  if(S.custom.userTeam===id)S.custom.userTeam='en';
+  S.custom.teams=S.custom.teams.filter(x=>x!==id);
+  if(S.custom.teams.length<S.custom.size){
+    for(const candidate of TEAMS){
+      if(S.custom.teams.length>=S.custom.size)break;
+      if(candidate.custom||S.custom.teams.includes(candidate.id))continue;
+      S.custom.teams.push(candidate.id);
+    }
+  }
+  unregisterCustomTeam(id);
+  for(const key of [...squadCache.keys()]) if(key.startsWith(`${id}:`)) squadCache.delete(key);
+  if(S.teamEditor?.id===id){S.teamEditor=null;S.route='teams';}
+  save();closeModal();render();
+  toast(`${t.name} deleted.`,'info');
+}
+function setCustomCaptain(teamId, playerId) {
+  const t=team(teamId);
+  if(!t?.custom||!t.roster.some(p=>p.id===playerId)) return;
+  t.captain=playerId;
+  commitCustomTeam(t);
+  closeModal();render();
+  toast('Captain updated.','success');
+}
+function resetCustomSquad(id) {
+  const t=team(id);
+  if(!t?.custom) return;
+  showModal(`${modalHead('Regenerate squad?','SQUAD BUILDER')}
+    <p class="modal-copy">This replaces all 23 players and their attributes with a fresh squad. Your team identity, kit and tactics are kept.</p>
+    <div class="modal-buttons"><button class="btn ghost" data-action="modal:close">CANCEL</button><button class="btn gold" data-action="team:resetConfirm" data-team="${t.id}">REGENERATE</button></div>`,'wide');
+}
+function regenerateCustomSquad(id) {
+  const t=team(id);
+  if(!t?.custom) return;
+  const fresh=createCustomTeam(t.rating);
+  t.roster=fresh.roster.map(p=>({...p,id:`${t.id}-${p.number}`,teamId:t.id}));
+  t.captain=t.roster.find(p=>p.number===9)?.id||t.roster[0].id;
+  commitCustomTeam(t,true);
+  closeModal();
+  toast('Squad regenerated.','success');
 }
 
 function trainingScreen() {
@@ -917,11 +1279,12 @@ function careerTraining(c) {
 /* ---------------- Shared team picker ---------------- */
 function openTeamPicker(mode, side='') {
   S.pickContext={mode,side};
-  const list=[...TEAMS].sort((a,b)=>b.rating-a.rating);
+  const list=[...TEAMS].sort((a,b)=>(b.custom?1:0)-(a.custom?1:0)||squadRating(b.id)-squadRating(a.id));
   showModal(`${modalHead('Choose a nation','SELECT TEAM')}
-    <div class="team-picker-grid">${list.map(t=>`<button class="team-pick-row" data-action="team:choose" data-team="${t.id}">
-      ${crest(t,40)}<span><b>${esc(t.name)}</b><small>${esc(t.nick)} • ${esc(t.styleLabel)}</small></span><span class="tp-rating">${t.rating}</span>
-    </button>`).join('')}</div>`, 'tall');
+    <div class="team-picker-grid">${list.map(t=>`<button class="team-pick-row ${t.custom?'custom':''}" data-action="team:choose" data-team="${t.id}">
+      ${crest(t,40)}<span><b>${esc(t.name)}</b><small>${esc(t.nick)} • ${esc(t.styleLabel)}</small></span><span class="tp-rating">${squadRating(t.id)}</span>
+    </button>`).join('')}</div>
+    <div class="modal-actions"><button class="btn glass full" data-action="team:createFromPicker">${icon('shield',16)} CREATE A CUSTOM NATION</button></div>`, 'tall');
 }
 function inspectTeam(teamId) {
   const t=team(teamId), sq=squadFor(teamId);
@@ -940,22 +1303,27 @@ function inspectTeam(teamId) {
 function launchMatch(meta) {
   const homeSquad = meta.homeSquad || squadFor(meta.homeTeam.id, meta.seed||0);
   const awaySquad = meta.awaySquad || squadFor(meta.awayTeam.id, (meta.seed||0)+7);
+  const homeTactics = meta.homeTactics || (meta.homeTeam.custom ? meta.homeTeam.tactics : null);
+  const awayTactics = meta.awayTactics || (meta.awayTeam.custom ? meta.awayTeam.tactics : null);
   const game = new RugbyGame({
-    home:{ team:meta.homeTeam, squad:homeSquad, lineupIds:meta.homeLineup, tactics:meta.homeTactics },
-    away:{ team:meta.awayTeam, squad:awaySquad, lineupIds:meta.awayLineup, tactics:meta.awayTactics },
+    home:{ team:meta.homeTeam, squad:homeSquad, lineupIds:meta.homeLineup, tactics:homeTactics },
+    away:{ team:meta.awayTeam, squad:awaySquad, lineupIds:meta.awayLineup, tactics:awayTactics },
     userTeam:meta.userTeam||'home', halfSeconds:meta.halfSeconds||180,
     mode:meta.mode||'quick', trainingDrill:meta.trainingDrill||null,
     venue:meta.venue||meta.homeTeam.venue, difficulty:meta.difficulty||S.settings.difficulty,
-    weather:meta.weather||'clear', year:meta.year||null, onEvent:handleGameEvent
+    weather:meta.weather||'random', weatherSeed:meta.weatherSeed, year:meta.year||null, onEvent:handleGameEvent
   });
   game.paused = true;
   S.game=game; window.__game=game;
   S.matchMeta=meta;
   S.matchResult=null;
   S.matchView='prematch';
+  S.anthem={active:false,status:'idle',queue:[],index:0,currentSide:null,token:0,mode:null};
   S.route='match';
   window.scrollTo({top:0,behavior:'instant'});
   render();
+  S.audio.setAnthemVolume(S.settings.anthemVolume);
+  if (S.settings.anthemEnabled && S.settings.anthemAutoPlay) uiTimeout(()=>startAnthemCeremony('auto'),250);
 }
 
 function matchScreen() {
@@ -986,15 +1354,29 @@ function matchScreen() {
         <div class="prematch-stadium"></div>
         <div class="prematch-inner">
           <span class="kicker gold">${meta.mode==='tournament'?'RUGBY WORLD CUP 26':meta.mode==='career'?'INTERNATIONAL SERIES':'WORLD RUGBY'}</span>
-          <div class="prematch-teams">
-            <div>${crest(h,82)}<h2>${esc(h.name)}</h2><span>${esc(h.nick)}</span></div>
+          <div class="prematch-teams ceremony-teams">
+            <div class="ceremony-team ${S.anthem.currentSide==='home'?'active':''}" data-side="home">
+              <span class="ceremony-flag">${esc(h.flag||'🏉')}</span>${crest(h,76)}<h2>${esc(h.name)}</h2><span>${esc(h.nick)}</span>
+              <small>${esc(resolveAnthem(h).shortTitle||h.styleLabel)}</small>
+              <div class="ceremony-lineup">${g.home.lineup.slice(0,15).sort((x,y)=>x.number-y.number).map(p=>`<span><b>${p.number}</b>${esc(p.name.split(' ').at(-1))}</span>`).join('')}</div>
+            </div>
             <div class="prematch-v"><span>V</span><small>${esc(meta.stageLabel||'MATCHDAY')}</small></div>
-            <div>${crest(a,82)}<h2>${esc(a.name)}</h2><span>${esc(a.nick)}</span></div>
+            <div class="ceremony-team ${S.anthem.currentSide==='away'?'active':''}" data-side="away">
+              <span class="ceremony-flag">${esc(a.flag||'🏉')}</span>${crest(a,76)}<h2>${esc(a.name)}</h2><span>${esc(a.nick)}</span>
+              <small>${esc(resolveAnthem(a).shortTitle||a.styleLabel)}</small>
+              <div class="ceremony-lineup">${g.away.lineup.slice(0,15).sort((x,y)=>x.number-y.number).map(p=>`<span><b>${p.number}</b>${esc(p.name.split(' ').at(-1))}</span>`).join('')}</div>
+            </div>
           </div>
-          <p class="prematch-venue">${icon('globe',14)} ${esc(meta.venue||'World Rugby Stadium')} <span>•</span> ${icon('whistle',13)} ${meta.mode==='tournament'?'Cup match':meta.mode==='career'?'Series match':'International'}</p>
+          <div class="ceremony-status" id="ceremony-status">${ceremonyStatusText()}</div>
+          <p class="prematch-venue">${icon('globe',14)} ${esc(meta.venue||'World Rugby Stadium')} <span>•</span> ${weatherIcon(g.weather?.icon)} ${esc(weatherLabel(g.weather))}</p>
           <div class="prematch-actions">
             <button class="btn glass" data-action="match:anthem">${icon('whistle',17)} PLAY ANTHEMS</button>
             <button class="btn gold" data-action="match:kickoff">${icon('play',18)} KICK OFF</button>
+          </div>
+          <div class="ceremony-actions">
+            <button class="btn ghost sm" data-action="match:anthemStop">STOP</button>
+            <button class="btn ghost sm" data-action="match:anthemSkip">SKIP</button>
+            <button class="btn ghost sm" data-action="match:anthemReplay">REPLAY</button>
           </div>
           <small class="prematch-note">${meta.trainingDrill?'Drill mode — no clock. Complete the objective.':'15-a-side • Full laws • 23-player squads'}</small>
         </div>
@@ -1209,15 +1591,15 @@ function handleGameEvent(type,data={}) {
     case 'interception': S.audio.cheer(.5); toast(`Interception! ${data.player}`,'success'); break;
     case 'advantage': toast(`Advantage: ${data.reason}`,'info'); break;
     case 'goalRequest':
-      if(data.user) setTimeout(()=>showGoalOverlay(data),220);
+      if(data.user) uiTimeout(()=>showGoalOverlay(data),220);
       break;
     case 'penalty':
-      if(g.pendingPenalty?.side===g.userTeam) setTimeout(()=>showPenaltyOverlay(g.pendingPenalty),240);
+      if(g.pendingPenalty?.side===g.userTeam) uiTimeout(()=>showPenaltyOverlay(g.pendingPenalty),240);
       break;
     case 'kickMenu': showKickOverlay(data); break;
-    case 'halftime': setTimeout(()=>showHalftime(data),500); break;
-    case 'fulltime': S.matchResult=data; setTimeout(()=>showFulltime(data),600); break;
-    case 'trainingComplete': S.matchResult={training:true,...data}; setTimeout(()=>showTrainingComplete(data),500); break;
+    case 'halftime': uiTimeout(()=>showHalftime(data),500); break;
+    case 'fulltime': S.matchResult=data; uiTimeout(()=>showFulltime(data),600); break;
+    case 'trainingComplete': S.matchResult={training:true,...data}; uiTimeout(()=>showTrainingComplete(data),500); break;
     case 'goalResult':
       S.audio.cheer(data.result==='good'?.6:.2);
       closeGoalOverlay();
@@ -1382,11 +1764,16 @@ function showMatchTactics() {
 function stopMatch() {
   cancelAnimationFrame(S.raf);
   cancelAnimationFrame(S.goalRaf);
+  clearUiTimers();
+  stopAnthemCeremony('',true);
+  S.game?.destroy?.();
   S.matchResize?.disconnect();
+  S.matchResize=null;
   S.renderer?.dispose?.();
   S.renderer=null;
   S.game=null;
   S.matchMeta=null;
+  S.matchResult=null;
   S.matchView='prematch';
   S.audio.crowd(false);
   S.lastFrame=0;
@@ -1460,9 +1847,11 @@ function showSwapOptions(playerId) {
 }
 
 function showDraw(t) {
-  showModal(`${modalHead('Pool draw complete',esc(t.name))}
-    <div class="draw-grid">${t.groups.map((g,i)=>`<div class="draw-group"><h4>POOL ${'ABCD'[i]||i+1}</h4>${g.map(id=>`<div class="draw-team ${id===t.userTeamId?'mine':''}">${crest(team(id),26)}<b>${team(id).abbr}</b><span>${esc(team(id).name)}</span></div>`).join('')}</div>`).join('')}</div>
-    <p class="draw-note">Top two from each pool qualify for the knockout stage. Your fixtures are saved automatically.</p>
+  const label=t.format==='league'?'LEAGUE':t.format==='groups'?'GROUP':'POOL';
+  const note=t.format==='league'?'Every nation plays every other. Highest points total takes the title.':t.format==='groups'?'Best overall record after the group matches takes the title.':t.format==='knockout'?'Straight knockout. Lose once and you are out.':`Top ${t.config?.qualifiersPerGroup||2} from each pool reach the knockouts. Your fixtures are saved automatically.`;
+  showModal(`${modalHead(t.format==='knockout'?'Knockout draw complete':'Draw complete',esc(t.name))}
+    <div class="draw-grid">${t.groups.map((g,i)=>`<div class="draw-group"><h4>${label} ${'ABCD'[i]||i+1}</h4>${g.map(id=>`<div class="draw-team ${id===t.userTeamId?'mine':''}">${crest(team(id),26)}<b>${team(id).abbr}</b><span>${esc(team(id).name)}</span></div>`).join('')}</div>`).join('')}${!t.groups.length?`<div class="draw-group"><h4>${currentStageLabel(t).toUpperCase()}</h4>${t.fixtures.slice(0,8).map(f=>`<div class="draw-team ${f.homeId===t.userTeamId||f.awayId===t.userTeamId?'mine':''}"><b>${team(f.homeId).abbr}</b><span>v ${esc(team(f.awayId).name)}</span></div>`).join('')}</div>`:''}</div>
+    <p class="draw-note">${esc(note)}</p>
     <button class="btn gold full" data-action="modal:close">${icon('trophy',17)} BEGIN TOURNAMENT</button>`, 'wide');
 }
 
@@ -1474,6 +1863,8 @@ function handleAction(action,data,el,ev) {
     case 'nav:career': go('career'); break;
     case 'nav:historical': go('historical'); break;
     case 'nav:custom': go('custom'); break;
+    case 'nav:teams': go('teams'); break;
+    case 'nav:teamEditor': go('teamEditor'); break;
     case 'nav:training': go('training'); break;
     case 'nav:settings': go('settings'); break;
     case 'modal:close': closeModal(); break;
@@ -1482,9 +1873,23 @@ function handleAction(action,data,el,ev) {
     case 'quick:half': S.quick.half=Number(data.val);save();render();break;
     case 'quick:difficulty': S.quick.difficulty=data.val;save();render();break;
     case 'quick:kickoff': startQuickMatch(); break;
+    case 'weather:set': setWeatherChoice(data.context,data.val); break;
     case 'team:pick': openTeamPicker(data.mode||'quick',data.side||''); break;
     case 'team:choose': chooseTeam(data.team); break;
     case 'team:inspect': inspectTeam(data.team); break;
+    case 'team:create': createNewCustomTeam(); break;
+    case 'team:createFromPicker': createNewCustomTeam(true); break;
+    case 'team:edit': editCustomTeam(data.team); break;
+    case 'team:duplicate': duplicateTeam(data.team); break;
+    case 'team:delete': confirmDeleteCustomTeam(data.team); break;
+    case 'team:deleteDo': deleteCustomTeam(data.team); break;
+    case 'team:tab': if(S.teamEditor){S.teamEditor.tab=data.val;render();} break;
+    case 'team:saveIdentity': saveCustomIdentity(); break;
+    case 'team:resetSquad': resetCustomSquad(data.team); break;
+    case 'team:resetConfirm': regenerateCustomSquad(data.team); break;
+    case 'team:player': showModal(playerEditorModal(data.team,data.player),'tall'); break;
+    case 'team:playerSave': saveCustomPlayer(data.team,data.player); break;
+    case 'team:captain': setCustomCaptain(data.team,data.player); break;
     case 'tour:start': startTournament(); break;
     case 'tour:group': S.tournamentGroup=Number(data.i);render();break;
     case 'tour:play': playTournamentMatch(); break;
@@ -1506,6 +1911,10 @@ function handleAction(action,data,el,ev) {
     case 'hist:playEra': startEraMatch(data.era); break;
     case 'hist:playPlayer': startArchivePlayerMatch(data.player); break;
     case 'hist:playTeam': startArchiveTeamMatch(data.team); break;
+    case 'custom:format': S.custom.format=data.val;save();render();break;
+    case 'custom:groups': S.custom.groupsCount=Number(data.val);save();render();break;
+    case 'custom:qualifiers': S.custom.qualifiers=Number(data.val);save();render();break;
+    case 'custom:legs': S.custom.legs=Number(data.val);save();render();break;
     case 'custom:size': setCustomSize(Number(data.val)); break;
     case 'custom:team': toggleCustomTeam(data.team); break;
     case 'custom:user': openTeamPicker('custom'); break;
@@ -1523,7 +1932,13 @@ function handleAction(action,data,el,ev) {
     case 'career:develop': if(developPlayer(S.career,data.id,data.attr)){save();showPlayerModal(data.id);toast(`${ATTR_LABELS[data.attr]} improved.`,'success');}else toast('Not enough training points.','warn');break;
     case 'career:tactic': S.career.tactics[data.key]=data.val;save();render();break;
     case 'career:newseason': newCareerSeason(S.career);save();S.careerTab='overview';render();toast('A new season begins.','success');break;
-    case 'setting:toggle': S.settings[data.key]=!S.settings[data.key];save();render();break;
+    case 'setting:toggle':
+      S.settings[data.key]=!S.settings[data.key];save();
+      if(data.key==='sound'){
+        S.audio.setEnabled(S.settings.sound);
+        if(!S.settings.sound)stopAnthemCeremony('disabled',true);
+      } else if(data.key==='anthemEnabled'&&!S.settings.anthemEnabled) stopAnthemCeremony('disabled',true);
+      render();break;
     case 'setting:layout': S.settings.layout=data.val;save();render();break;
     case 'setting:difficulty': S.settings.difficulty=data.val;save();render();break;
     case 'setting:camera': S.settings.cameraZoom=data.val==='close'?1.12:data.val==='wide'?.9:1;save();render();break;
@@ -1532,7 +1947,10 @@ function handleAction(action,data,el,ev) {
     case 'settings:reset': confirmReset();break;
     case 'settings:resetDo': localStorage.removeItem(SAVE_KEY);location.reload();break;
     case 'match:kickoff': kickOffMatch(); break;
-    case 'match:anthem': playAnthem(); break;
+    case 'match:anthem': startAnthemCeremony('manual'); break;
+    case 'match:anthemStop': stopAnthemCeremony('stopped'); break;
+    case 'match:anthemSkip': skipAnthem(); break;
+    case 'match:anthemReplay': replayAnthem(); break;
     case 'match:pause': showPauseMenu(); break;
     case 'match:sound': S.settings.sound=!S.settings.sound;S.audio.setEnabled(S.settings.sound);save();toast(S.settings.sound?'Sound on':'Sound off','info');break;
     case 'match:pass': if(S.game){ if(S.game.ball.holder&&S.game.ball.holder.side!==S.game.userTeam)S.game.switchDefender(); else S.game.pass(); }break;
@@ -1587,7 +2005,7 @@ function startQuickMatch() {
   launchMatch({
     homeTeam:team(S.quick.home),awayTeam:team(S.quick.away),
     userTeam:'home',mode:'quick',halfSeconds:S.quick.half*60,
-    difficulty:S.quick.difficulty,venue
+    difficulty:S.quick.difficulty,venue,weather:S.quick.weather||'random'
   });
 }
 
@@ -1603,17 +2021,17 @@ function playTournamentMatch() {
   const t=S.tournament,f=nextUserFixture(t);if(!t||!f){toast('No match ready. Advance the tournament.','info');return;}
   const home=team(f.homeId),away=team(f.awayId);
   const userTeam=f.homeId===t.userTeamId?'home':'away';
-  const stageLabel=f.stage==='group'?`POOL ${'ABCD'[f.group]||f.group+1} • ROUND ${f.round}`:{qf:'QUARTER-FINAL',sf:'SEMI-FINAL',third:'THIRD-PLACE PLAY-OFF',final:'WORLD CUP FINAL'}[f.stage];
+  const stageLabel=fixtureLabel(t,f);
   const year=t.edition||null;
   launchMatch({homeTeam:home,awayTeam:away,userTeam,mode:'tournament',halfSeconds:180,difficulty:S.settings.difficulty,
-    venue:f.venue,fixture:f,stageLabel,stage:f.stage,year,
+    venue:f.venue,fixture:f,stageLabel,stage:f.stage,year,weather:t.config?.weather||'random',
     homeSquad:year?historicalSquad(f.homeId,year):undefined,
     awaySquad:year?historicalSquad(f.awayId,year):undefined});
 }
 
 function simulateUserTournamentMatch() {
   const t=S.tournament,f=nextUserFixture(t);if(!t||!f)return;
-  const r=simulateMatch(team(f.homeId),team(f.awayId),{knockout:f.stage!=='group'});
+  const r=simulateMatch(team(f.homeId),team(f.awayId),{knockout:!['group','league'].includes(f.stage)});
   f.played=true;f.homeScore=r.homeScore;f.awayScore=r.awayScore;f.homeTries=r.homeTries;f.awayTries=r.awayTries;f.simulated=true;
   t.lastResults=[f];
   simulateRemainingInRound(t);advanceIfReady(t);save();render();
@@ -1674,8 +2092,18 @@ function createCustomTournament() {
   const c=S.custom;
   if(c.teams.length!==c.size){toast(`Select ${c.size} nations (${c.teams.length} selected).`,'warn');return;}
   const name=$('#custom-name')?.value||c.name;c.name=name;
-  S.tournament=customTournament({name,teamIds:c.teams,userTeamId:c.userTeam,groupsCount:c.size===8?2:4});
+  const format=c.format||'worldcup';
+  const groupsCount=format==='league'?1:format==='knockout'?0:clamp(Number(c.groupsCount)||2,1,8);
+  S.tournament=customTournament({
+    name,teamIds:c.teams,userTeamId:c.userTeam,groupsCount,format,
+    config:{
+      weather:c.weather||'random', legs:Number(c.legs)||1,
+      qualifiersPerGroup:Number(c.qualifiers)||2,
+      bestThirdPlace:format==='mixed', thirdPlace:format!=='knockout'
+    }
+  });
   save();S.route='tournament';S.tournamentGroup=0;render();showDraw(S.tournament);
+  S.audio.cheer(.3);
 }
 
 function startTraining(drill) {
@@ -1748,18 +2176,104 @@ function confirmReset() {
 function kickOffMatch() {
   const g=S.game;if(!g)return;
   $('#prematch-overlay')?.classList.add('leaving');
-  setTimeout(()=>$('#prematch-overlay')?.classList.add('hidden'),500);
+  uiTimeout(()=>$('#prematch-overlay')?.classList.add('hidden'),500);
   S.matchView='live';
   g.paused=false;
   if(!g.started)g.start();
   S.audio.init();S.audio.crowd(true);S.audio.whistle();
   toast('Kick off! Use the joystick to play.','info');
 }
-function playAnthem() {
-  const g=S.game;if(!g)return;
-  S.audio.init();S.audio.anthem(g.home.team.id);
-  toast(`${g.home.team.name} anthem plays around the stadium.`,'info');
+function ceremonyStatusText() {
+  const a=S.anthem;
+  if(a.active&&a.currentSide){
+    const g=S.game;
+    const t=a.currentSide==='home'?g?.home.team:g?.away.team;
+    const spec=resolveAnthem(t);
+    const label=a.currentSide==='home'?'HOME':'AWAY';
+    const mode=a.mode==='recording'?'CLEARED RECORDING':'ORIGINAL FANFARE';
+    return `<span class="live-dot"></span> NOW PLAYING • ${label}: ${esc(spec.shortTitle||t?.name||'Anthem')} <small>${mode}</small>`;
+  }
+  if(a.status==='complete')return `${icon('whistle',12)} Ceremony complete. The teams are ready.`;
+  if(a.status==='stopped')return 'Ceremony stopped. Play again before kick-off if you wish.';
+  if(a.status==='disabled')return 'Anthems are muted in Settings.';
+  return `${icon('whistle',12)} Anthems, flags and starting XVs are presented before kick-off.`;
 }
+function updateCeremonyUI() {
+  const status=$('#ceremony-status');
+  if(status)status.innerHTML=ceremonyStatusText();
+  $$('.ceremony-team').forEach(el=>el.classList.toggle('active',el.dataset.side===S.anthem.currentSide));
+}
+function startAnthemCeremony(source='manual') {
+  const g=S.game;if(!g)return;
+  if(!S.settings.anthemEnabled||!S.settings.sound){
+    S.anthem.status='disabled';updateCeremonyUI();
+    toast('Enable sound and anthems in Settings to hear the ceremony.','info');
+    return;
+  }
+  stopAnthemCeremony('',true);
+  const token=++S.anthem.token;
+  S.anthem.queue=ceremonyOrder(S.matchMeta,g).map(x=>({...x,team:x.team||g[x.side].team}));
+  if(!S.anthem.queue.length)return;
+  S.anthem.active=true;S.anthem.status='playing';S.anthem.index=0;S.anthem.currentSide=null;S.anthem.mode=null;
+  S.audio.init();S.audio.setAnthemVolume(S.settings.anthemVolume);
+  updateCeremonyUI();
+  playAnthemAt(0,token,source);
+}
+function playAnthemAt(index,token,source='auto') {
+  const g=S.game,a=S.anthem,item=a.queue[index];
+  if(!g||!item||token!==a.token)return;
+  a.index=index;a.active=true;a.status='playing';a.currentSide=item.side;
+  const spec=resolveAnthem(item.team);
+  const useRecording=canPlayRecording(spec);
+  a.mode=useRecording?'recording':'fanfare';
+  updateCeremonyUI();
+  S.audio.setCrowdLevel(.012,.4);
+  let duration=4300;
+  if(useRecording){
+    const specDuration=(spec.endMs||18000)-(spec.startMs||0);
+    duration=clamp(specDuration,4000,ANTHEM_POLICY.maxDurationMs);
+    S.audio.playAnthemRecording(spec,{volume:S.settings.anthemVolume}).then(result=>{
+      if(!result.ok&&token===S.anthem.token)S.audio.anthemSting(item.team.id,spec,{cheer:true});
+    });
+  } else {
+    S.audio.anthemSting(item.team.id,spec,{cheer:true});
+  }
+  uiTimeout(()=>{
+    if(token!==S.anthem.token)return;
+    S.audio.stopAnthem(.25);
+    if(index+1<a.queue.length)playAnthemAt(index+1,token,source);
+    else finishAnthemCeremony(token);
+  },duration);
+}
+function finishAnthemCeremony(token) {
+  if(token!==S.anthem.token)return;
+  S.anthem.active=false;S.anthem.status='complete';S.anthem.currentSide=null;S.anthem.index=0;
+  S.audio.setCrowdLevel(.055,.8);
+  S.audio.cheer(.25);
+  updateCeremonyUI();
+}
+function stopAnthemCeremony(status='stopped',silent=false) {
+  S.anthem.token++;
+  S.anthem.active=false;S.anthem.status=status||'stopped';S.anthem.currentSide=null;S.anthem.index=0;
+  S.audio.stopAnthem(.18);
+  S.audio.setCrowdLevel(.055,.4);
+  if(!silent)updateCeremonyUI();
+}
+function skipAnthem() {
+  const a=S.anthem;
+  if(!a.active||!a.queue.length){startAnthemCeremony('skip');return;}
+  S.audio.stopAnthem(0);
+  const token=++a.token;
+  if(a.index+1<a.queue.length)playAnthemAt(a.index+1,token,'skip');
+  else finishAnthemCeremony(token);
+}
+function replayAnthem() {
+  const a=S.anthem;
+  if(!S.game)return;
+  if(!a.queue.length){startAnthemCeremony('replay');return;}
+  startAnthemCeremony('replay');
+}
+function playAnthem() { startAnthemCeremony('manual'); }
 
 /* ---------------- Render & init ---------------- */
 function render() {
@@ -1771,6 +2285,8 @@ function render() {
     case 'tournament': html=tournamentScreen();break;
     case 'historical': html=historicalScreen();break;
     case 'custom': html=customScreen();break;
+    case 'teams': html=teamsScreen();break;
+    case 'teamEditor': html=teamEditorScreen();break;
     case 'training': html=trainingScreen();break;
     case 'career': html=careerScreen();break;
     case 'settings': html=settingsScreen();break;
@@ -1796,8 +2312,21 @@ document.addEventListener('input',ev=>{
     save();
     if(el.dataset.setting==='controlScale'){const v=$('#scale-val');if(v)v.textContent=Math.round(S.settings.controlScale*100)+'%';}
     if(el.dataset.setting==='sensitivity'){const v=$('#sens-val');if(v)v.textContent=Math.round(S.settings.sensitivity*100)+'%';}
+    if(el.dataset.setting==='anthemVolume'){
+      const v=$('#anthem-vol-val');if(v)v.textContent=Math.round(S.settings.anthemVolume*100)+'%';
+      S.audio.setAnthemVolume(S.settings.anthemVolume);
+    }
     const deck=$('.control-deck');if(deck)deck.style.setProperty('--ctrl',S.settings.controlScale);
   }
+  if(el.dataset.tactic&&S.teamEditor){
+    const t=team(S.teamEditor.id);
+    if(t?.custom){t.tactics[el.dataset.tactic]=Number(el.value);commitCustomTeam(t,false);const v=$('#tac-'+el.dataset.tactic+'-val');if(v)v.textContent=el.value;}
+  }
+  if(el.dataset.tacticSelect&&S.teamEditor){
+    const t=team(S.teamEditor.id);
+    if(t?.custom){t.tactics[el.dataset.tacticSelect]=el.value;commitCustomTeam(t,false);}
+  }
+  if(el.dataset.attr){const b=el.closest('.attr-field')?.querySelector('b');if(b)b.textContent=el.value;}
   if(el.dataset.careerRange&&S.career){
     S.career.tactics[el.dataset.careerRange]=Number(el.value);save();
     const b=el.closest('.panel-row')?.querySelector('.row-between b');if(b)b.textContent=el.value+'%';
@@ -1817,5 +2346,7 @@ window.addEventListener('keydown',ev=>{
   if(ev.key==='k'||ev.key==='K')S.game.openKickMenu();
 });
 
+S.audio.setEnabled(S.settings.sound);
+S.audio.setAnthemVolume(S.settings.anthemVolume);
 render();
 

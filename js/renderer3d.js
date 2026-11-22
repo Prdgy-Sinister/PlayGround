@@ -14,6 +14,7 @@ const dampAngle = (a, b, lambda, dt) => {
   if (d < -Math.PI) d += Math.PI * 2;
   return a + d * (1 - Math.exp(-lambda * dt));
 };
+const rand = (a, b) => a + Math.random() * (b - a);
 
 const SKIN = ['#f2c9a0', '#d79b6c', '#a96843', '#7a452a', '#efd4b5', '#c88c61'];
 const SKY_TOP = '#0b2a20';
@@ -59,6 +60,7 @@ export class MatchRenderer3D {
     this.numberTextures = new Map();
     this.effectSprites = new Map();
     this.lastSize = { w: 0, h: 0 };
+    this.lastDpr = 0;
     this.shake = { x: 0, y: 0, z: 0 };
 
     this.scene = new THREE.Scene();
@@ -90,6 +92,7 @@ export class MatchRenderer3D {
     this.buildBenches();
     this.buildGrassTufts();
     this.buildFloodlights();
+    this.buildWeather();
     this.buildPosts();
     this.buildSetPieceMarker();
     this.buildBall();
@@ -133,7 +136,8 @@ export class MatchRenderer3D {
   }
 
   buildLights() {
-    this.scene.add(new THREE.HemisphereLight(0xbfe2ff, 0x0a1c12, .82));
+    this.hemiLight = new THREE.HemisphereLight(0xbfe2ff, 0x0a1c12, .82);
+    this.scene.add(this.hemiLight);
     this.scene.add(new THREE.AmbientLight(0x9fc7b2, .18));
 
     const key = new THREE.DirectionalLight(0xfff0cf, 2.15);
@@ -481,6 +485,117 @@ export class MatchRenderer3D {
       glow.position.set(x * .72, 24, z * .72);
       this.scene.add(glow);
     }
+  }
+
+  buildWeather() {
+    const q = this.quality();
+    const rainCount = q === 'low' ? 180 : q === 'medium' ? 420 : q === 'high' ? 750 : 1100;
+    const rain = new Float32Array(rainCount * 3);
+    for (let i = 0; i < rainCount; i++) {
+      rain[i * 3] = rand(-48, 48);
+      rain[i * 3 + 1] = rand(1, 46);
+      rain[i * 3 + 2] = rand(-72, 72);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(rain, 3));
+    this.rainPositions = rain;
+    this.rainCount = rainCount;
+    this.rain = new THREE.Points(geo, new THREE.PointsMaterial({
+      color: 0xbfd9e8, size: q === 'low' ? .16 : .22, transparent: true,
+      opacity: 0, depthWrite: false, sizeAttenuation: true
+    }));
+    this.rain.frustumCulled = false;
+    this.scene.add(this.rain);
+
+    // A wet sheen and a handful of puddles make the pitch condition readable.
+    this.wetSheen = new THREE.Mesh(
+      new THREE.PlaneGeometry(70, 100),
+      new THREE.MeshStandardMaterial({ color: 0x8fa8ad, transparent: true, opacity: 0, roughness: .18, metalness: .16, depthWrite: false })
+    );
+    this.wetSheen.rotation.x = -Math.PI / 2;
+    this.wetSheen.position.y = .055;
+    this.scene.add(this.wetSheen);
+
+    this.puddles = new THREE.Group();
+    const puddleMat = new THREE.MeshStandardMaterial({
+      color: 0x183b4c, transparent: true, opacity: 0, roughness: .12, metalness: .3, depthWrite: false
+    });
+    for (let i = 0; i < 14; i++) {
+      const p = new THREE.Mesh(new THREE.CircleGeometry(1.1 + (i % 4) * .55, 14), puddleMat);
+      p.rotation.x = -Math.PI / 2;
+      p.scale.set(1.5, .65, 1);
+      p.position.set(((i * 31) % 60) - 30, .065, ((i * 47) % 88) - 44);
+      this.puddles.add(p);
+    }
+    this.scene.add(this.puddles);
+    this.puddleMat = puddleMat;
+
+    this.clouds = new THREE.Group();
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: 0x9ba9a3, transparent: true, opacity: 0, depthWrite: false, fog: false
+    });
+    for (let i = 0; i < 12; i++) {
+      const c = new THREE.Mesh(new THREE.SphereGeometry(8 + (i % 3) * 3, 8, 5), cloudMat);
+      c.position.set(((i * 29) % 130) - 65, 72 + (i % 4) * 5, ((i * 53) % 180) - 90);
+      c.scale.set(2.1, .28, 1.2);
+      this.clouds.add(c);
+    }
+    this.scene.add(this.clouds);
+    this.cloudMat = cloudMat;
+    this.weatherKind = null;
+  }
+
+  syncWeather(dt) {
+    const fx = this.game.weatherFx;
+    if (!fx || !this.rain) return;
+    const q = this.quality();
+    if (fx.rain > 0) {
+      const p = this.rainPositions;
+      const speed = 24 + fx.rain * 15;
+      for (let i = 0; i < this.rainCount; i++) {
+        const j = i * 3;
+        p[j] += (fx.windX * 1.8 + .6) * dt;
+        p[j + 1] -= speed * dt;
+        p[j + 2] += (fx.windY * 1.4 + .35) * dt;
+        if (p[j + 1] < 0) {
+          p[j] = rand(-48, 48);
+          p[j + 1] = rand(38, 52);
+          p[j + 2] = rand(-72, 72);
+        }
+      }
+      this.rain.geometry.attributes.position.needsUpdate = true;
+    }
+    this.rain.material.opacity = damp(this.rain.material.opacity, Math.min(.62, fx.rain * .42), 3, dt);
+    this.wetSheen.material.opacity = damp(this.wetSheen.material.opacity, fx.wetness * .22, 2, dt);
+    this.puddleMat.opacity = damp(this.puddleMat.opacity, clamp(fx.mud * .85 + fx.wetness * .18, 0, .75), 2, dt);
+    this.cloudMat.opacity = damp(this.cloudMat.opacity, fx.sky === 'day' ? .1 : fx.sky === 'storm' ? .68 : fx.sky === 'rain' ? .5 : .34, 2, dt);
+    this.clouds.position.x += (fx.windX * .12 + .18) * dt;
+    if (this.clouds.position.x > 20) this.clouds.position.x = -20;
+
+    if (fx.sky !== this.weatherKind) {
+      this.weatherKind = fx.sky;
+      const palettes = {
+        day: ['#163c55', '#8fc6e6', 0xbfe8ff],
+        overcast: ['#283336', '#7d8b8c', 0xa9babd],
+        rain: ['#1b292f', '#5d7378', 0x91a9b0],
+        storm: ['#0b1118', '#3e4b55', 0x718493]
+      };
+      const [top, bottom, fog] = palettes[fx.sky] || palettes.overcast;
+      const tex = canvasTexture(32, 256, (c, w, h) => {
+        const g = c.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, top); g.addColorStop(.5, bottom);
+        g.addColorStop(1, fx.sky === 'day' ? '#c8e3d2' : '#26312d');
+        c.fillStyle = g; c.fillRect(0, 0, w, h);
+      });
+      this.scene.background?.dispose?.();
+      this.scene.background = tex;
+      if (this.scene.fog) this.scene.fog.color.setHex(fog);
+      this.scene.fog?.density && (this.scene.fog.density = fx.sky === 'storm' ? .006 : fx.sky === 'rain' ? .0046 : .0038);
+    }
+    const light = fx.light;
+    if (this.keyLight) this.keyLight.intensity = damp(this.keyLight.intensity, 2.15 * light, 2, dt);
+    if (this.hemiLight) this.hemiLight.intensity = damp(this.hemiLight.intensity, .82 * light, 2, dt);
+    this.gl.toneMappingExposure = damp(this.gl.toneMappingExposure, (q === 'ultra' ? 1.12 : 1.08) * (.82 + light * .18), 2, dt);
   }
 
   buildPosts() {
@@ -914,7 +1029,8 @@ export class MatchRenderer3D {
     }
     if (g.ruck) {
       this.offsideLine.visible = true;
-      this.offsideLine.position.set(0, .05, g.ruck.y + 1.2 - 50);
+      const offY = g.ruck.y + (g.ruck.side === 'home' ? -1.2 : 1.2);
+      this.offsideLine.position.set(0, .05, offY - 50);
     } else {
       this.offsideLine.visible = false;
     }
@@ -957,8 +1073,10 @@ export class MatchRenderer3D {
     this.w = Math.max(1, r.width || pr?.width || 1);
     this.h = Math.max(1, r.height || pr?.height || 1);
     this.dpr = this.pixelRatioCap();
-    if (this.w === this.lastSize.w && this.h === this.lastSize.h) return;
+    const dprChanged = this.dpr !== this.lastDpr;
+    if (this.w === this.lastSize.w && this.h === this.lastSize.h && !dprChanged) return;
     this.lastSize = { w: this.w, h: this.h };
+    this.lastDpr = this.dpr;
     this.gl.setPixelRatio(this.dpr);
     this.gl.setSize(this.w, this.h, false);
     const aspect = this.w / this.h;
@@ -1021,8 +1139,6 @@ export class MatchRenderer3D {
     this.camera.top = this.viewSize / 2;
     this.camera.bottom = -this.viewSize / 2;
     this.camera.updateProjectionMatrix();
-    this.camera.fov = (this.w / this.h < .8 ? 52 : 48) * (1 / Math.max(.74, zoom));
-    this.camera.updateProjectionMatrix();
   }
 
   render(dt = 1 / 60) {
@@ -1034,6 +1150,7 @@ export class MatchRenderer3D {
     this.syncEffects(dt);
     this.syncSetPiece();
     this.syncOverlay();
+    this.syncWeather(dt);
     this.updateCamera(dt);
     this.gl.render(this.scene, this.camera);
   }

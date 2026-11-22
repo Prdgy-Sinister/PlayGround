@@ -3,6 +3,7 @@
    breakdowns, set pieces, laws and a role-aware AI. */
 
 import { IDENTITY_BY_TEAM } from './history.js';
+import { createWeather, updateWeather, weatherEffects, weatherLabel, resolveWeatherKind } from './weather.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -156,8 +157,16 @@ export class RugbyGame {
     this.userDefenderId = null;
     this.lastPasser = null;
     this.kickoffTeam = opts.kickoffTeam || (Math.random() < .5 ? 'home' : 'away');
-    this.weather = opts.weather || 'clear';
+    this.weather = createWeather(opts.weather || 'sunny', opts.weatherSeed || Math.floor(Math.random() * 999999));
+    this.weatherFx = weatherEffects(this.weather);
     this.venue = opts.venue || this.home.team?.venue || 'World Rugby Stadium';
+    this.ceremony = false;
+    this.actionWindow = 0;
+    this.timers = [];
+    this.timerGen = 0;
+    this.menuPaused = false;
+    this.destroyed = false;
+    this.pressureUntil = 0;
     this.manOfMatch = null;
     this.formationPhase = 0;
     this.debug = false;
@@ -277,7 +286,7 @@ export class RugbyGame {
             x = clamp(35 + (n-4.5)*2.3, 5, 65);
             y = ballY - dir * (n <= 3 ? 2.5 : 7 + (n%3));
           } else {
-            x = clamp([0,0,0,0,0,0,0,0,35,-9,24,-4,10,28,-17][n], 5, 65);
+            x = clamp([0,0,0,0,0,0,0,0,0,35,-9,24,-4,10,28,-17][n], 5, 65);
             y = ballY - dir * (7 + (n%4)*3);
           }
         }
@@ -301,14 +310,50 @@ export class RugbyGame {
 
   setSprint(v) { this.input.sprint = !!v; }
 
+  /* All delayed law/phase changes go through here so they can be cancelled
+     when the match is destroyed, paused or overtaken by a new phase. */
+  schedule(fn, ms, phase = null) {
+    const id = ++this.timerGen;
+    const entry = { id, token: null, phase, fn };
+    const run = () => {
+      if (this.destroyed) return;
+      // A user pause menu must freeze every scheduled law change. Defer rather
+      // than discard: lineouts and restarts must still resolve after resume.
+      if (this.menuPaused || (this.paused && !['goal','penalty','conversion'].includes(this.phase))) {
+        entry.token = setTimeout(run, 120);
+        return;
+      }
+      this.timers = this.timers.filter(t => t.id !== id);
+      if (phase && this.phase !== phase) return;
+      fn();
+    };
+    entry.token = setTimeout(run, ms);
+    this.timers.push(entry);
+    return id;
+  }
+
+  clearTimers() {
+    for (const t of this.timers) clearTimeout(t.token);
+    this.timers = [];
+  }
+
+  destroy() {
+    this.destroyed = true;
+    this.clearTimers();
+  }
+
   update(dt) {
     dt = Math.min(dt, .05);
+    if (this.destroyed) return;
     this.time += dt;
     this.animTime += dt;
     this.updateEffects(dt);
     if (this.cameraShake > 0) this.cameraShake = Math.max(0, this.cameraShake - dt * 2.6);
     if (this.paused || this.ended) return;
     if (['penalty','goal','conversion','halftime','fulltime'].includes(this.phase)) return;
+    updateWeather(this.weather, dt);
+    this.weatherFx = weatherEffects(this.weather);
+    this.actionWindow = Math.max(0, this.actionWindow - dt);
     if (this.phase === 'try') { this.updateTry(dt); return; }
     if (this.phase === 'scrum') { this.updateScrum(dt); this.updateClock(dt); return; }
     if (this.phase === 'lineout') { this.updateLineout(dt); this.updateClock(dt); return; }
@@ -473,6 +518,7 @@ export class RugbyGame {
       p.celebrate = Math.max(0, p.celebrate - dt);
       p.step = Math.max(0, p.step - dt);
       p.recover = Math.max(0, p.recover - dt);
+      p.pressure = Math.max(0, (p.pressure || 0) - dt);
       if (p.tackleAnim <= 0) p.tackleType = null;
       if (p.card) continue;
       if (p.down > 0) {
@@ -505,29 +551,38 @@ export class RugbyGame {
   movePlayer(p, ax, ay, sprint, dt) {
     let l = Math.hypot(ax, ay);
     if (l > 1) { ax /= l; ay /= l; l = 1; }
-    const staminaFactor = clamp(p.stamina/100, .55, 1);
-    const maxSpd = p.speedNow * (sprint && p.stamina > 8 ? 1.22 : 1);
-    const accel = 7.5 + (p.acceleration || 70) * .075;
+    const fx = this.weatherFx;
+    const traction = fx?.traction ?? 1;
+    const fatigue = fx?.fatigue ?? 1;
+    const staminaAttr = p.staminaAttr ?? p.staminaBase ?? p.stamina ?? 70;
+    const maxSpd = p.speedNow * (sprint && p.stamina > 8 ? 1.22 : 1) * (.82 + traction * .18);
+    const accel = (7.5 + (p.acceleration || 70) * .075) * (.65 + traction * .35);
     if (l > .08) {
       p.vx += ax * accel * dt;
       p.vy += ay * accel * dt;
-      if (sprint && p.stamina > 8) p.stamina = Math.max(0, p.stamina - dt * (1.25 - (p.staminaAttr||p.stamina)*0.002));
-      else p.stamina = Math.max(0, p.stamina - dt * .09);
+      if (sprint && p.stamina > 8) p.stamina = Math.max(0, p.stamina - dt * (1.25 - staminaAttr * .002) * fatigue);
+      else p.stamina = Math.max(0, p.stamina - dt * .09 * fatigue);
     } else {
-      p.vx *= Math.pow(.04, dt);
-      p.vy *= Math.pow(.04, dt);
-      p.stamina = Math.min(100, p.stamina + dt * (.32 + (p.staminaAttr||70)*.002));
+      const brake = Math.pow(.04 + (1 - traction) * .08, dt);
+      p.vx *= brake;
+      p.vy *= brake;
+      p.stamina = Math.min(100, p.stamina + dt * (.32 + staminaAttr * .002) / Math.max(1, fatigue * .8));
+    }
+    if (traction < .85) {
+      const slip = (1 - traction) * .38;
+      p.vx += rand(-slip, slip) * dt * 2;
+      p.vy += rand(-slip, slip) * dt * 2;
     }
     const spd = Math.hypot(p.vx,p.vy);
     if (spd > maxSpd) { p.vx = p.vx/spd*maxSpd; p.vy = p.vy/spd*maxSpd; }
-    // agility / balance affects turn sharpness
     p.x += p.vx * dt; p.y += p.vy * dt;
     const moved = Math.hypot(p.x-p.lastX,p.y-p.lastY);
     p.distanceRun += moved;
     if (this.ball.holder === p && moved > 0) p.metres += Math.max(0, (p.y - p.lastY) * p.dir);
-    p.runCycle += moved * 2.1;
+    p.runCycle += moved * 2.1 * (.82 + traction * .18);
     p.lastX = p.x; p.lastY = p.y;
-    p.x = clamp(p.x, 2, 68); p.y = clamp(p.y, 2, 98);
+    // Players may carry the ball over the goal line, but never out of touch.
+    p.x = clamp(p.x, 0, 70); p.y = clamp(p.y, -2.5, 102.5);
     if (p.stamina > 0) p.stamina = Math.min(100, p.stamina + dt * .01);
   }
 
@@ -548,9 +603,12 @@ export class RugbyGame {
           if (rel > 2.2) {
             carrier.vx *= .88; carrier.vy *= .88;
             other.vx -= nx * rel * .16; other.vy -= ny * rel * .16;
-            if (Math.random() < .25) this.dust(carrier.x, carrier.y, 2, '#e5dcc4');
+            if (Math.random() < .25) this.dust(carrier.x, carrier.y, 2, this.weatherFx?.mud > .5 ? '#6b5538' : '#e5dcc4');
           }
         }
+        // Separation happens after movement, so restore the pitch bounds here.
+        p.x = clamp(p.x, 0, 70); p.y = clamp(p.y, -2.5, 102.5);
+        q.x = clamp(q.x, 0, 70); q.y = clamp(q.y, -2.5, 102.5);
       }
     }
   }
@@ -589,23 +647,26 @@ export class RugbyGame {
     const goalY = p.dir > 0 ? 100 : 0;
     const toGoal = Math.abs(goalY - p.y);
     const support = this.supportOptions(p);
-    if (p.think <= 0) {
+    // The human carrier is never told what to do by the AI: only opponents
+    // (and carriers during the kickoff phase) make autonomous decisions.
+    const autonomous = p.side !== this.userTeam || this.userTeam === 'none' || this.phase === 'kickoff';
+    if (autonomous && p.think <= 0) {
       const tactics = this.teamTactics(p.side);
       p.think = rand(.22,.55) * (1.18 - (tactics.tempo || .5) * .36);
       const kickBias = tactics.kick;
       const pressure = nd < 3.5;
       const inOwnHalf = (p.dir>0 ? p.y<50 : p.y>50);
       const losingLate = this.losingLate(p.side);
-      const advantage = this.advantage?.team === p.side;
-      if (!advantage && !losingLate && Math.random() < .012 + kickBias*.008 && this.phaseCount > 1) {
+      const advantage = this.advantage?.side === p.side;
+      if (!advantage && !losingLate && Math.random() < .008 + kickBias*.006 && this.phaseCount > 1) {
         if (inOwnHalf && nd < 4.5) { this.aiKick(p, 'box'); return { x:0,y:0,sprint:false }; }
-        if (!inOwnHalf && Math.random()<.4) { this.aiKick(p, 'territory'); return { x:0,y:0,sprint:false }; }
+        if (!inOwnHalf && Math.random()<.35) { this.aiKick(p, 'territory'); return { x:0,y:0,sprint:false }; }
       }
-      if (pressure && support.length && Math.random() < .42 + (p.awareness||60)*.002 + (tactics.pass || .5) * .16) {
+      if (pressure && support.length && Math.random() < .32 + (p.awareness||60)*.0015 + (tactics.pass || .5) * .12) {
         this.aiPass(p, support[0]);
         return { x:0,y:0,sprint:false };
       }
-      if (pressure && support.length && p.offloadWindow > 0 && Math.random() < .18 + (tactics.offload || .5) * .3) {
+      if (pressure && support.length && p.offloadWindow > 0 && Math.random() < .12 + (tactics.offload || .5) * .24) {
         this.aiPass(p, support[0], true);
         return { x:0,y:0,sprint:false };
       }
@@ -659,9 +720,9 @@ export class RugbyGame {
     if (p.number === 9 && carrier !== p && this.phase !== 'open') behind = 1;
     let tx = clamp(slotX, 4, 66);
     let ty = carrier.y - attackDir * behind;
-    // support line: run toward a gap ahead of carrier
-    if (p.number>=11 && carrier.y*attackDir > 30) ty = carrier.y - attackDir * (p.number===15? 11 : 2.5);
-    if (this.ball.holder && p.number >= 11 && carrier.y*attackDir > 55) ty = carrier.y + attackDir * 1.5;
+    // Support must stay behind the ball: a receiver ahead of the carrier
+    // would make every pass forward. Keep usable depth near the try line.
+    if (p.number>=11 && carrier.y*attackDir > 30) ty = carrier.y - attackDir * (p.number===15? 9 : 3.5);
     const dx = tx-p.x, dy = ty-p.y, d=Math.hypot(dx,dy)||1;
     const wantSprint = d > 9 && (p.number>=9);
     return { x:clamp(dx/d,-1,1), y:clamp(dy/d,-1,1), sprint:wantSprint };
@@ -711,18 +772,29 @@ export class RugbyGame {
     const ai = identity?.ai || {};
     const base = { expansive:.55, power:.5, flair:.5, structured:.5, kicking:.55, pace:.5, defense:.5, scrum:.5, balanced:.5, offload:.5 }[team.style] || .5;
     const t = this[side].tactics || {};
+    // Tactics arrive from career data as 0-100 and from in-match presets as
+    // 0-1 or named values. Normalise them once so AI maths stays sane.
+    const unit = v => v == null ? undefined : clamp(v > 1 ? v / 100 : v, 0, 1);
+    const shape = t.shape || 'balanced';
+    const shapeMods = {
+      narrow: { width:.35, lineSpeed:.7 }, wide: { width:.85, lineSpeed:.5 },
+      flat: { width:.6, lineSpeed:.85}, deep: { width:.5, lineSpeed:.4 },
+      balanced: { width:.55, lineSpeed:.6 }
+    }[shape] || {};
+    const kickMode = t.kickMode || (t.kick > .65 ? 'territory' : 'balanced');
     return {
-      kick: t.kick ?? ai.kick ?? base,
-      width: t.width ?? ai.width ?? base,
-      offload: t.offload ?? ai.offload ?? base,
-      lineSpeed: t.lineSpeed ?? ai.lineSpeed ?? .55,
-      tempo: ai.tempo ?? base,
-      breakdown: ai.breakdown ?? base,
-      scrum: ai.scrum ?? base,
-      defence: ai.defence ?? ai.defense ?? base,
-      carry: ai.carry ?? base,
-      pass: ai.pass ?? base,
-      backline: identity?.formation?.backline || 'mixed',
+      kick: unit(t.kick) ?? unit(ai.kick) ?? base,
+      width: unit(t.width) ?? shapeMods.width ?? unit(ai.width) ?? base,
+      offload: unit(t.offload) ?? unit(ai.offload) ?? base,
+      lineSpeed: unit(t.lineSpeed) ?? shapeMods.lineSpeed ?? unit(ai.lineSpeed) ?? .55,
+      tempo: unit(t.tempo) ?? unit(ai.tempo) ?? base,
+      breakdown: unit(t.breakdown) ?? unit(ai.breakdown) ?? base,
+      scrum: unit(t.scrum) ?? unit(ai.scrum) ?? base,
+      defence: unit(t.defence ?? t.defense) ?? unit(ai.defence ?? ai.defense) ?? base,
+      carry: unit(t.carry) ?? unit(ai.carry) ?? base,
+      pass: unit(t.pass) ?? unit(ai.pass) ?? base,
+      kickMode,
+      backline: t.line || identity?.formation?.backline || 'mixed',
       pods: identity?.formation?.pods || 'split',
       chase: identity?.formation?.chase || 'connected'
     };
@@ -779,8 +851,10 @@ export class RugbyGame {
     if (type === 'grubber') { angle = rand(-.2,.2); power = 20; vz = 1.2; }
     if (type === 'bomb') { angle = rand(-.25,.25); power = 17; vz = 14; }
     if (type === 'cross') { angle = rand(-.5,.5); power = 20; vz = 8; }
-    const vx = Math.sin(angle)*power;
-    const vy = dir*Math.cos(angle)*power;
+    const fx = this.weatherFx;
+    const carry = fx?.temperature < 8 ? 1.06 : 1;
+    const vx = Math.sin(angle)*power*carry + (fx?.windX||0)*.8;
+    const vy = dir*Math.cos(angle)*power*carry + (fx?.windY||0)*.8;
     b.holder = null; b.mode = 'kick'; b.x=p.x; b.y=p.y; b.z=1.2;
     b.vx=vx; b.vy=vy; b.vz=vz; b.lastKick=p.side; b.lastKickType=type; b.bounces=0;
     b.kickFrom = { x:p.x, y:p.y, side:p.side };
@@ -811,23 +885,31 @@ export class RugbyGame {
     }
     if (b.mode === 'pass' && b.pass) {
       const pass = b.pass;
+      const target = this.byId(pass.targetId);
       pass.t += dt;
       const t = clamp(pass.t / pass.duration, 0, 1);
-      b.x = lerp(pass.fromX, pass.toX, t);
-      b.y = lerp(pass.fromY, pass.toY, t);
+      // Lead the receiver: passes follow the player, not a stale point.
+      const tx = target?.onField ? lerp(pass.fromX, target.x, t) : pass.toX;
+      const ty = target?.onField ? lerp(pass.fromY, target.y, t) : pass.toY;
+      b.x = tx; b.y = ty;
       b.z = 1.1 + Math.sin(t*Math.PI)*1.2;
-      // interception
-      for (const o of this[pass.side==='home'?'away':'home'].lineup) {
+      // Interception rolls are scaled by dt so frame rate cannot change them.
+      for (const o of this.opponentsOf({ side:pass.side })) {
         if (!o.onField || o.down>0 || o.card) continue;
-        if (Math.hypot(o.x-b.x,o.y-b.y) < 1.2 && Math.random() < .005 + (o.awareness||60)*.00008) {
+        if (Math.hypot(o.x-b.x,o.y-b.y) < 1.2 && Math.random() < (.055 + (o.awareness||60)*.0008) * dt) {
           this.intercept(o); return;
         }
       }
       if (t >= 1) {
-        const target = this.allPlayers.find(p=>p.id===pass.targetId);
-        if (!target || !target.onField) { b.mode='loose'; b.z=0; this.knockOn(pass.side, 'Pass goes to ground'); return; }
-        const pressure = this.opponentsOf(target).some(o=>o.onField && dist(o,target)<1.6);
-        const catchChance = clamp(.97 - (100-(target.handling||70))*.003 - (pressure?.08:0), .72, .99);
+        if (!target || !target.onField || target.down>0 || target.card) {
+          b.mode='loose'; b.z=.3; this.knockOn(pass.side, 'Pass goes to ground'); return;
+        }
+        const pressure = (target.pressure||0) > 0 || this.opponentsOf(target).some(o=>o.onField && dist(o,target)<1.6);
+        const fx = this.weatherFx;
+        const catchChance = clamp((.97 - (100-(target.handling||70))*.003 - (pressure?.08:0)) * (fx?.catch ?? 1), .35, .99);
+        if (b.y < -.5 || b.y > 100.5 || b.x < 0 || b.x > 70) {
+          b.mode='loose'; b.z=.3; this.knockOn(pass.side, 'Pass goes out of play'); return;
+        }
         if (Math.random() > catchChance) {
           b.mode='loose'; b.z=.3; b.vx=rand(-2,2); b.vy=rand(-2,2);
           this.knockOn(pass.side, `${target.name} spills the pass!`);
@@ -835,23 +917,35 @@ export class RugbyGame {
           b.mode='held'; b.holder=target; b.pass=null; b.z=.5;
           target.touches++;
           this.lastPasser = null;
-          if (pass.offload) this.dust(target.x,target.y,2,'#e2d7bd');
+          // Control follows the ball to the receiver.
+          if (target.side === this.userTeam) { this.controlledId = target.id; this.controlLock = 0; }
+          if (pass.offload) this.dust(target.x,target.y,2,fx?.mud>.5?'#6b5538':'#e2d7bd');
         }
       }
       return;
     }
     if (b.mode === 'kick' || b.mode === 'loose') {
+      const fx = this.weatherFx;
+      if (b.mode === 'kick' && fx) {
+        b.vx += fx.windX * dt * .12;
+        b.vy += fx.windY * dt * .12;
+      }
       b.x += b.vx*dt; b.y += b.vy*dt;
       if (b.mode === 'kick') {
         b.z += b.vz*dt; b.vz -= 9.81*dt;
         if (b.z <= 0) {
           b.z = 0;
-          if (b.bounces < 2 && Math.abs(b.vz) > 1.5) { b.vz = Math.abs(b.vz)*.34; b.bounces++; this.dust(b.x,b.y,3,'#c9bd9e'); }
-          else { b.vz = 0; b.mode='loose'; }
+          if (b.bounces < 2 && Math.abs(b.vz) > 1.5) {
+            b.vz = Math.abs(b.vz)*.34 * (fx?.ballFriction ?? 1);
+            b.vx *= .72 * (fx?.ballFriction ?? 1);
+            b.vy *= .72 * (fx?.ballFriction ?? 1);
+            b.bounces++;
+            this.dust(b.x,b.y,3,fx?.mud>.5?'#6b5538':'#c9bd9e');
+          } else { b.vz = 0; b.mode='loose'; }
         }
       }
       if (b.mode === 'loose') {
-        const fr = Math.pow(.55, dt);
+        const fr = Math.pow(.55 * (fx?.ballFriction ?? 1), dt);
         b.vx *= fr; b.vy *= fr;
         if (Math.hypot(b.vx,b.vy) < .4) { b.vx=0; b.vy=0; }
       }
@@ -862,19 +956,23 @@ export class RugbyGame {
 
   checkCatch(dt) {
     const b = this.ball;
-    if (b.mode === 'held') return;
+    b.catchCooldown = Math.max(0, (b.catchCooldown || 0) - dt);
+    if (b.mode === 'held' || b.catchCooldown > 0) return;
     if (b.mode === 'kick' && b.z > 2.2) return;
     let best=null, bd=99;
     for (const p of this.allPlayers) {
       if (!p.onField || p.down>0 || p.card) continue;
+      // The kicking side cannot contest its own restart immediately.
+      if (b.mode === 'kick' && b.lastKick === p.side && b.kickFrom && dist(p,b.kickFrom) < 9 && b.bounces === 0) continue;
       const d = Math.hypot(p.x-b.x,p.y-b.y);
       if (d < 1.7 && d < bd) { bd=d; best=p; }
     }
     if (!best) return;
     const contest = this.opponentsOf(best).filter(o=>o.onField && Math.hypot(o.x-b.x,o.y-b.y)<2.2);
     const catchAttr = (best.handling||70) + (best.jumping||60)*.3 - contest.length*3;
-    if (Math.random() < clamp(.45 + catchAttr*.005, .45,.95)) {
-      b.holder = best; b.mode='held'; b.vx=0; b.vy=0; b.z=.5; b.pass=null;
+    const chance = clamp((.45 + catchAttr*.005) * (this.weatherFx?.catch ?? 1), .18, .95);
+    if (Math.random() < chance) {
+      b.holder = best; b.mode='held'; b.vx=0; b.vy=0; b.z=.5; b.pass=null; b.catchCooldown=0;
       best.touches++;
       this.possession = best.side;
       if (this.phase === 'kickoff') {
@@ -891,21 +989,21 @@ export class RugbyGame {
       this.emit('catch', { player:best.name });
     } else {
       b.vx += rand(-2,2); b.vy += rand(-2,2); b.z=.4;
-      this.dust(b.x,b.y,3);
+      b.catchCooldown=.28;
+      this.dust(b.x,b.y,3,this.weatherFx?.mud>.5?'#6b5538':'#d8cfb5');
     }
   }
 
   checkTackles(dt) {
-    if (this.phase !== 'open' && this.phase !== 'kickoff') return;
+    if (this.phase !== 'open') return;
     const carrier = this.ball.holder;
     if (!carrier || carrier.down>0) return;
     for (const d of this.opponentsOf(carrier)) {
-      if (!d.onField || d.down>0 || d.card || d.tackleCooldown>0) continue;
-      const gap = dist(d,carrier);
-      const userDef = d.id===this.controlledId && d.side===this.userTeam;
-      const lunge = userDef && this.actionPressed;
-      if (gap < (lunge?1.9:1.15)) {
-        if (userDef && !this.actionPressed && gap>0.7) continue;
+      // User defenders only tackle on an explicit input. AI team-mates do not
+      // silently steal tackles from the player.
+      if (d.side === this.userTeam) continue;
+      if (!d.onField || d.down>0 || d.card || d.tackleCooldown>0 || d.stun>0 || d.recover>0) continue;
+      if (dist(d,carrier) < 1.15) {
         this.resolveTackle(d, carrier);
         break;
       }
@@ -913,7 +1011,7 @@ export class RugbyGame {
   }
 
   resolveTackle(defender, carrier, type='normal') {
-    defender.tackleCooldown = type==='dive'?1.05:.65;
+    defender.tackleCooldown = Math.max(defender.tackleCooldown || 0, type==='dive'?1.05:.65);
     defender.tackleType=type;
     defender.tackleAnim=.6;
     carrier.tackledBy=defender.id;
@@ -921,8 +1019,9 @@ export class RugbyGame {
     const dir = carrier.dir;
     const rel = Math.hypot(defender.vx-carrier.vx, defender.vy-carrier.vy);
     const closing = Math.max(0, ((defender.vx-carrier.vx)*(carrier.x-defender.x) + (defender.vy-carrier.vy)*(carrier.y-defender.y)) / (dist(defender,carrier)||1));
+    const grip = this.weatherFx?.traction ?? 1;
     let hit = (defender.tackling||70)*.58 + (defender.strength||70)*.24 + closing*3.2 + rel*1.5;
-    let resist = (carrier.strength||70)*.5 + (carrier.agility||70)*.16 + (carrier.speed||70)*.17 + rel*.8;
+    let resist = (carrier.strength||70)*.5 + (carrier.agility||70)*.16 + (carrier.speed||70)*.17 + rel*.8 + (1-grip)*14;
     if (type==='low') { hit+=4; resist-=2; }
     if (type==='big') { hit+=15; resist-=6; }
     if (type==='dive') { hit+=2; resist-=1; }
@@ -952,8 +1051,9 @@ export class RugbyGame {
       this.emit('brokenTackle', { player:carrier.name, defender:defender.name });
       return;
     }
-    // offload window
-    if (carrier.offloadWindow > 0 && Math.random() < .55) {
+    // Offloads are a player decision for the human side; the AI may use its
+    // automatic window. A wet ball makes any offload far less reliable.
+    if (carrier.offloadWindow > 0 && carrier.side !== this.userTeam && Math.random() < .55 * (this.weatherFx?.catch ?? 1)) {
       const support = this.supportOptions(carrier)[0];
       if (support && Math.random() < .55 + (carrier.handling||70)*.003) {
         this.aiPass(carrier, support, true);
@@ -1030,12 +1130,13 @@ export class RugbyGame {
     if (!r || r.resolved) return;
     r.timer += dt;
     // players bind to the breakdown
+    const dir = r.side==='home' ? 1 : -1;
     for (const p of [...r.attack,...r.defense]) {
       if (!p.onField || p.down>0) continue;
       const isAttack = r.attack.includes(p);
       const idx = (isAttack?r.attack:r.defense).indexOf(p);
       const tx = r.x + (idx-1)*.7 + (isAttack?-0.5:0.5);
-      const ty = r.y + (isAttack?-0.45:0.45) + (idx===0?0:idx*.2);
+      const ty = r.y + (isAttack?-dir*.45:dir*.45) + (idx===0?0:idx*.2);
       const dx=tx-p.x, dy=ty-p.y, d=Math.hypot(dx,dy)||1;
       if (d>0.45) this.movePlayer(p, dx/d, dy/d, false, dt);
     }
@@ -1074,7 +1175,9 @@ export class RugbyGame {
     this.possession = side;
     this.ruck = null;
     if (nine) {
-      nine.x = x + (side==='home'?-.4:.4); nine.y = y + (side==='home'?-.4:.4);
+      const dir = side==='home' ? 1 : -1;
+      nine.x = clamp(x + rand(-.35,.35), 2, 68);
+      nine.y = clamp(y - dir*.55, -1, 101);
       nine.down = 0;
       this.ball.holder = nine; this.ball.mode='held'; this.ball.x=nine.x; this.ball.y=nine.y; this.ball.z=.5;
       this.ball.pass=null;
@@ -1113,7 +1216,16 @@ export class RugbyGame {
     const b = this.ball;
     if (b.holder) {
       const p = b.holder;
-      // try line / in-goal
+      // Touch is adjudicated before the goal line: a carrier cannot run out.
+      if (p.x <= 0 || p.x >= 70) {
+        const other = p.side==='home'?'away':'home';
+        const lineX = clamp(p.x, 2, 68);
+        p.x = lineX;
+        this.say(`${p.name} is forced into touch. Lineout to ${this[other].team.name}.`,'setpiece');
+        this.startLineout(other, lineX, clamp(p.y, 7, 93));
+        return;
+      }
+      // Carriers may cross the goal line to ground the ball.
       if ((p.dir > 0 && p.y >= 100) || (p.dir < 0 && p.y <= 0)) {
         this.scoreTry(p.side, p, p.x, p.y);
         return;
@@ -1205,11 +1317,14 @@ export class RugbyGame {
     const side=info.side;
     this.phase='conversion';
     this.pendingConversion={ side, x:clamp(info.x,3,67), y:info.y, scorer:info.scorer };
-    const kicker=this[kickerSide(side,this)].lineup.find(p=>p.number===10) || this[side].lineup[9];
-    this.goal={ type:'conversion', side, x:clamp(info.x,5,65), y:info.y, kicker, distance:Math.hypot(35-clamp(info.x,5,65),100-info.y), timer:0, user:side===this.userTeam, result:null };
+    const kicker=this[side].lineup.find(p=>p.number===10) || this[side].lineup[9];
+    const goalY = side==='home' ? 100 : 0;
+    const kickX = clamp(info.x, 5, 65);
+    const distance=Math.hypot(35-kickX, goalY-info.y);
+    this.goal={ type:'conversion', side, x:kickX, y:goalY, kicker, distance, timer:0, user:side===this.userTeam, result:null };
     this.say(`${kicker.name} lines up the conversion...`, 'info');
     this.emit('goalRequest',{...this.goal});
-    if (side!==this.userTeam) setTimeout(()=>this.aiGoal(), 1100);
+    if (side!==this.userTeam) this.schedule(()=>this.aiGoal(), 1100, 'conversion');
   }
 
   updateCards(dt) {
@@ -1221,7 +1336,7 @@ export class RugbyGame {
     }
   }
 
-  autoControl(dt) {
+  autoControl(dt=0) {
     if (this.userTeam==='none') return;
     const b=this.ball;
     const user = this[this.userTeam];
@@ -1229,14 +1344,16 @@ export class RugbyGame {
     this.controlLock=Math.max(0,this.controlLock-dt);
     const candidates=user.lineup.filter(p=>p.onField&&p.down<=0&&!p.card);
     if(!candidates.length) return;
-    // Possession transfer is immediate: the ball carrier is always yours.
+    // Whoever carries the ball for the user is always the controlled player.
     if (b.holder && b.holder.side===this.userTeam) {
+      if (this.controlledId !== b.holder.id) this.emit('control',{player:b.holder.name});
       this.controlledId=b.holder.id;
-      this.controlLock=0;
       return;
     }
-    // A manual switch holds for a moment so the AI cannot snatch it back.
-    if (this.controlLock>0) return;
+    // A manual defensive switch stays put until the timer expires.
+    if (this.controlLock>0) {
+      if (candidates.some(p=>p.id===this.controlledId)) return;
+    }
     const point=b.holder||b;
     const target=candidates.sort((a,c)=>dist(a,point)-dist(c,point))[0];
     if (target) this.controlledId=target.id;
@@ -1244,7 +1361,8 @@ export class RugbyGame {
 
   action() {
     this.actionPressed = true;
-    setTimeout(()=>{this.actionPressed=false;}, 160);
+    this.actionWindow = .28;
+    this.schedule(()=>{this.actionPressed=false;}, 280);
     if (this.phase==='ruck' && this.ruck) {
       if (this.ruck.side===this.userTeam) { this.ruck.attackTaps++; this.emit('ruckTap',{side:'attack',taps:this.ruck.attackTaps}); }
       else { this.ruck.defenseTaps++; this.emit('ruckTap',{side:'defense',taps:this.ruck.defenseTaps}); }
@@ -1270,13 +1388,33 @@ export class RugbyGame {
 
   manualTackle(type='normal') {
     if (this.phase!=='open') return false;
-    const carrier=this.ball.holder;
-    if (!carrier || carrier.side===this.userTeam) return false;
+    const b=this.ball;
     const defender=this.byId(this.controlledId);
     if (!defender || defender.side!==this.userTeam || defender.down>0 || defender.card) return false;
     const cfg=TACKLE_TYPES[type]||TACKLE_TYPES.normal;
     if (defender.tackleCooldown>0 || defender.stamina<cfg.stamina*.5) return false;
 
+    // An intercept is a play on the ball in flight, not on a ball carrier.
+    if (type==='intercept') {
+      defender.tackleCooldown=cfg.cooldown;
+      defender.stamina=Math.max(0,defender.stamina-cfg.stamina);
+      defender.tackleAnim=.55;
+      defender.tackleType=type;
+      if (b.mode==='pass' && b.pass && b.pass.side!==this.userTeam) {
+        const dPass=dist(defender,b);
+        const chance=clamp(.22+(defender.awareness||60)*.005+(defender.handling||60)*.004-dPass*.02,.06,.82)
+          * (this.weatherFx?.catch ?? 1);
+        if (Math.random()<chance) { this.intercept(defender); return true; }
+      }
+      this.stats[defender.side].missedTackles++;
+      defender.stun=.34;
+      this.flash(defender.x,defender.y,'INTERCEPT MISSED','#ffb066');
+      this.emit('missedTackle',{player:defender.name,carrier:'the pass',type});
+      return false;
+    }
+
+    const carrier=b.holder;
+    if (!carrier || carrier.side===this.userTeam) return false;
     const d=dist(defender,carrier);
     const [nx,ny]=norm(carrier.x-defender.x, carrier.y-defender.y);
     defender.tackleCooldown=cfg.cooldown;
@@ -1287,26 +1425,22 @@ export class RugbyGame {
     defender.vy+=ny*cfg.lunge;
 
     if (type==='pressure') {
-      this.flash(defender.x,defender.y,'PRESSURE','#8fe8ff');
-      this.emit('pressure',{player:defender.name});
-      return true;
-    }
-
-    if (type==='intercept') {
-      const b=this.ball;
-      if (b.mode==='pass' && b.pass && b.pass.side!==this.userTeam) {
-        const chance=clamp(.16+(defender.awareness||60)*.005+(defender.handling||60)*.003-d*.022,.06,.72);
-        if (Math.random()<chance) { this.intercept(defender); return true; }
+      if (d <= cfg.range + 1.5) {
+        carrier.pressure = Math.max(carrier.pressure || 0, 1.1);
+        carrier.vx *= .82; carrier.vy *= .82;
+        this.flash(defender.x,defender.y,'PRESSURE','#8fe8ff');
+        this.say(`${defender.name} jams the channel. ${carrier.name} is under pressure.`,'tackle');
+        this.emit('pressure',{player:defender.name});
+        return true;
       }
       this.stats[defender.side].missedTackles++;
-      defender.stun=.34;
-      this.flash(defender.x,defender.y,'INTERCEPT MISSED','#ffb066');
-      this.emit('missedTackle',{player:defender.name,carrier:carrier.name,type});
+      this.flash(defender.x,defender.y,'PRESSURE MISSED','#ffb066');
       return false;
     }
 
     const reach=cfg.range+(defender.speed||60)*.004;
-    const chance=clamp(cfg.accuracy+((defender.tackling||70)-(carrier.agility||70))*.005-(d>reach?.16:0),.28,.97);
+    const grip=this.weatherFx?.traction ?? 1;
+    const chance=clamp((cfg.accuracy+((defender.tackling||70)-(carrier.agility||70))*.005-(d>reach?.16:0))*(.72+grip*.28),.18,.97);
     if (d<=reach && Math.random()<chance) {
       this.resolveTackle(defender,carrier,type);
       return true;
@@ -1414,7 +1548,7 @@ export class RugbyGame {
     if (!carrier || carrier.side!==this.userTeam || this.phase!=='open') return;
     const support=this.supportOptions(carrier)[0];
     if (!support) { this.say('No one in support for the offload.','info'); return; }
-    const chance=clamp(.38+(carrier.handling||70)*.004+(carrier.awareness||70)*.002, .35,.9);
+    const chance=clamp((.38+(carrier.handling||70)*.004+(carrier.awareness||70)*.002)*(this.weatherFx?.catch ?? 1), .18,.9);
     if (Math.random()<chance) {
       this.aiPass(carrier,support,true);
       carrier.offloadWindow=0;
@@ -1432,41 +1566,48 @@ export class RugbyGame {
     const carrier=this.ball.holder;
     if (!carrier || carrier.side!==this.userTeam) return false;
     this.kickMenuOpen=true;
+    this.menuWasPaused=this.paused;
+    this.menuPaused=true;
     this.paused=true;
     this.emit('kickMenu', { player:carrier.name, inGoalRange: Math.abs(carrier.y-(carrier.dir>0?100:0))<38, x:carrier.x, y:carrier.y });
     return true;
   }
 
-  closeKickMenu() { this.kickMenuOpen=false; this.paused=false; }
+  closeKickMenu() {
+    this.kickMenuOpen=false; this.menuPaused=false;
+    this.paused=this.menuWasPaused || false;
+  }
 
   chooseKick(type) {
     if (!this.kickMenuOpen) return;
-    this.kickMenuOpen=false; this.paused=false;
+    this.kickMenuOpen=false; this.menuPaused=false;
+    this.paused=this.menuWasPaused || false;
     const p=this.ball.holder;
     if (!p) return;
     if (type==='goal') { this.attemptDropGoal(p); return; }
-    if (type==='cross') { this.userKick(p,'cross'); return; }
-    if (type==='grubber') { this.userKick(p,'grubber'); return; }
-    if (type==='bomb') { this.userKick(p,'bomb'); return; }
-    if (type==='touch') { this.userKick(p,'touch'); return; }
+    if (['cross','grubber','bomb','touch','box','territory'].includes(type)) { this.userKick(p,type); return; }
     this.userKick(p,'territory');
   }
 
   userKick(p,type) {
     const dir=p.dir;
+    const fx=this.weatherFx;
     let angle=(this.input.x||0)*.5;
     let power=25,vz=8;
     if (type==='grubber'){power=21;vz=1.2;}
     if (type==='bomb'){power=18;vz=14;}
     if (type==='box'){power=17;vz=10;angle=this.input.x*.2;}
-    if (type==='cross'){angle=this.input.x*.9;power=20;vz=8;}
+    if (type==='cross'){angle=(this.input.x||0)*.9;power=20;vz=8;}
     if (type==='touch'){angle=(p.x>35?1:-1)*.85;power=28;vz=6;}
+    const carry=fx?.temperature<8?1.06:1;
     const b=this.ball;
     b.holder=null;b.mode='kick';b.x=p.x;b.y=p.y;b.z=1.1;
-    b.vx=Math.sin(angle)*power;b.vy=dir*Math.cos(angle)*power;b.vz=vz;
+    b.vx=Math.sin(angle)*power*carry+(fx?.windX||0)*.8;
+    b.vy=dir*Math.cos(angle)*power*carry+(fx?.windY||0)*.8;
+    b.vz=vz;
     b.lastKick=p.side;b.lastKickType=type;b.bounces=0;b.kickFrom={x:p.x,y:p.y,side:p.side};
     p.kicks++;this.stats[p.side].kicks++;p.kickAnim=.5;
-    this.say(`${p.name} ${type==='grubber'?'slides a grubber into space':type==='bomb'?'sends up a towering bomb':type==='cross'?'fires a cross-field kick':type==='touch'?'finds touch':'kicks for territory'}.`,'kick');
+    this.say(`${p.name} ${type==='grubber'?'slides a grubber into space':type==='bomb'?'sends up a towering bomb':type==='box'?'box-kicks into space':type==='cross'?'fires a cross-field kick':type==='touch'?'finds touch':'kicks for territory'}.`,'kick');
     this.emit('kick',{type,player:p.name});
     this.phaseCount++;
   }
@@ -1479,7 +1620,7 @@ export class RugbyGame {
     const kicker=this[p.side].lineup.find(x=>x.number===10)||p;
     this.goal={type:'drop',side:p.side,x:p.x,y:p.y,kicker,distance,timer:0,user:p.side===this.userTeam,result:null};
     this.emit('goalRequest',{...this.goal});
-    if (p.side!==this.userTeam) setTimeout(()=>this.aiGoal(),900);
+    if (p.side!==this.userTeam) this.schedule(()=>this.aiGoal(),900,'goal');
   }
 
   takeGoalKick(quality=0.7) {
@@ -1487,8 +1628,10 @@ export class RugbyGame {
     if (!g || g.result) return;
     const kicker=g.kicker;
     const distFactor=clamp((g.distance-18)/36,0,1);
-    let chance=clamp(.92+(kicker.kicking-80)*.006-quality*.28-distFactor*.38, .06,.98);
-    if (g.type==='conversion') chance=clamp(.94+(kicker.kicking-80)*.005-quality*.22-distFactor*.26,.15,.99);
+    const fx=this.weatherFx;
+    const windPenalty=Math.abs(fx?.windX||0)*.035+Math.abs(fx?.windY||0)*.012+(fx?.rain||0)*.025;
+    let chance=clamp(.92+(kicker.kicking-80)*.006-quality*.28-distFactor*.38-windPenalty, .04,.98);
+    if (g.type==='conversion') chance=clamp(.94+(kicker.kicking-80)*.005-quality*.22-distFactor*.26-windPenalty,.08,.99);
     const success=Math.random()<chance;
     this.resolveGoal(success);
   }
@@ -1522,7 +1665,7 @@ export class RugbyGame {
     }
     const scoredSide=g.side;
     this.goal=null; this.paused=false;
-    setTimeout(()=>{
+    this.schedule(()=>{
       if (g.type==='conversion') this.restartKickoff(scoredSide==='home'?'away':'home');
       else if (g.type==='penalty') this.start22Drop(scoredSide==='home'?'away':'home');
       else this.restartKickoff(scoredSide==='home'?'away':'home');
@@ -1574,7 +1717,7 @@ export class RugbyGame {
     const good=s.meter>.34&&s.meter<.72;
     s.quality=good?1:.35;
     this.flash(s.x,s.y,good?'PERFECT PUSH':'EARLY ENGAGE',good?'#baff7a':'#ffb36a');
-    setTimeout(()=>this.resolveScrum(),250);
+    this.schedule(()=>this.resolveScrum(),250,'scrum');
   }
 
   resolveScrum() {
@@ -1590,6 +1733,7 @@ export class RugbyGame {
     const def=pack(this[other])+otherQuality*8+rand(-4,4)+scrumIdentity(other);
     const win=atk>def;
     if (Math.random()<.055) {
+      this.setpiece=null;
       this.say('The scrum collapses. Penalty — the front row will have another go.','penalty');
       this.awardPenalty(win?side:other,'Scrum collapse',s.x,s.y);
       return;
@@ -1664,15 +1808,17 @@ export class RugbyGame {
       this.say(`${jumper.name} rises to claim the lineout.`,'setpiece');
       this.ball.holder=jumper;this.ball.mode='held';this.ball.z=.5;
       this.possession=side;
-      if(Math.random()<.45) { setTimeout(()=>this.startMaul(side,s.x,s.y,jumper),350); }
-      else { setTimeout(()=>this.retainRuck(side,s.x,s.y),450); }
+      const lx=s.x, ly=s.y;
+      if(Math.random()<.45) { this.schedule(()=>this.startMaul(side,lx,ly,jumper),350,'lineout'); }
+      else { this.schedule(()=>this.retainRuck(side,lx,ly),450,'lineout'); }
       this.emit('lineoutResult',{winner:side,jumper:jumper.name});
     }else{
       this.stats[other].turnovers++;
       this.say(`Stolen! ${this[other].team.name} disrupt the throw and take the lineout.`,'big');
       const thief=this[other].lineup.find(p=>p.number===4)||this[other].lineup[3];
       this.ball.holder=thief;this.ball.mode='held';this.ball.z=.5;this.possession=other;
-      setTimeout(()=>this.retainRuck(other,s.x,s.y,true),500);
+      const lx=s.x, ly=s.y;
+      this.schedule(()=>this.retainRuck(other,lx,ly,true),500,'lineout');
       this.emit('lineoutResult',{winner:other,jumper:thief.name});
     }
     this.setpiece=null;
@@ -1691,15 +1837,23 @@ export class RugbyGame {
     const m=this.maul;if(!m)return;
     m.timer+=dt;
     const dir=m.side==='home'?1:-1;
-    m.y+=dt*.55;
+    const push=(1 + Math.min(3,m.drive)*.25) * (this.weatherFx?.traction ?? 1);
+    m.y=clamp(m.y + dir*dt*.55*push, 1, 99);
+    if(m.holder){m.holder.x=m.x;m.holder.y=m.y;}
     for(const p of this[m.side].lineup.filter(p=>p.number<=8)){
-      const tx=m.x+(p.number%3-1)*1.1,ty=m.y-(p.number%3)*.6;
+      const tx=m.x+(p.number%3-1)*1.1;
+      const ty=m.y-dir*(.8+(p.number%3)*.6);
       p.x=lerp(p.x,tx,.08);p.y=lerp(p.y,ty,.08);
     }
     if(m.timer>2.2||m.drive>5) this.endMaul();
   }
 
-  maulDrive(){if(this.maul){this.maul.drive++;this.flash(this.maul.x,this.maul.y,'DRIVE','#baff7a');this.emit('maulDrive',{drive:this.maul.drive});}}
+  maulDrive(){
+    if(!this.maul||this.maul.drive>=5)return;
+    this.maul.drive++;
+    this.flash(this.maul.x,this.maul.y,'DRIVE','#baff7a');
+    this.emit('maulDrive',{drive:this.maul.drive});
+  }
 
   endMaul() {
     const m=this.maul;if(!m)return;
@@ -1713,7 +1867,7 @@ export class RugbyGame {
   awardPenalty(side, reason, x, y) {
     if (this.phase==='try'||this.ended) return;
     const adv=this.advantage;
-    if (adv && adv.team===side && this.phase==='open') {
+    if (adv && adv.side===side && this.phase==='open') {
       this.say(`Advantage being played to ${this[side].team.name}.`,'info');
       return;
     }
@@ -1722,7 +1876,7 @@ export class RugbyGame {
     this.pendingPenalty={side,reason,x:clamp(x,3,67),y:clamp(y,5,95)};
     this.say(`Penalty to ${this[side].team.name} — ${reason}.`,'penalty');
     this.emit('penalty',{...this.pendingPenalty,team:this[side].team.name});
-    if(side!==this.userTeam) setTimeout(()=>this.aiPenalty(),1200);
+    if(side!==this.userTeam) this.schedule(()=>this.aiPenalty(),1200,'penalty');
   }
 
   choosePenalty(option) {
@@ -1737,7 +1891,7 @@ export class RugbyGame {
       const kicker=this[p.side].lineup.find(x=>x.number===10)||this[p.side].lineup[9];
       this.goal={type:'penalty',side:p.side,x:p.x,y:p.y,kicker,distance,timer:0,user:p.side===this.userTeam,result:null};
       this.emit('goalRequest',{...this.goal});
-      if(p.side!==this.userTeam)setTimeout(()=>this.aiGoal(),900);
+      if(p.side!==this.userTeam)this.schedule(()=>this.aiGoal(),900,'goal');
     } else if(option==='touch'){this.penaltyTouch(p);}
     else if(option==='scrum'){this.startScrum(p.side,p.x,p.y);}
     else {
@@ -1752,7 +1906,8 @@ export class RugbyGame {
     const dir=p.side==='home'?1:-1;
     const ty=clamp(p.y+dir*18,8,92);
     this.say('Kick to touch. Attacking lineout inside the twenty-two.','info');
-    setTimeout(()=>this.startLineout(p.side,clamp(p.x,4,66),ty),550);
+    const px=clamp(p.x,4,66), side=p.side;
+    this.schedule(()=>this.startLineout(side,px,ty),550,'penalty');
   }
 
   aiPenalty() {
@@ -1835,7 +1990,7 @@ export class RugbyGame {
       phase:this.phase,score:{...this.score},clock:this.clock,half:this.half,
       home:this.home.team,away:this.away.team,userTeam:this.userTeam,
       possession:carrier?.side||this.possession,
-      controlled:controlled?{name:controlled.name,number:controlled.number,stamina:controlled.stamina,position:controlled.posName}:null,
+      controlled:controlled?{name:controlled.name,number:controlled.number,stamina:controlled.stamina,position:controlled.posName || controlled.position}:null,
       carrier:carrier?{name:carrier.name,side:carrier.side,number:carrier.number,stamina:carrier.stamina}:null,
       actionLabel,passEnabled:!!(carrier&&carrier.side===this.userTeam&&this.phase==='open'),
       kickEnabled:!!(carrier&&carrier.side===this.userTeam&&this.phase==='open'),
@@ -1848,6 +2003,8 @@ export class RugbyGame {
       stats:this.stats,commentary:this.commentary.slice(-4),training:this.training,
       userRating:this.avgRating(userTeam.lineup),oppRating:this.avgRating(opp.lineup),
       ball:{x:b.x,y:b.y,z:b.z,mode:b.mode},effects:this.effects,
+      weather:this.weatherFx ? {...this.weatherFx, angle:this.weather.angle} : null,
+      weatherLabel: weatherLabel(this.weather),
       venue:this.venue,time:this.time
     };
   }

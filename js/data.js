@@ -55,7 +55,7 @@ export const POSITION_PROFILE = {
   CTR:{speed:13,acceleration:12,strength:3,stamina:4,agility:10,tackling:5,passing:6,kicking:1,handling:8,jumping:-2,scrum:-14,positioning:8,awareness:9,discipline:0}
 };
 
-const STYLE_LABEL = {
+export const STYLE_LABEL = {
   expansive:'Expansive', power:'Power Game', flair:'Flair', structured:'Structured',
   kicking:'Kicking & Pressure', pace:'Pace & Offload', defense:'Defensive Wall',
   scrum:'Set-Piece Grind', balanced:'Balanced', offload:'Offload Chaos'
