@@ -718,7 +718,8 @@ a{color:inherit}
   repeating-linear-gradient(90deg,transparent 0 34px,rgba(255,255,255,.025) 34px 35px),
   linear-gradient(180deg,#0d3323,#06170f 70%)}
 .prematch-stadium:after{content:"";position:absolute;left:-20%;right:-20%;bottom:-20%;height:55%;transform:perspective(380px) rotateX(62deg);background:repeating-linear-gradient(90deg,rgba(70,145,99,.18) 0 30px,rgba(35,91,60,.12) 30px 60px)}
-.prematch-inner{position:relative;z-index:2;text-align:center;padding:18px;width:100%;max-width:520px}
+.prematch-inner{position:relative;z-index:2;text-align:center;padding:18px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto}
+.prematch-overlay{overflow-y:auto}
 .prematch-teams{display:grid;grid-template-columns:1fr 42px 1fr;align-items:center;gap:2px;margin:14px 0 8px}
 .prematch-teams>div{display:flex;flex-direction:column;align-items:center;gap:3px}
 .prematch-teams h2{font-family:var(--font-head);font-size:18px;line-height:1;margin:5px 0 0;letter-spacing:-.01em}
