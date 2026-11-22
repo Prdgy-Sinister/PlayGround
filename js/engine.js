@@ -2,6 +2,8 @@
    A deterministic, physics-flavoured rugby engine: momentum, collisions,
    breakdowns, set pieces, laws and a role-aware AI. */
 
+import { IDENTITY_BY_TEAM } from './history.js';
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const len = (x, y) => Math.hypot(x, y);
@@ -9,6 +11,17 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const norm = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
 const rand = (a = 0, b = 1) => a + Math.random() * (b - a);
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+/* Manual tackle techniques. Range is metres, lunge is an impulse, accuracy
+   is the base success chance before attribute adjustments. */
+const TACKLE_TYPES = {
+  normal:    { range: 2.2, lunge: 3.4, accuracy: .90, stamina: 2.0, cooldown: .48, risk: .06 },
+  low:       { range: 2.0, lunge: 2.8, accuracy: .95, stamina: 2.5, cooldown: .58, risk: .04 },
+  dive:      { range: 3.9, lunge: 6.4, accuracy: .74, stamina: 7.5, cooldown: 1.05, risk: .20 },
+  big:       { range: 2.5, lunge: 4.4, accuracy: .66, stamina: 9.0, cooldown: 1.25, risk: .27 },
+  intercept: { range: 4.6, lunge: 2.2, accuracy: .35, stamina: 3.0, cooldown: .85, risk: .12 },
+  pressure:  { range: 10.0, lunge: 2.4, accuracy: 1, stamina: 2.6, cooldown: .45, risk: 0 }
+};
 
 const FIRST_NAMES = ['Jack','Tom','Liam','Noah','Ethan','Luca','Mateo','Sione','Tama','Finn','Owen','Rhys','Pieter','Ruan','Diego','João','Kotaro','Giorgi','Sami','Tevita'];
 const LAST_NAMES = ['Walker','Reed','Fraser','King','Mason','Vaea','Tuilagi','Nkosi','Dupont','Smith','O’Brien','Williams','Botha','Costa','Sato','Lomidze','Fifita','Mata','Nielsen','Rossi'];
@@ -38,6 +51,12 @@ export class Player {
     this.contact = 0;
     this.fend = 0;
     this.offloadWindow = 0;
+    this.tackleAnim = 0;
+    this.tackleType = null;
+    this.tackledBy = null;
+    this.celebrate = 0;
+    this.step = 0;
+    this.recover = 0;
     this.card = null;
     this.cardTimer = 0;
     this.stamina = 100;
@@ -117,6 +136,7 @@ export class RugbyGame {
     this.players = [];
     this.controlledId = null;
     this.switchCooldown = 0;
+    this.controlLock = 0;
     this.kickoffPending = null;
     this.ruck = null;
     this.maul = null;
@@ -233,6 +253,7 @@ export class RugbyGame {
     this.kickoffTeam = kickingSide;
     this.controlledId = null;
     this.switchCooldown = 0;
+    this.controlLock = 0;
   }
 
   resetFormation(possession, style='open') {
@@ -448,6 +469,11 @@ export class RugbyGame {
       p.passAnim = Math.max(0, p.passAnim - dt);
       p.offloadWindow = Math.max(0, p.offloadWindow - dt);
       p.fend = Math.max(0, p.fend - dt);
+      p.tackleAnim = Math.max(0, p.tackleAnim - dt);
+      p.celebrate = Math.max(0, p.celebrate - dt);
+      p.step = Math.max(0, p.step - dt);
+      p.recover = Math.max(0, p.recover - dt);
+      if (p.tackleAnim <= 0) p.tackleType = null;
       if (p.card) continue;
       if (p.down > 0) {
         p.down -= dt;
@@ -564,8 +590,9 @@ export class RugbyGame {
     const toGoal = Math.abs(goalY - p.y);
     const support = this.supportOptions(p);
     if (p.think <= 0) {
-      p.think = rand(.22,.55);
-      const kickBias = this.teamTactics(p.side).kick;
+      const tactics = this.teamTactics(p.side);
+      p.think = rand(.22,.55) * (1.18 - (tactics.tempo || .5) * .36);
+      const kickBias = tactics.kick;
       const pressure = nd < 3.5;
       const inOwnHalf = (p.dir>0 ? p.y<50 : p.y>50);
       const losingLate = this.losingLate(p.side);
@@ -574,16 +601,17 @@ export class RugbyGame {
         if (inOwnHalf && nd < 4.5) { this.aiKick(p, 'box'); return { x:0,y:0,sprint:false }; }
         if (!inOwnHalf && Math.random()<.4) { this.aiKick(p, 'territory'); return { x:0,y:0,sprint:false }; }
       }
-      if (pressure && support.length && Math.random() < .55 + (p.awareness||60)*.002) {
+      if (pressure && support.length && Math.random() < .42 + (p.awareness||60)*.002 + (tactics.pass || .5) * .16) {
         this.aiPass(p, support[0]);
         return { x:0,y:0,sprint:false };
       }
-      if (pressure && support.length && p.offloadWindow > 0 && Math.random() < .3) {
+      if (pressure && support.length && p.offloadWindow > 0 && Math.random() < .18 + (tactics.offload || .5) * .3) {
         this.aiPass(p, support[0], true);
         return { x:0,y:0,sprint:false };
       }
     }
-    let tx = p.x, ty = p.y + dir * 3;
+    const carry = this.teamTactics(p.side).carry || .5;
+    let tx = p.x, ty = p.y + dir * (2.4 + carry * 1.6);
     if (nearest && nd < 7) {
       // find the widest gap
       const gaps = [-12,-7,-3,3,7,12].map(off => {
@@ -611,16 +639,22 @@ export class RugbyGame {
     }
     const attackDir = dir;
     const phase = this.phaseCount;
+    const tactics = this.teamTactics(p.side);
+    const width = .62 + (tactics.width || .5) * .78;
     let slotX, behind;
     if (p.number <= 8) {
       const forwardRank = p.number<=3 ? 1 : p.number<=5 ? 2 : 3;
-      slotX = carrier.x + (p.number%2 ? -1:1) * (forwardRank*3 + (p.number%3));
+      const podSpread = tactics.pods==='wide' ? 4.2 : tactics.pods==='tight' ? 2.4 : 3.2;
+      slotX = carrier.x + (p.number%2 ? -1:1) * (forwardRank*podSpread + (p.number%3));
       behind = 2 + forwardRank*2.2 + (phase>3?2:0);
     } else {
       const slots = {9:-2,10:-7,11:-25,12:-11,13:9,14:25,15:-17};
-      slotX = carrier.x + (slots[p.number] || 0) * (p.x>35 ? -1 : 1);
+      slotX = carrier.x + (slots[p.number] || 0) * width * (p.x>35 ? -1 : 1);
       behind = p.number===9 ? 1.5 : p.number===10 ? 5 : 8 + (p.number%3)*2;
       if (phase > 2) behind += 2;
+      if (tactics.backline==='deep') behind += 2.6;
+      if (tactics.backline==='flat') behind = Math.max(1, behind-1.6);
+      if (p.number>=11 && tactics.width>.8) slotX = carrier.x + (slots[p.number]||0)*1.18*(p.x>35?-1:1);
     }
     if (p.number === 9 && carrier !== p && this.phase !== 'open') behind = 1;
     let tx = clamp(slotX, 4, 66);
@@ -636,7 +670,9 @@ export class RugbyGame {
   aiDefend(p, dt) {
     const b = this.ball, dir = p.dir, carrier = b.holder;
     const attack = carrier ? carrier : { x:b.x, y:b.y };
-    const lineY = attack.y - dir * (this.phase==='ruck'?1.2:4.2);
+    const tactics = this.teamTactics(p.side);
+    const lineGap = this.phase==='ruck' ? 1.2 : (5.6 - (tactics.lineSpeed || .55) * 2.8);
+    const lineY = attack.y - dir * lineGap;
     const nearest = this.nearestDefenders(p.side, attack, 2);
     const isChaser = nearest.some(o=>o.id===p.id);
     if (p.number === 15) {
@@ -651,7 +687,7 @@ export class RugbyGame {
     }
     const slot = [0, -2, 2, -5, 5, -9, 9, 0, -1, -7, -24, -11, 8, 24, 0][p.number] || 0;
     const drift = clamp((attack.x-35)*.55, -8, 8);
-    let tx = clamp(35 + slot*1.15 + drift, 3, 67);
+    let tx = clamp(35 + slot*1.15*(.8+(tactics.width||.5)*.5) + drift, 3, 67);
     let ty = clamp(lineY - dir*(p.number%3)*.45, -5, 105);
     if (this.ball.mode==='kick' && b.z>0) {
       ty = clamp(attack.y - dir*7, -5, 105);
@@ -671,9 +707,25 @@ export class RugbyGame {
 
   teamTactics(side) {
     const team = this[side].team;
+    const identity = IDENTITY_BY_TEAM[team.id];
+    const ai = identity?.ai || {};
     const base = { expansive:.55, power:.5, flair:.5, structured:.5, kicking:.55, pace:.5, defense:.5, scrum:.5, balanced:.5, offload:.5 }[team.style] || .5;
     const t = this[side].tactics || {};
-    return { kick: (t.kick ?? base) * .7 + .3, width: t.width ?? .5, offload: t.offload ?? base, lineSpeed: t.lineSpeed ?? .55 };
+    return {
+      kick: t.kick ?? ai.kick ?? base,
+      width: t.width ?? ai.width ?? base,
+      offload: t.offload ?? ai.offload ?? base,
+      lineSpeed: t.lineSpeed ?? ai.lineSpeed ?? .55,
+      tempo: ai.tempo ?? base,
+      breakdown: ai.breakdown ?? base,
+      scrum: ai.scrum ?? base,
+      defence: ai.defence ?? ai.defense ?? base,
+      carry: ai.carry ?? base,
+      pass: ai.pass ?? base,
+      backline: identity?.formation?.backline || 'mixed',
+      pods: identity?.formation?.pods || 'split',
+      chase: identity?.formation?.chase || 'connected'
+    };
   }
 
   losingLate(side) {
@@ -850,22 +902,31 @@ export class RugbyGame {
     }
   }
 
-  resolveTackle(defender, carrier) {
-    defender.tackleCooldown = .65;
+  resolveTackle(defender, carrier, type='normal') {
+    defender.tackleCooldown = type==='dive'?1.05:.65;
+    defender.tackleType=type;
+    defender.tackleAnim=.6;
+    carrier.tackledBy=defender.id;
+    carrier.tackleType=type;
     const dir = carrier.dir;
     const rel = Math.hypot(defender.vx-carrier.vx, defender.vy-carrier.vy);
     const closing = Math.max(0, ((defender.vx-carrier.vx)*(carrier.x-defender.x) + (defender.vy-carrier.vy)*(carrier.y-defender.y)) / (dist(defender,carrier)||1));
-    const hit = (defender.tackling||70)*.58 + (defender.strength||70)*.24 + closing*3.2 + rel*1.5;
-    const resist = (carrier.strength||70)*.5 + (carrier.agility||70)*.16 + (carrier.speed||70)*.17 + rel*.8;
+    let hit = (defender.tackling||70)*.58 + (defender.strength||70)*.24 + closing*3.2 + rel*1.5;
+    let resist = (carrier.strength||70)*.5 + (carrier.agility||70)*.16 + (carrier.speed||70)*.17 + rel*.8;
+    if (type==='low') { hit+=4; resist-=2; }
+    if (type==='big') { hit+=15; resist-=6; }
+    if (type==='dive') { hit+=2; resist-=1; }
     let breakChance = clamp(.12 + (resist-hit)*.007, .02, .62);
-    if (carrier.fend>0) breakChance += .16;
+    if (carrier.fend>0) breakChance += type==='big'?.05:.16;
     if (carrier.stamina < 25) breakChance -= .08;
+    if (type==='low') breakChance -= .12;
+    if (type==='big') breakChance += .04;
     this.stats[defender.side].tackles++;
     defender.tackles++;
     this.dust(carrier.x,carrier.y,4);
     this.cameraShake = Math.min(.55,.18+closing*.03);
     // dangerous high shot
-    const highChance = clamp(.006 + (100-(defender.discipline||70))*.0006, .004,.035);
+    const highChance = clamp((.006 + (100-(defender.discipline||70))*.0006) * (type==='big'?2.6:type==='dive'?1.35:type==='low'?.4:1), .002,.08);
     if (Math.random() < highChance) {
       this.highTackle(defender, carrier);
       return;
@@ -894,15 +955,27 @@ export class RugbyGame {
       }
     }
     // dominant vs cover tackle
-    const dominant = closing > 4.5 || (defender.strength||70) - (carrier.strength||70) > 16;
-    carrier.down = dominant ? 1.45 : .95;
+    const dominant = type==='big' || closing > 4.5 || (defender.strength||70) - (carrier.strength||70) > 16;
+    carrier.down = dominant ? 1.45 : type==='dive'?.85:.95;
     carrier.vx = defender.vx*.55 + (carrier.x-defender.x)*.2;
     carrier.vy = defender.vy*.55 + (carrier.y-defender.y)*.2;
     defender.vx *= .55; defender.vy *= .55;
-    if (dominant) { this.flash(carrier.x,carrier.y,'DOMINANT HIT','#ffd36a'); this.say(`Huge dominant tackle by ${defender.name}!`, 'big'); }
-    else if (rel < 2) this.say(`${defender.name} completes a textbook low tackle.`, 'tackle');
+    if (type==='dive') {
+      defender.down = .42;
+      defender.recover = .5;
+      this.flash(carrier.x,carrier.y,'DIVE TACKLE','#ffd36a');
+      this.say(`${defender.name} launches into a diving tackle on ${carrier.name}!`,'tackle');
+    } else if (type==='big') {
+      this.flash(carrier.x,carrier.y,'BIG HIT','#ffd36a');
+      this.say(`Crunching big tackle from ${defender.name}!`,'big');
+    } else if (type==='low') {
+      this.say(`${defender.name} goes low and chops ${carrier.name} down.`,'tackle');
+    } else if (dominant) {
+      this.flash(carrier.x,carrier.y,'DOMINANT HIT','#ffd36a');
+      this.say(`Huge dominant tackle by ${defender.name}!`, 'big');
+    } else if (rel < 2) this.say(`${defender.name} completes a textbook standing tackle.`, 'tackle');
     else this.say(`${defender.name} chops ${carrier.name} down.`, 'tackle');
-    this.emit('tackle', { player:defender.name, carrier:carrier.name, dominant, rel });
+    this.emit('tackle', { player:defender.name, carrier:carrier.name, dominant, rel, type });
     this.startRuck(defender, carrier);
   }
 
@@ -958,8 +1031,10 @@ export class RugbyGame {
     }
     if (r.timer > (r.quick?1.05:1.75)) {
       r.resolved = true;
-      const attackPow = r.attack.reduce((s,p)=>s+(p.strength||70)*.5+(p.scrum||60)*.2+(p.agility||60)*.1,0)/Math.max(1,r.attack.length) + r.attackTaps*5;
-      const defPow = r.defense.reduce((s,p)=>s+(p.tackling||70)*.45+(p.strength||70)*.3+(p.agility||60)*.15,0)/Math.max(1,r.defense.length) + r.defenseTaps*6;
+      const attackIdentity = this.teamTactics(r.side).breakdown || .5;
+      const defIdentity = this.teamTactics(r.side==='home'?'away':'home').breakdown || .5;
+      const attackPow = r.attack.reduce((s,p)=>s+(p.strength||70)*.5+(p.scrum||60)*.2+(p.agility||60)*.1,0)/Math.max(1,r.attack.length) + r.attackTaps*5 + attackIdentity*3;
+      const defPow = r.defense.reduce((s,p)=>s+(p.tackling||70)*.45+(p.strength||70)*.3+(p.agility||60)*.15,0)/Math.max(1,r.defense.length) + r.defenseTaps*6 + defIdentity*3;
       const keep = clamp(.58 + (attackPow-defPow)*.008 + r.attackTaps*.025 - r.defenseTaps*.035, .18,.92);
       // ruck penalty chance
       if (Math.random() < .018 + r.defenseTaps*.006) {
@@ -1103,6 +1178,10 @@ export class RugbyGame {
     scorer.tries++; scorer.points += 5;
     this.phase='try';
     this.ball.holder=null; this.ball.mode='dead'; this.ball.x=x; this.ball.y=y;
+    scorer.celebrate=3.2;
+    for (const p of this[side].lineup) {
+      if (p!==scorer && p.onField && dist(p,scorer)<24) p.celebrate=2.4;
+    }
     this.tryInfo={ side, scorer, x, y, timer:2.8 };
     this.say(`TRY! ${scorer.name} touches down for ${this[side].team.name}!`, 'try');
     this.flash(x,y,'TRY','#ffe58b');
@@ -1136,18 +1215,21 @@ export class RugbyGame {
     if (this.userTeam==='none') return;
     const b=this.ball;
     const user = this[this.userTeam];
-    const opponent = this[this.userTeam==='home'?'away':'home'];
-    let target=null;
-    if (b.holder && b.holder.side===this.userTeam) target=b.holder;
-    else if (b.holder) {
-      const defenders=user.lineup.filter(p=>p.onField&&p.down<=0&&!p.card).sort((a,c)=>dist(a,b.holder)-dist(c,b.holder));
-      target=defenders[0];
-    } else {
-      const near=user.lineup.filter(p=>p.onField&&p.down<=0&&!p.card).sort((a,c)=>Math.hypot(a.x-b.x,a.y-b.y)-Math.hypot(c.x-b.x,c.y-b.y));
-      target=near[0];
-    }
-    if (target) this.controlledId=target.id;
     this.switchCooldown=Math.max(0,this.switchCooldown-dt);
+    this.controlLock=Math.max(0,this.controlLock-dt);
+    const candidates=user.lineup.filter(p=>p.onField&&p.down<=0&&!p.card);
+    if(!candidates.length) return;
+    // Possession transfer is immediate: the ball carrier is always yours.
+    if (b.holder && b.holder.side===this.userTeam) {
+      this.controlledId=b.holder.id;
+      this.controlLock=0;
+      return;
+    }
+    // A manual switch holds for a moment so the AI cannot snatch it back.
+    if (this.controlLock>0) return;
+    const point=b.holder||b;
+    const target=candidates.sort((a,c)=>dist(a,point)-dist(c,point))[0];
+    if (target) this.controlledId=target.id;
   }
 
   action() {
@@ -1172,18 +1254,106 @@ export class RugbyGame {
         else { carrier.fend=.45; this.flash(carrier.x,carrier.y,'FEND','#ffdf8a'); }
       }
     } else {
-      // tackle lunge
-      const target=carrier;
-      if (target && controlled.side!==target.side) {
-        const d=dist(controlled,target);
-        if (d<4.2) {
-          const [nx,ny]=norm(target.x-controlled.x,target.y-controlled.y);
-          controlled.vx+=nx*4.5; controlled.vy+=ny*4.5;
-          controlled.tackleCooldown=.2;
-          this.dust(controlled.x,controlled.y,2);
-        }
-      }
+      this.manualTackle('normal');
     }
+  }
+
+  manualTackle(type='normal') {
+    if (this.phase!=='open') return false;
+    const carrier=this.ball.holder;
+    if (!carrier || carrier.side===this.userTeam) return false;
+    const defender=this.byId(this.controlledId);
+    if (!defender || defender.side!==this.userTeam || defender.down>0 || defender.card) return false;
+    const cfg=TACKLE_TYPES[type]||TACKLE_TYPES.normal;
+    if (defender.tackleCooldown>0 || defender.stamina<cfg.stamina*.5) return false;
+
+    const d=dist(defender,carrier);
+    const [nx,ny]=norm(carrier.x-defender.x, carrier.y-defender.y);
+    defender.tackleCooldown=cfg.cooldown;
+    defender.stamina=Math.max(0,defender.stamina-cfg.stamina);
+    defender.tackleAnim=.55;
+    defender.tackleType=type;
+    defender.vx+=nx*cfg.lunge;
+    defender.vy+=ny*cfg.lunge;
+
+    if (type==='pressure') {
+      this.flash(defender.x,defender.y,'PRESSURE','#8fe8ff');
+      this.emit('pressure',{player:defender.name});
+      return true;
+    }
+
+    if (type==='intercept') {
+      const b=this.ball;
+      if (b.mode==='pass' && b.pass && b.pass.side!==this.userTeam) {
+        const chance=clamp(.16+(defender.awareness||60)*.005+(defender.handling||60)*.003-d*.022,.06,.72);
+        if (Math.random()<chance) { this.intercept(defender); return true; }
+      }
+      this.stats[defender.side].missedTackles++;
+      defender.stun=.34;
+      this.flash(defender.x,defender.y,'INTERCEPT MISSED','#ffb066');
+      this.emit('missedTackle',{player:defender.name,carrier:carrier.name,type});
+      return false;
+    }
+
+    const reach=cfg.range+(defender.speed||60)*.004;
+    const chance=clamp(cfg.accuracy+((defender.tackling||70)-(carrier.agility||70))*.005-(d>reach?.16:0),.28,.97);
+    if (d<=reach && Math.random()<chance) {
+      this.resolveTackle(defender,carrier,type);
+      return true;
+    }
+
+    // A mistimed shot has consequences: the defender is beaten and the
+    // carrier gets a clear step of momentum.
+    this.stats[defender.side].missedTackles++;
+    defender.stun=type==='dive'?.72:.34;
+    defender.recover=.55;
+    defender.vx=nx*2.0; defender.vy=ny*2.0;
+    carrier.vx+=nx*1.35; carrier.vy+=ny*1.35;
+    this.dust(carrier.x,carrier.y,3);
+    this.flash(defender.x,defender.y,type==='big'?'BIG MISS':'MISSED TACKLE','#ffb066');
+    this.say(`${defender.name} shoots out of the line and ${carrier.name} steps inside!`,'big');
+    this.emit('missedTackle',{player:defender.name,carrier:carrier.name,type});
+    return false;
+  }
+
+  fend() {
+    const carrier=this.ball.holder;
+    if (!carrier || carrier.side!==this.userTeam || this.phase!=='open') return false;
+    if (carrier.stamina<8) return false;
+    carrier.fend=.58;
+    carrier.stamina=Math.max(0,carrier.stamina-4);
+    const nearest=this.opponentsOf(carrier).filter(o=>o.onField&&o.down<=0&&!o.card)
+      .sort((a,b)=>dist(a,carrier)-dist(b,carrier))[0];
+    if (nearest && dist(nearest,carrier)<3.2) {
+      const [nx,ny]=norm(nearest.x-carrier.x,nearest.y-carrier.y);
+      nearest.vx+=nx*2.6; nearest.vy+=ny*2.6;
+      nearest.stun=Math.max(nearest.stun,.32);
+      this.flash(nearest.x,nearest.y,'FEND','#ffdf8a');
+    }
+    this.dust(carrier.x,carrier.y,2);
+    this.emit('fend',{player:carrier.name});
+    return true;
+  }
+
+  sidestep() {
+    const carrier=this.ball.holder;
+    if (!carrier || carrier.side!==this.userTeam || this.phase!=='open') return false;
+    if (carrier.stamina<10) return false;
+    const nearest=this.opponentsOf(carrier).filter(o=>o.onField&&o.down<=0&&!o.card)
+      .sort((a,b)=>dist(a,carrier)-dist(b,carrier))[0];
+    let side=Math.sign(this.input.x);
+    if (!side) side=nearest?Math.sign(carrier.x-nearest.x)||1:1;
+    carrier.vx+=side*6.2;
+    carrier.vy+=carrier.dir*1.2;
+    carrier.step=.42;
+    carrier.stamina=Math.max(0,carrier.stamina-7);
+    if (nearest && dist(nearest,carrier)<2.8) {
+      nearest.vx-=side*1.4; nearest.vy*= .6; nearest.stun=Math.max(nearest.stun,.24);
+    }
+    this.dust(carrier.x,carrier.y,3);
+    this.flash(carrier.x,carrier.y,'SIDE-STEP','#a7ff8f');
+    this.emit('sidestep',{player:carrier.name});
+    return true;
   }
 
   pass() {
@@ -1212,13 +1382,21 @@ export class RugbyGame {
 
   switchDefender() {
     if (this.userTeam==='none') return;
+    if (this.switchCooldown>0) return;
     const user=this[this.userTeam];
     const point=this.ball.holder || this.ball;
-    const list=user.lineup.filter(p=>p.onField&&p.down<=0&&!p.card).sort((a,b)=>Math.hypot(a.x-point.x,a.y-point.y)-Math.hypot(b.x-point.x,b.y-point.y));
+    const list=user.lineup.filter(p=>p.onField&&p.down<=0&&!p.card)
+      .sort((a,b)=>Math.hypot(a.x-point.x,a.y-point.y)-Math.hypot(b.x-point.x,b.y-point.y));
     if(!list.length)return;
     const idx=list.findIndex(p=>p.id===this.controlledId);
-    const next=list[(idx+1)%Math.min(list.length,4)];
-    if(next){this.controlledId=next.id;this.flash(next.x,next.y,'SWITCH','#f4d67f');this.emit('switch',{player:next.name});}
+    const next=list[(idx+1)%Math.min(list.length,5)];
+    if(next){
+      this.controlledId=next.id;
+      this.controlLock=2.4;
+      this.switchCooldown=.35;
+      this.flash(next.x,next.y,'SWITCH','#f4d67f');
+      this.emit('switch',{player:next.name});
+    }
   }
 
   offload() {
@@ -1397,8 +1575,9 @@ export class RugbyGame {
     const pack=t=>t.lineup.filter(p=>p.number<=8).reduce((a,p)=>a+(p.scrum||60),0)/8;
     const userQuality=side===this.userTeam?(s.quality||.55):rand(.5,.95);
     const otherQuality=other===this.userTeam?(s.quality||.55):rand(.5,.95);
-    const atk=pack(this[side])+userQuality*9+rand(-4,4);
-    const def=pack(this[other])+otherQuality*8+rand(-4,4);
+    const scrumIdentity = (t) => (this.teamTactics(t).scrum || .5) * 5;
+    const atk=pack(this[side])+userQuality*9+rand(-4,4)+scrumIdentity(side);
+    const def=pack(this[other])+otherQuality*8+rand(-4,4)+scrumIdentity(other);
     const win=atk>def;
     if (Math.random()<.055) {
       this.say('The scrum collapses. Penalty — the front row will have another go.','penalty');

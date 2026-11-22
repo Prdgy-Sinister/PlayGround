@@ -2,6 +2,11 @@ import { TEAMS, TEAM_MAP, makeSquad, overallFor, ATTRS, ATTR_LABELS, POSITIONS, 
 import { RugbyGame, simulateMatch } from './engine.js';
 import { MatchRenderer } from './renderer.js';
 import {
+  ERAS, RWC_RECORDS, RWC_FINALS, CHAMPIONSHIP_HISTORY, DREAM_MATCHES,
+  ARCHIVE_PLAYERS, PLAYER_BY_ID, PLAYERS_BY_COUNTRY, playersForTeam, allTimeGreats,
+  historicalSquad, historicalSquadRating, eraBaseRating, eraTeamRatings, archiveSummary, playerRatingAt, eraForYear
+} from './history.js';
+import {
   makeTournament, recordResult, simulateFixture, simulateRemainingInRound, advanceIfReady,
   nextUserFixture, standingsFor, allStandings, currentStageLabel, userStillIn, simulateUntilUserMatch,
   tournamentSummary, historicalTournament, customTournament, teamOf, fixtureTeams
@@ -36,7 +41,7 @@ const S = {
   route: 'home',
   settings: Object.assign({
     sound: true, haptics: true, controlScale: 1, sensitivity: 1, cameraZoom: 1,
-    layout: 'right', difficulty: 'pro', commentary: true
+    layout: 'right', difficulty: 'pro', commentary: true, graphics: 'medium'
   }, saved.settings || {}),
   tournament: saved.tournament || null,
   career: saved.career || null,
@@ -46,6 +51,14 @@ const S = {
   tournamentTeam: saved.tournamentTeam || 'en',
   tournamentGroup: 0,
   careerTab: 'overview',
+  archiveTab: saved.archiveTab || 'cups',
+  archiveYear: saved.archiveYear || 1995,
+  archiveTeam: saved.archiveTeam || 'nz',
+  archiveEra: saved.archiveEra || 'dawn',
+  archiveFilterYear: saved.archiveFilterYear || 0,
+  archiveCountry: saved.archiveCountry || '',
+  archivePosition: saved.archivePosition || '',
+  archiveTournament: saved.archiveTournament || 0,
   custom: saved.custom || { name:'The Nations Cup', size:8, teams:['nz','za','fr','ie','en','au','ar','fj'], userTeam:'en' },
   game: null, renderer: null, raf: null, matchMeta: null, matchUi: null, matchView: 'prematch',
   lastHud: 0, goalRaf: null, goalMarker: 0, goalDir: 1, toastTimer: null, audio: new Sound(),
@@ -55,7 +68,10 @@ const S = {
 function save() {
   const data = {
     settings:S.settings, tournament:S.tournament, career:S.career, selectedTeam:S.selectedTeam,
-    unlocks:S.unlocks, quick:S.quick, tournamentTeam:S.tournamentTeam, custom:S.custom
+    unlocks:S.unlocks, quick:S.quick, tournamentTeam:S.tournamentTeam, custom:S.custom,
+    archiveTab:S.archiveTab, archiveYear:S.archiveYear, archiveTeam:S.archiveTeam, archiveEra:S.archiveEra,
+    archiveFilterYear:S.archiveFilterYear, archiveCountry:S.archiveCountry, archivePosition:S.archivePosition,
+    archiveTournament:S.archiveTournament
   };
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch {}
 }
@@ -365,6 +381,7 @@ function settingsScreen() {
         <h3 class="panel-title">GAMEPLAY</h3>
         <div class="panel-row"><div><label>DIFFICULTY</label><small>Default for quick matches</small></div><div class="segmented">${[['amateur','ROOKIE'],['pro','PRO'],['elite','ELITE']].map(([k,l])=>`<button class="${S.settings.difficulty===k?'active':''}" data-action="setting:difficulty" data-val="${k}">${l}</button>`).join('')}</div></div>
         <div class="panel-row"><div><label>CAMERA ZOOM</label><small>Match framing</small></div><div class="segmented">${[['close','CLOSE'],['normal','NORMAL'],['wide','WIDE']].map(([k,l])=>`<button class="${S.settings.cameraZoom===(k==='close'?1.12:k==='wide'?.9:1)?'active':''}" data-action="setting:camera" data-val="${k}">${l}</button>`).join('')}</div></div>
+        <div class="panel-row"><div><label>GRAPHICS QUALITY</label><small>Low to Ultra for device performance</small></div><div class="segmented">${[['low','LOW'],['medium','MED'],['high','HIGH'],['ultra','ULTRA']].map(([k,l])=>`<button class="${S.settings.graphics===k?'active':''}" data-action="setting:graphics" data-val="${k}">${l}</button>`).join('')}</div></div>
       </section>
       <section class="settings-panel">
         <h3 class="panel-title">DATA</h3>
@@ -530,26 +547,206 @@ function championCard(t) {
   </section>`;
 }
 
+function archiveTabs() {
+  const tabs = [['cups','WORLD CUPS'],['eras','ERAS'],['nations','NATIONS'],['legends','LEGENDS']];
+  return `<div class="tabs archive-tabs">${tabs.map(([id,label])=>`<button class="${S.archiveTab===id?'active':''}" data-action="hist:tab" data-tab="${id}">${label}</button>`).join('')}</div>`;
+}
+
+function archiveCups() {
+  return `<div class="classic-grid">${HISTORIC_EDITIONS.slice().reverse().map(e=>{
+    const w=team(e.winner);
+    return `<button class="classic-card" data-action="hist:open" data-year="${e.year}" style="--era:${e.colour}">
+      <span class="classic-year">${e.year}</span>
+      <div class="classic-winner">${crest(w,50)}<div><b>${esc(w.name)}</b><span>${esc(w.nick)}</span></div></div>
+      <div class="classic-meta"><span>HOST</span><b>${esc(e.host)}</b></div>
+      <div class="classic-score"><span>FINAL</span><b>${esc(e.score)}</b><em>v ${esc(team(e.runnerUp).abbr)}</em></div>
+      <div class="classic-star">${icon('star',12)} ${esc(e.star)}</div>
+    </button>`;
+  }).join('')}</div>
+  <section class="section archive-section"><div class="section-head"><div><span class="kicker">DREAM FIXTURES</span><h2>Great teams, head to head</h2></div><span class="section-count">${DREAM_MATCHES.length}</span></div>
+    <div class="dream-scroll">${DREAM_MATCHES.map(d=>`<button class="dream-card" data-action="hist:dream" data-id="${d.id}">
+      <span class="dream-label">${esc(d.label)}</span>
+      <div class="dream-teams"><span>${crest(team(d.home[0]),34)}<b>${esc(team(d.home[0]).abbr)} '${String(d.home[1]).slice(2)}</b></span><i>V</i><span>${crest(team(d.away[0]),34)}<b>${esc(team(d.away[0]).abbr)} '${String(d.away[1]).slice(2)}</b></span></div>
+      <p>${esc(d.note)}</p><em>PLAY FIXTURE ${icon('arrow',12)}</em>
+    </button>`).join('')}</div>
+  </section>
+  <section class="section archive-section"><div class="section-head"><div><span class="kicker">CHAMPIONSHIP ARCHIVE</span><h2>Five & Six Nations</h2></div><span class="section-count">1975–2025</span></div>
+    <div class="champ-list">${CHAMPIONSHIP_HISTORY.slice().reverse().slice(0,12).map(c=>`<div class="champ-row"><b>${c.year}</b><span>${esc(c.competition)}</span><strong>${esc(c.winner)}</strong>${c.shared?`<em>shared with ${esc(c.shared)}</em>`:''}</div>`).join('')}</div>
+  </section>`;
+}
+
+function archiveEras() {
+  return `<div class="era-list">${ERAS.map(e=>{
+    const stars=e.stars.map(id=>PLAYER_BY_ID[id]).filter(Boolean);
+    return `<button class="era-card" data-action="hist:era" data-era="${e.id}" style="--era:${e.colour}">
+      <div class="era-top"><span class="era-years">${e.from}–${e.to}</span><span class="era-count">${stars.length} featured</span></div>
+      <h3>${esc(e.label)}</h3><span class="era-tagline">${esc(e.tagline)}</span>
+      <p>${esc(e.blurb)}</p>
+      <div class="era-stars">${stars.slice(0,4).map(p=>`<span>${esc(p.name.split(' ').slice(-1)[0])}</span>`).join('')}</div>
+      <div class="era-themes">${e.themes.map(t=>`<span>${esc(t)}</span>`).join('')}</div>
+    </button>`;
+  }).join('')}</div>`;
+}
+
+function archiveNations() {
+  const list=TEAMS.slice().sort((a,b)=>(archiveSummary(b.id).players||0)-(archiveSummary(a.id).players||0));
+  return `<div class="archive-nation-grid">${list.map(t=>{
+    const s=archiveSummary(t.id), rec=s.record;
+    return `<button class="archive-nation" data-action="hist:team" data-team="${t.id}">
+      ${crest(t,44)}<div><b>${esc(t.name)}</b><span>${esc(t.nick)}</span><small>${s.players} archive players</small></div>
+      <em>${rec?.titles?`${rec.titles}× WORLD CHAMPION`:esc(rec?.best||'Archive')}</em>
+    </button>`;
+  }).join('')}</div>
+  <div class="archive-note">${icon('chart',15)} Career totals are public-record snapshots. Ratings and attributes are clearly marked gameplay estimates.</div>`;
+}
+
+function archivePosGroup(pos) {
+  if (['LHP','THP','HK','LK','BSF','OSF','N8','FL'].includes(pos)) return 'FWD';
+  if (['SH','FH'].includes(pos)) return 'HALF';
+  if (['IC','OC','CTR'].includes(pos)) return 'MID';
+  return 'OUT';
+}
+
+function archiveLegends() {
+  const years=[0,1975,1987,1995,2003,2011,2019,2026];
+  const cups=[0,1987,1991,1995,1999,2003,2007,2011,2015,2019,2023];
+  const positions=[['','ALL'],['FWD','FORWARDS'],['HALF','HALVES'],['MID','CENTRES'],['OUT','OUTSIDE']];
+  const nations=TEAMS.filter(t=>(PLAYERS_BY_COUNTRY[t.id]||[]).length);
+  let legends=allTimeGreats();
+  if(S.archiveCountry) legends=legends.filter(p=>p.countryId===S.archiveCountry);
+  if(S.archivePosition) legends=legends.filter(p=>archivePosGroup(p.position)===S.archivePosition);
+  if(S.archiveFilterYear) legends=legends.filter(p=>p.debut<=S.archiveFilterYear&&(p.retired==null||p.retired>=S.archiveFilterYear));
+  if(S.archiveTournament) legends=legends.filter(p=>(p.worldCups||[]).includes(S.archiveTournament));
+  legends=legends.slice(0,60);
+  return `<div class="archive-filters">
+    <div class="filter-row"><span>YEAR</span><div class="filter-chips">${years.map(y=>`<button class="${S.archiveFilterYear===y?'active':''}" data-action="hist:filter" data-key="archiveFilterYear" data-value="${y}">${y||'ALL'}</button>`).join('')}</div></div>
+    <div class="filter-row"><span>POSITION</span><div class="filter-chips">${positions.map(([v,l])=>`<button class="${S.archivePosition===v?'active':''}" data-action="hist:filter" data-key="archivePosition" data-value="${v}">${l}</button>`).join('')}</div></div>
+    <div class="filter-row"><span>WORLD CUP</span><div class="filter-chips">${cups.map(y=>`<button class="${S.archiveTournament===y?'active':''}" data-action="hist:filter" data-key="archiveTournament" data-value="${y}">${y||'ALL'}</button>`).join('')}</div></div>
+    <div class="filter-row"><span>NATION</span><select id="archive-country" class="archive-select"><option value="">ALL NATIONS</option>${nations.map(t=>`<option value="${t.id}" ${S.archiveCountry===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
+    <div class="filter-count">${legends.length} PLAYER${legends.length===1?'':'S'} • RATINGS ARE GAMEPLAY ESTIMATES</div>
+  </div>
+  <div class="archive-legend-list">${legends.map((p,i)=>`<button class="archive-legend" data-action="hist:player" data-player="${p.id}">
+    <span class="al-rank">${String(i+1).padStart(2,'0')}</span>
+    <span class="al-flag">${TEAM_MAP[p.countryId]?.flag||''}</span>
+    <div><b>${esc(p.name)}</b><span>${esc(TEAM_MAP[p.countryId]?.name||'')} • ${esc(p.position)} • ${p.debut}–${p.retired??'—'}</span><small>${esc((p.traits||[]).slice(0,2).join(' • '))}</small></div>
+    <em>${p.rating}<small>EST</small></em>
+  </button>`).join('')}</div>`;
+}
+
 function historicalScreen() {
-  return `<div class="page sub-page">
-    ${subHeader('Classic Cups','RELIVE THE LEGENDS')}
+  return `<div class="page sub-page archive-page">
+    ${subHeader('The Archive','1975 TO TODAY')}
     <div class="content-wrap">
-      <section class="classic-hero"><span class="kicker gold">THE ARCHIVE</span><h1>HISTORY<br>REWRITTEN</h1><p>Replay every World Cup from 1987 to 2023. Same nations. Same stage. A different story.</p><div class="classic-line"></div></section>
-      <div class="classic-grid">${HISTORIC_EDITIONS.slice().reverse().map(e=>{
-        const w=team(e.winner);
-        return `<button class="classic-card" data-action="hist:open" data-year="${e.year}" style="--era:${e.colour}">
-          <span class="classic-year">${e.year}</span>
-          <div class="classic-winner">${crest(w,50)}<div><b>${esc(w.name)}</b><span>${esc(w.nick)}</span></div></div>
-          <div class="classic-meta"><span>HOST</span><b>${esc(e.host)}</b></div>
-          <div class="classic-score"><span>FINAL</span><b>${esc(e.score)}</b><em>v ${esc(team(e.runnerUp).abbr)}</em></div>
-          <div class="classic-star">${icon('star',12)} ${esc(e.star)}</div>
-        </button>`;
-      }).join('')}</div>
-      <section class="section"><div class="section-head"><div><span class="kicker">UNLOCKABLE</span><h2>Legends of the game</h2></div><span class="section-count">${LEGENDS.length}</span></div>
-        <div class="legend-scroll">${LEGENDS.slice(0,8).map(l=>`<div class="legend-card"><div class="legend-silhouette">${icon('career',36)}</div><b>${esc(l.name)}</b><span>${esc(l.trait)}</span><em>${l.era} • ${l.rating} OVR</em></div>`).join('')}</div>
+      <section class="classic-hero archive-hero"><span class="kicker gold">RUGBY HISTORY</span><h1>THE<br>ARCHIVE</h1><p>Every World Cup since 1987, every Five and Six Nations title since 1975, and the players who built the game. Verified records and estimated ratings, kept separate.</p><div class="classic-line"></div>
+        <div class="archive-stats"><div><b>${ARCHIVE_PLAYERS.length}</b><span>ARCHIVE PLAYERS</span></div><div><b>${ERAS.length}</b><span>ERAS</span></div><div><b>${RWC_FINALS.length}</b><span>WORLD CUPS</span></div><div><b>51</b><span>CHAMPIONSHIPS</span></div></div>
       </section>
+      ${archiveTabs()}
+      ${S.archiveTab==='cups'?archiveCups():S.archiveTab==='eras'?archiveEras():S.archiveTab==='nations'?archiveNations():archiveLegends()}
     </div>
   </div>`;
+}
+
+function showArchivePlayer(id) {
+  const p=PLAYER_BY_ID[id];if(!p)return;
+  const t=team(p.countryId);
+  const versions=(p.versions||[]).slice().sort((a,b)=>a.year-b.year);
+  const peak=versions.reduce((best,v)=>v.rating>(best?.rating||0)?v:best,null);
+  showModal(`${modalHead(esc(p.name),`${esc(t.name.toUpperCase())} • ${esc(p.position)}${p.nick?' • '+esc(p.nick):''}`)}
+    <div class="archive-player-hero">
+      ${crest(t,66)}
+      <div><span>EST. PEAK</span><b>${peak?.rating||p.rating}</b></div>
+      <div><span>DEBUT</span><b>${p.debut??'—'}</b></div>
+      <div><span>RETIRED</span><b>${p.retired??'—'}</b></div>
+    </div>
+    <div class="archive-record">
+      <div><span>CAPS</span><b>${p.caps??'—'}</b></div>
+      <div><span>TRIES</span><b>${p.tries??'—'}</b></div>
+      <div><span>POINTS</span><b>${p.points??'—'}</b></div>
+      <div><span>WORLD CUPS</span><b>${(p.worldCups||[]).length}</b></div>
+    </div>
+    <div class="archive-note">${icon('chart',14)} ${p.statsVerified?'Career totals are verified public records.':'Career totals are an estimated archive snapshot.'} Ratings and attributes are gameplay estimates, not official rankings.</div>
+    ${p.honours?.length?`<h3 class="modal-sub">HONOURS</h3><div class="archive-chips">${p.honours.map(h=>`<span>${esc(h)}</span>`).join('')}</div>`:''}
+    ${p.traits?.length?`<h3 class="modal-sub">SIGNATURE TRAITS</h3><div class="archive-chips gold">${p.traits.map(h=>`<span>${esc(h)}</span>`).join('')}</div>`:''}
+    ${versions.length?`<h3 class="modal-sub">ERA RATINGS <small>ESTIMATED</small></h3><div class="version-list">${versions.map(v=>`<div><b>${v.year}</b><span>${esc(v.label||'Version')}</span><em>${v.rating}</em></div>`).join('')}</div>`:''}
+    <button class="btn gold full" data-action="hist:playPlayer" data-player="${p.id}">${icon('play',17)} PLAY A DREAM MATCH</button>`,'tall');
+}
+
+function showArchiveTeam(id) {
+  const t=team(id), s=archiveSummary(id), rec=s.record;
+  const greats=allTimeGreats(id).slice(0,8);
+  showModal(`${modalHead(esc(t.name),esc(t.nick).toUpperCase())}
+    <div class="archive-team-hero">${crest(t,74)}<div><span>WORLD CUP TITLES</span><b>${rec?.titles??0}</b></div><div><span>APPEARANCES</span><b>${rec?.apps??'—'}</b></div><div><span>ARCHIVE PLAYERS</span><b>${s.players}</b></div></div>
+    <p class="modal-copy">${esc(rec?.best||'A proud international history.')}</p>
+    <h3 class="modal-sub">ARCHIVE GREATS <small>EST. RATINGS</small></h3>
+    <div class="archive-legend-list compact">${greats.map((p,i)=>`<button class="archive-legend" data-action="hist:player" data-player="${p.id}"><span class="al-rank">${String(i+1).padStart(2,'0')}</span><div><b>${esc(p.name)}</b><span>${esc(p.position)} • ${p.debut}–${p.retired??'—'}</span></div><em>${p.rating}<small>EST</small></em></button>`).join('')}</div>
+    <button class="btn gold full" data-action="hist:playTeam" data-team="${id}">${icon('play',17)} PLAY AS ${esc(t.abbr)}</button>`,'tall');
+}
+
+function showArchiveEra(id) {
+  const e=ERAS.find(x=>x.id===id);if(!e)return;
+  const stars=e.stars.map(pid=>PLAYER_BY_ID[pid]).filter(Boolean);
+  const titles=CHAMPIONSHIP_HISTORY.filter(c=>c.year>=e.from&&c.year<=e.to);
+  showModal(`${modalHead(esc(e.label),`${e.from}–${e.to} • ${esc(e.tagline).toUpperCase()}`)}
+    <div class="archive-era-hero" style="--era:${e.colour}"><span class="era-years">${e.from}–${e.to}</span><p>${esc(e.blurb)}</p><div class="era-themes">${e.themes.map(t=>`<span>${esc(t)}</span>`).join('')}</div></div>
+    <h3 class="modal-sub">FEATURED PLAYERS <small>EST. RATINGS</small></h3>
+    <div class="archive-legend-list compact">${stars.map(p=>`<button class="archive-legend" data-action="hist:player" data-player="${p.id}"><div><b>${esc(p.name)}</b><span>${esc(team(p.countryId).abbr)} • ${esc(p.position)}</span></div><em>${p.rating}<small>EST</small></em></button>`).join('')}</div>
+    <h3 class="modal-sub">CHAMPIONSHIPS</h3>
+    <div class="champ-list compact">${titles.slice().reverse().map(c=>`<div class="champ-row"><b>${c.year}</b><span>${esc(c.competition)}</span><strong>${esc(c.winner)}</strong>${c.shared?`<em>shared</em>`:''}</div>`).join('')}</div>
+    <button class="btn gold full" data-action="hist:playEra" data-era="${e.id}">${icon('play',17)} PLAY THIS ERA</button>`,'tall');
+}
+
+function startDreamMatch(id) {
+  const d=DREAM_MATCHES.find(x=>x.id===id);if(!d)return;
+  const [homeId,homeYear]=d.home,[awayId,awayYear]=d.away;
+  closeModal();
+  launchMatch({
+    homeTeam:team(homeId),awayTeam:team(awayId),userTeam:'home',mode:'quick',
+    halfSeconds:180,difficulty:S.settings.difficulty,venue:d.venue,
+    year:homeYear,homeSquad:historicalSquad(homeId,homeYear),awaySquad:historicalSquad(awayId,awayYear),
+    stageLabel:d.label.toUpperCase()
+  });
+}
+
+function startEraMatch(id) {
+  const e=ERAS.find(x=>x.id===id);if(!e)return;
+  const mid=Math.round((e.from+e.to)/2);
+  const ranking=eraTeamRatings(mid);
+  const homeId=ranking[0]?.id||'nz',awayId=ranking[1]?.id||'za';
+  closeModal();
+  launchMatch({
+    homeTeam:team(homeId),awayTeam:team(awayId),userTeam:'home',mode:'quick',
+    halfSeconds:180,difficulty:S.settings.difficulty,venue:'World Rugby Stadium',
+    year:mid,homeSquad:historicalSquad(homeId,mid),awaySquad:historicalSquad(awayId,mid),
+    stageLabel:`${e.label.toUpperCase()} • ${mid}`
+  });
+}
+
+function startArchivePlayerMatch(id) {
+  const p=PLAYER_BY_ID[id];if(!p)return;
+  const peak=(p.versions||[]).reduce((best,v)=>v.rating>(best?.rating||0)?v:best,{year:p.debut||2000,rating:p.rating});
+  const year=clamp(peak.year||2000,1975,2026);
+  const rivals=TEAMS.filter(t=>t.id!==p.countryId).sort((a,b)=>eraBaseRating(b.id,year)-eraBaseRating(a.id,year));
+  const rival=rivals[0]?.id||'nz';
+  closeModal();
+  launchMatch({
+    homeTeam:team(p.countryId),awayTeam:team(rival),userTeam:'home',mode:'quick',
+    halfSeconds:180,difficulty:S.settings.difficulty,venue:'World Rugby Stadium',
+    year,homeSquad:historicalSquad(p.countryId,year),awaySquad:historicalSquad(rival,year),
+    stageLabel:`${p.name.toUpperCase()} • ${year}`
+  });
+}
+
+function startArchiveTeamMatch(id) {
+  const year=clamp(S.archiveYear||2026,1975,2026);
+  const rivals=TEAMS.filter(t=>t.id!==id).sort((a,b)=>eraBaseRating(b.id,year)-eraBaseRating(a.id,year));
+  const rival=rivals[0]?.id||'nz';
+  closeModal();
+  launchMatch({
+    homeTeam:team(id),awayTeam:team(rival),userTeam:'home',mode:'quick',
+    halfSeconds:180,difficulty:S.settings.difficulty,venue:'World Rugby Stadium',
+    year,homeSquad:historicalSquad(id,year),awaySquad:historicalSquad(rival,year),
+    stageLabel:`${team(id).abbr} • ${year}`
+  });
 }
 
 function customScreen() {
@@ -749,7 +946,7 @@ function launchMatch(meta) {
     userTeam:meta.userTeam||'home', halfSeconds:meta.halfSeconds||180,
     mode:meta.mode||'quick', trainingDrill:meta.trainingDrill||null,
     venue:meta.venue||meta.homeTeam.venue, difficulty:meta.difficulty||S.settings.difficulty,
-    weather:meta.weather||'clear', onEvent:handleGameEvent
+    weather:meta.weather||'clear', year:meta.year||null, onEvent:handleGameEvent
   });
   game.paused = true;
   S.game=game;
@@ -813,15 +1010,28 @@ function matchScreen() {
         <span class="joy-label">MOVE</span>
       </div>
       <div class="control-mid">
+        <button class="switch-chip" id="btn-switch" data-action="match:switch" aria-label="Switch defender">${icon('swap',13)} <span>SWITCH</span></button>
         <div class="player-chip" id="player-chip"><span>YOU</span><b>—</b></div>
         <div class="stamina-chip"><span>STAMINA</span><div class="stamina-bar"><i id="stamina-fill"></i></div></div>
         <div class="tap-context" id="tap-context">READY</div>
       </div>
-      <div class="action-pad">
-        <button class="round-btn sprint" id="btn-sprint" aria-label="Sprint">${icon('bolt',22)}<span>SPRINT</span></button>
-        <button class="round-btn kick" id="btn-kick" data-action="match:kick" aria-label="Kick">${icon('boot',23)}<span>KICK</span></button>
-        <button class="round-btn pass" id="btn-pass" data-action="match:pass" aria-label="Pass">${icon('arrow',23)}<span>PASS</span></button>
-        <button class="round-btn action" id="btn-action" data-action="match:action" aria-label="Action">${icon('shield',23)}<span>ACTION</span></button>
+      <div class="action-pad attack-pad" id="attack-pad">
+        <button class="round-btn sprint" id="btn-sprint" aria-label="Sprint">${icon('bolt',20)}<span>SPRINT</span></button>
+        <button class="round-btn pass" id="btn-pass" data-action="match:pass" aria-label="Pass">${icon('arrow',20)}<span>PASS</span></button>
+        <button class="round-btn kick" id="btn-kick" data-action="match:kick" aria-label="Kick">${icon('boot',20)}<span>KICK</span></button>
+        <button class="round-btn action" id="btn-action" data-action="match:action" aria-label="Action">${icon('shield',20)}<span>ACTION</span></button>
+        <button class="round-btn offload" id="btn-offload" data-action="match:offload" aria-label="Offload">${icon('swap',20)}<span>OFFLOAD</span></button>
+        <button class="round-btn fend" id="btn-fend" data-action="match:fend" aria-label="Fend">${icon('shield',20)}<span>FEND</span></button>
+        <button class="round-btn step" id="btn-step" data-action="match:step" aria-label="Side-step">${icon('arrow',20)}<span>STEP</span></button>
+      </div>
+      <div class="action-pad defense-pad hidden" id="defense-pad">
+        <button class="round-btn switch" data-action="match:switch" aria-label="Switch defender">${icon('swap',19)}<span>SWITCH</span></button>
+        <button class="round-btn tackle" data-action="match:tackle" data-type="normal" aria-label="Normal tackle">${icon('shield',19)}<span>TACKLE</span></button>
+        <button class="round-btn low" data-action="match:tackle" data-type="low" aria-label="Low tackle">${icon('shield',19)}<span>LOW</span></button>
+        <button class="round-btn dive" data-action="match:tackle" data-type="dive" aria-label="Dive tackle">${icon('bolt',19)}<span>DIVE</span></button>
+        <button class="round-btn big" data-action="match:tackle" data-type="big" aria-label="Big tackle">${icon('shield',19)}<span>BIG</span></button>
+        <button class="round-btn intercept" data-action="match:tackle" data-type="intercept" aria-label="Intercept">${icon('arrow',19)}<span>INTERCEPT</span></button>
+        <button class="round-btn pressure" data-action="match:tackle" data-type="pressure" aria-label="Defensive pressure">${icon('bolt',19)}<span>PRESSURE</span></button>
       </div>
     </div>
   </div>`;
@@ -925,6 +1135,14 @@ function updateMatchHud() {
   const defending=g.phase==='open'&&snap.carrier&&snap.carrier.side!==g.userTeam;
   if(pass){pass.querySelector('span').textContent=defending?'SWITCH':'PASS';pass.classList.toggle('disabled',!snap.passEnabled&&!defending&&g.phase!=='ruck');}
   if(kick)kick.classList.toggle('disabled',!snap.kickEnabled);
+  const sw=$('#btn-switch');if(sw)sw.classList.toggle('show',!!defending);
+  const attackPad=$('#attack-pad'),defPad=$('#defense-pad');
+  if(attackPad)attackPad.classList.toggle('hidden',!!defending);
+  if(defPad)defPad.classList.toggle('hidden',!defending);
+  const offload=$('#btn-offload'),fend=$('#btn-fend'),step=$('#btn-step');
+  if(offload)offload.classList.toggle('disabled',!snap.passEnabled);
+  if(fend)fend.classList.toggle('disabled',!snap.passEnabled);
+  if(step)step.classList.toggle('disabled',!snap.passEnabled);
   updateContextPanel(g,snap);
   updateTrainingPanel(g);
 }
@@ -1145,7 +1363,7 @@ function showSubTargets(benchId) {
   const team=g[g.userTeam], bench=team.bench.find(p=>p.id===benchId);
   if(!bench)return;
   showModal(`${modalHead('Who comes off?',`${esc(bench.name)} • ${esc(bench.posName)}`)}
-    <div class="sub-list">${team.lineup.filter(p=>p.onField).sort((a,b)=>a.number-b.number).map(p=>`<div class="sub-row"><span class="pnum">${p.number}</span><div><b>${esc(p.name)}</b><small>${esc(p.posName)} • ${p.stamina}% stamina</small></div><button class="btn ghost sm" data-action="pause:subDo" data-on="${benchId}" data-off="${p.id}">REPLACE</button></div>`).join('')}</div>`, 'tall');
+    <div class="sub-list">${team.lineup.filter(p=>p.onField).sort((a,b)=>a.number-b.number).map(p=>`<div class="sub-row"><span class="pnum">${p.number}</span><div><b>${esc(p.name)}</b><small>${esc(p.posName)} • ${Math.round(p.stamina)}% stamina</small></div><button class="btn ghost sm" data-action="pause:subDo" data-on="${benchId}" data-off="${p.id}">REPLACE</button></div>`).join('')}</div>`, 'tall');
 }
 
 function showMatchTactics() {
@@ -1165,6 +1383,7 @@ function stopMatch() {
   cancelAnimationFrame(S.raf);
   cancelAnimationFrame(S.goalRaf);
   S.matchResize?.disconnect();
+  S.renderer?.dispose?.();
   S.renderer=null;
   S.game=null;
   S.matchMeta=null;
@@ -1278,6 +1497,15 @@ function handleAction(action,data,el,ev) {
     case 'hist:open': openHistoric(data.year); break;
     case 'hist:start': startHistoric(data.year); break;
     case 'hist:pick': openTeamPicker('historical'); break;
+    case 'hist:tab': S.archiveTab=data.tab;save();render();break;
+    case 'hist:filter': S[data.key]=(data.key==='archiveFilterYear'||data.key==='archiveTournament')?Number(data.value):data.value;save();render();break;
+    case 'hist:dream': startDreamMatch(data.id); break;
+    case 'hist:era': showArchiveEra(data.era); break;
+    case 'hist:team': showArchiveTeam(data.team); break;
+    case 'hist:player': showArchivePlayer(data.player); break;
+    case 'hist:playEra': startEraMatch(data.era); break;
+    case 'hist:playPlayer': startArchivePlayerMatch(data.player); break;
+    case 'hist:playTeam': startArchiveTeamMatch(data.team); break;
     case 'custom:size': setCustomSize(Number(data.val)); break;
     case 'custom:team': toggleCustomTeam(data.team); break;
     case 'custom:user': openTeamPicker('custom'); break;
@@ -1299,6 +1527,7 @@ function handleAction(action,data,el,ev) {
     case 'setting:layout': S.settings.layout=data.val;save();render();break;
     case 'setting:difficulty': S.settings.difficulty=data.val;save();render();break;
     case 'setting:camera': S.settings.cameraZoom=data.val==='close'?1.12:data.val==='wide'?.9:1;save();render();break;
+    case 'setting:graphics': S.settings.graphics=data.val;save();render();toast('Graphics quality saved for next match.','info');break;
     case 'settings:save': save();toast('Progress saved.','success');break;
     case 'settings:reset': confirmReset();break;
     case 'settings:resetDo': localStorage.removeItem(SAVE_KEY);location.reload();break;
@@ -1307,8 +1536,13 @@ function handleAction(action,data,el,ev) {
     case 'match:pause': showPauseMenu(); break;
     case 'match:sound': S.settings.sound=!S.settings.sound;S.audio.setEnabled(S.settings.sound);save();toast(S.settings.sound?'Sound on':'Sound off','info');break;
     case 'match:pass': if(S.game){ if(S.game.ball.holder&&S.game.ball.holder.side!==S.game.userTeam)S.game.switchDefender(); else S.game.pass(); }break;
+    case 'match:switch': if(S.game)S.game.switchDefender();break;
     case 'match:kick': if(S.game){S.game.openKickMenu();}break;
     case 'match:action': if(S.game)S.game.action();break;
+    case 'match:offload': if(S.game)S.game.offload();break;
+    case 'match:fend': if(S.game)S.game.fend();break;
+    case 'match:step': if(S.game)S.game.sidestep();break;
+    case 'match:tackle': if(S.game)S.game.manualTackle(data.type||'normal');break;
     case 'match:jumper': if(S.game)S.game.setLineoutJumper(Number(data.i));break;
     case 'match:closeKick': if(S.game)S.game.closeKickMenu();closeKickOverlay();break;
     case 'match:chooseKick': if(S.game){S.game.chooseKick(data.kick);}closeKickOverlay();break;
@@ -1370,8 +1604,11 @@ function playTournamentMatch() {
   const home=team(f.homeId),away=team(f.awayId);
   const userTeam=f.homeId===t.userTeamId?'home':'away';
   const stageLabel=f.stage==='group'?`POOL ${'ABCD'[f.group]||f.group+1} • ROUND ${f.round}`:{qf:'QUARTER-FINAL',sf:'SEMI-FINAL',third:'THIRD-PLACE PLAY-OFF',final:'WORLD CUP FINAL'}[f.stage];
+  const year=t.edition||null;
   launchMatch({homeTeam:home,awayTeam:away,userTeam,mode:'tournament',halfSeconds:180,difficulty:S.settings.difficulty,
-    venue:f.venue,fixture:f,stageLabel,stage:f.stage});
+    venue:f.venue,fixture:f,stageLabel,stage:f.stage,year,
+    homeSquad:year?historicalSquad(f.homeId,year):undefined,
+    awaySquad:year?historicalSquad(f.awayId,year):undefined});
 }
 
 function simulateUserTournamentMatch() {
@@ -1568,6 +1805,7 @@ document.addEventListener('input',ev=>{
   if(el.id==='custom-name'){S.custom.name=el.value;save();}
   if(el.id==='coach-name'){S.coachName=el.value;save();}
   if(el.id==='quick-venue'){S.quick.venue=el.value;save();}
+  if(el.id==='archive-country'){S.archiveCountry=el.value;save();render();}
 });
 
 window.addEventListener('pointerdown',()=>{S.audio.init();},{once:true});
