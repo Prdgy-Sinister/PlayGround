@@ -1012,8 +1012,8 @@ export class MatchRenderer3D {
     const worldZ = this.focus.z - 50;
     const targetX = worldX;
     const targetZ = worldZ;
-    this.camera.position.set(targetX + this.shake.x, 58 + this.shake.y, targetZ - 8 + this.shake.z);
-    this.camera.lookAt(targetX, 0, targetZ + 4);
+    this.camera.position.set(targetX + this.shake.x, 64 + this.shake.y, targetZ - 10 + this.shake.z);
+    this.camera.lookAt(targetX, 0, targetZ + 6);
     this.viewSize = 46 / Math.max(.78, zoom);
     const aspect = this.w / this.h;
     this.camera.left = -this.viewSize * aspect / 2;
