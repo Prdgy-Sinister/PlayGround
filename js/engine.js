@@ -527,7 +527,7 @@ export class RugbyGame {
     if (this.ball.holder === p && moved > 0) p.metres += Math.max(0, (p.y - p.lastY) * p.dir);
     p.runCycle += moved * 2.1;
     p.lastX = p.x; p.lastY = p.y;
-    p.x = clamp(p.x, -2, 72); p.y = clamp(p.y, -9, 109);
+    p.x = clamp(p.x, 2, 68); p.y = clamp(p.y, 2, 98);
     if (p.stamina > 0) p.stamina = Math.min(100, p.stamina + dt * .01);
   }
 

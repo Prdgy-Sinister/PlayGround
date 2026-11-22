@@ -949,7 +949,7 @@ function launchMatch(meta) {
     weather:meta.weather||'clear', year:meta.year||null, onEvent:handleGameEvent
   });
   game.paused = true;
-  S.game=game;
+  S.game=game; window.__game=game;
   S.matchMeta=meta;
   S.matchResult=null;
   S.matchView='prematch';
@@ -1069,7 +1069,7 @@ function initJoystick() {
   const set=(ev)=>{
     const r=base.getBoundingClientRect();
     const cx=r.left+r.width/2,cy=r.top+r.height/2;
-    let dx=-(ev.clientX-cx)/(r.width*.36),dy=(ev.clientY-cy)/(r.height*.36);
+    let dx=(ev.clientX-cx)/(r.width*.36),dy=-(ev.clientY-cy)/(r.height*.36);
     const d=Math.hypot(dx,dy);
     if(d>1){dx/=d;dy/=d;}
     const sens=S.settings.sensitivity||1;
