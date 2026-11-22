@@ -877,6 +877,16 @@ export class RugbyGame {
       b.holder = best; b.mode='held'; b.vx=0; b.vy=0; b.z=.5; b.pass=null;
       best.touches++;
       this.possession = best.side;
+      if (this.phase === 'kickoff') {
+        this.phase = 'open'; this.phaseCount = 0;
+        if (best.side === this.userTeam) this.controlledId = best.id;
+        else {
+          const defenders = this[this.userTeam].lineup.filter(p=>p.onField && !p.card && p.down<=0);
+          let nearest=null, nd=999;
+          for (const d of defenders) { const dd=dist(d,best); if (dd<nd){nd=dd;nearest=d;} }
+          if (nearest) this.controlledId = nearest.id;
+        }
+      }
       if (b.lastKick && b.lastKick !== best.side) this.say(`${best.name} claims it safely for ${this[best.side].team.name}.`, 'info');
       this.emit('catch', { player:best.name });
     } else {
