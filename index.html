@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#08060f">
+  <meta name="description" content="Tokyo Redline — a vibrant, cartoon-styled first-person JDM drag racing game with manual clutch, a real H-pattern gearbox and 60 cars.">
+  <title>TOKYO REDLINE — First-Person JDM Drag Racing</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2308060f'/%3E%3Ctext x='16' y='23' font-family='sans-serif' font-weight='bold' font-size='16' fill='%23ff3d81' text-anchor='middle'%3ETR%3C/text%3E%3C/svg%3E">
+  <link rel="preload" href="assets/fonts/bebas.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/rajdhani-bold.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="booting">
+    <canvas id="scene" aria-label="3D game world"></canvas>
+    <div class="screen-fx" aria-hidden="true">
+      <div class="fx-grid"></div>
+      <div class="fx-glow"></div>
+      <div class="fx-noise"></div>
+      <div class="fx-scan"></div>
+    </div>
+
+    <div id="menu-chrome">
+      <header id="topbar">
+        <button class="brand" data-screen="home" aria-label="TOKYO REDLINE home">
+          <span class="brand-mark"><span>T</span><span>R</span></span>
+          <span class="brand-name"><b>TOKYO</b><em>REDLINE</em></span>
+          <span class="brand-jp">東京</span>
+        </button>
+        <nav id="main-tabs" aria-label="Main menu">
+          <button data-screen="garage">GARAGE</button>
+          <button data-screen="race-setup">RACE</button>
+          <button data-screen="dealer">DEALER</button>
+          <button data-screen="events">EVENTS</button>
+          <button data-screen="rivals">RIVALS</button>
+          <button data-screen="ranks">RECORDS</button>
+        </nav>
+        <div class="top-actions">
+          <div class="cash-chip" title="Your cash">
+            <span class="cash-symbol">¥</span>
+            <span id="cash-value">$4,200</span>
+          </div>
+          <div class="career-chip" title="Races won">
+            <span class="dot"></span><span id="wins-value">0</span><small>WINS</small>
+          </div>
+          <button id="sound-toggle" class="icon-btn" aria-label="Toggle sound">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h3l4-4v14l-4-4H4zM16 8.5a5 5 0 0 1 0 7M18.5 6a8 8 0 0 1 0 12"/></svg>
+          </button>
+          <button id="settings-btn" class="icon-btn" aria-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="m19.4 15 .1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a2 2 0 1 1-4 0V19a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.8 12a1.7 1.7 0 0 0-1.2-.9H3.4a2 2 0 1 1 0-4h.2A1.7 1.7 0 0 0 4.8 4.2L4.7 4a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10.5.1V0a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.2.9Z" transform="translate(0 2) scale(.9)"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main id="screen-root">
+        <!-- HOME -->
+        <section class="screen home-screen is-active" id="screen-home" data-screen="home">
+          <div class="home-copy">
+            <div class="eyebrow"><span class="eyebrow-line"></span>JAPANESE STREET LEGENDS</div>
+            <h1 class="hero-title"><span>TOKYO</span><em>REDLINE</em></h1>
+            <p class="hero-sub">FIRST PERSON. MANUAL CLUTCH.<br><strong>SIX GEARS OF PURE CHAOS.</strong></p>
+            <div class="hero-metrics">
+              <div><b>60</b><span>JDM MACHINES</span></div>
+              <div><b>10</b><span>NEON LOCATIONS</span></div>
+              <div><b>1/4</b><span>MILE MAYHEM</span></div>
+            </div>
+            <button class="cta primary" data-action="quick-race"><span>QUICK RACE</span><svg viewBox="0 0 28 16" aria-hidden="true"><path d="M0 8h24M18 2l6 6-6 6"/></svg></button>
+          </div>
+
+          <aside class="home-build-card glass-panel">
+            <div class="panel-kicker"><span>CURRENT BUILD</span><span class="home-bank">¥ <b id="home-cash">$4,200</b></span><span class="live-dot">LIVE</span></div>
+            <div class="build-head">
+              <div class="car-avatar" id="home-car-avatar"><span>86</span></div>
+              <div><small id="home-car-make">TOYOTA</small><h3 id="home-car-name">COROLLA AE86</h3><p id="home-car-tag">LIGHT. RWD. YOURS.</p></div>
+            </div>
+            <div class="stat-strip" id="home-stats"></div>
+            <div class="build-tags" id="home-build-tags"></div>
+            <div class="build-actions">
+              <button class="cta ghost sm" data-screen="garage">GARAGE</button>
+              <button class="cta hot sm" data-screen="customize">CUSTOMIZE</button>
+            </div>
+          </aside>
+
+          <div class="home-footer">
+            <div class="active-coords">
+              <span class="crosshair">+</span>
+              <div><small>ACTIVE LOCATION</small><b id="home-track">TOKYO / NEON CITY</b></div>
+            </div>
+            <div class="home-tip">
+              <span class="key">C</span> clutch <span class="key">1–6</span> shift <span class="key">W</span> throttle <span class="key">S</span> brake
+            </div>
+            <div class="rival-mini">
+              <div class="rival-avatar" id="home-rival-avatar">K</div>
+              <div><small>NEXT RIVAL</small><b id="home-rival-name">KAZE / NEON CATS</b></div>
+              <button data-screen="rivals" class="mini-arrow" aria-label="View rivals">→</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- GARAGE -->
+        <section class="screen garage-screen" id="screen-garage" data-screen="garage">
+          <div class="screen-head">
+            <div>
+              <div class="eyebrow">YOUR COLLECTION</div>
+              <h2 class="screen-title">THE <em>GARAGE</em></h2>
+            </div>
+            <p class="screen-note">Pick a machine. Every build is yours to tune, paint and ruin.<br><span id="garage-count">1 / 60</span> cars owned.</p>
+          </div>
+          <aside class="garage-list-panel glass-panel">
+            <div class="panel-kicker"><span>OWNED CARS</span><span id="garage-owned-count">01</span></div>
+            <div id="garage-list" class="vehicle-list"></div>
+          </aside>
+          <aside class="garage-info glass-panel">
+            <div class="panel-kicker"><span>SPEC SHEET</span><span id="garage-class">STREET</span></div>
+            <div class="garage-title-row">
+              <div><small id="garage-make">TOYOTA</small><h3 id="garage-model">COROLLA AE86</h3></div>
+              <span class="flag-jp">日本</span>
+            </div>
+            <p id="garage-desc" class="small-copy">Light, rear-drive, and yours from day one.</p>
+            <div class="big-stats" id="garage-big-stats"></div>
+            <div class="stat-bars" id="garage-bars"></div>
+            <div class="build-tags" id="garage-tags"></div>
+            <div class="build-actions">
+              <button class="cta ghost sm" data-action="set-active">SET ACTIVE</button>
+              <button class="cta hot sm" data-screen="customize">CUSTOMIZE</button>
+            </div>
+          </aside>
+          <div class="garage-bottom">
+            <button class="cta primary compact" data-screen="dealer"><span>GET MORE CARS</span><b>DEALER →</b></button>
+            <button class="cta primary" data-screen="race-setup"><span>RACE THIS BUILD</span><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l6 6-6 6"/></svg></button>
+          </div>
+        </section>
+
+        <!-- DEALER -->
+        <section class="screen dealer-screen" id="screen-dealer" data-screen="dealer">
+          <div class="screen-head compact">
+            <div><div class="eyebrow">JDM IMPORTS // 24H</div><h2 class="screen-title">NEON <em>DEALERSHIP</em></h2></div>
+            <div class="dealer-wallet glass-panel"><small>AVAILABLE CASH</small><b id="dealer-cash">$4,200</b></div>
+          </div>
+          <div class="dealer-layout">
+            <aside class="dealer-detail glass-panel" id="dealer-detail">
+              <div class="panel-kicker"><span id="dealer-tag">FEATURED IMPORT</span><span id="dealer-rarity">COMMON</span></div>
+              <div class="garage-title-row">
+                <div><small id="dealer-make">NISSAN</small><h3 id="dealer-model">SILVIA S15</h3></div>
+                <span class="flag-jp" id="dealer-year">2002</span>
+              </div>
+              <p class="small-copy" id="dealer-desc"></p>
+              <div class="big-stats" id="dealer-stats"></div>
+              <div class="stat-bars" id="dealer-bars"></div>
+              <div class="dealer-price-row"><div><small>PRICE</small><b id="dealer-price">$39,000</b></div><span id="dealer-requirement"></span></div>
+              <button class="cta hot wide" id="buy-car-btn">PURCHASE</button>
+            </aside>
+            <div class="dealer-browser">
+              <div class="filter-row" id="dealer-filters"></div>
+              <div id="dealer-grid" class="dealer-grid"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CUSTOMIZE -->
+        <section class="screen customize-screen" id="screen-customize" data-screen="customize">
+          <div class="screen-head compact">
+            <div><div class="eyebrow">CUSTOM WORKSHOP // TOKYO</div><h2 class="screen-title">BUILD <em>LAB</em></h2></div>
+            <div class="custom-budget glass-panel"><small>BUILD BUDGET</small><b id="custom-cash">$4,200</b></div>
+          </div>
+          <div class="custom-layout">
+            <aside class="custom-stats glass-panel">
+              <div class="panel-kicker"><span id="custom-car-label">TOYOTA AE86</span><span class="live-dot">PREVIEW</span></div>
+              <div class="big-stats" id="custom-big-stats"></div>
+              <div class="stat-bars" id="custom-bars"></div>
+              <div class="build-summary" id="custom-summary"></div>
+            </aside>
+            <aside class="custom-shop glass-panel">
+              <div class="panel-kicker"><span>PARTS & PAINT</span><span id="custom-spend">$0 SPENT</span></div>
+              <div id="custom-tabs" class="custom-tabs"></div>
+              <div class="custom-option-head"><b id="custom-category-title">PAINT</b><span id="custom-category-note"></span></div>
+              <div id="custom-options" class="custom-options"></div>
+            </aside>
+          </div>
+          <div class="custom-footer">
+            <button class="cta ghost" data-screen="garage">← BACK TO GARAGE</button>
+            <button class="cta primary" data-screen="race-setup"><span>TEST THIS BUILD</span><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l6 6-6 6"/></svg></button>
+          </div>
+        </section>
+
+        <!-- EVENTS -->
+        <section class="screen events-screen" id="screen-events" data-screen="events">
+          <div class="screen-head">
+            <div><div class="eyebrow">STREET SCHEDULE</div><h2 class="screen-title">NIGHT <em>EVENTS</em></h2></div>
+            <p class="screen-note">Single showdowns, three-round championships and<br>one white unicorn worth risking it all for.</p>
+          </div>
+          <div id="event-grid" class="event-grid"></div>
+          <div class="event-footer glass-panel">
+            <div><small>CHAMPIONSHIP STATUS</small><b id="event-status">NO ACTIVE SERIES</b></div>
+            <button class="cta ghost sm" data-screen="ranks">VIEW RECORDS</button>
+          </div>
+        </section>
+
+        <!-- RIVALS -->
+        <section class="screen rivals-screen" id="screen-rivals" data-screen="rivals">
+          <div class="screen-head">
+            <div><div class="eyebrow">CREW NETWORK</div><h2 class="screen-title">RIVAL <em>LADDER</em></h2></div>
+            <p class="screen-note">Climb from street rookies to the ghost of the expressway.<br>Every win opens a new door.</p>
+          </div>
+          <div id="rival-list" class="rival-list"></div>
+        </section>
+
+        <!-- RACE SETUP -->
+        <section class="screen setup-screen" id="screen-race-setup" data-screen="race-setup">
+          <div class="screen-head compact">
+            <div><div class="eyebrow">CHOOSE YOUR BATTLEFIELD</div><h2 class="screen-title">RACE <em>SETUP</em></h2></div>
+            <div class="distance-toggle" id="distance-toggle">
+              <button data-distance="quarter" class="active"><b>1/4</b><span>MILE</span></button>
+              <button data-distance="half"><b>1/2</b><span>MILE</span></button>
+            </div>
+          </div>
+          <div class="setup-layout">
+            <div class="track-panel">
+              <div class="section-label"><span>01</span> SELECT LOCATION</div>
+              <div id="track-grid" class="track-grid"></div>
+            </div>
+            <aside class="setup-side glass-panel">
+              <div class="panel-kicker"><span>RACE CARD</span><span id="setup-distance">1/4 MILE</span></div>
+              <div class="setup-track-art" id="setup-track-art"><span class="jp" id="setup-track-jp">東京</span><span class="index">01</span></div>
+              <small id="setup-track-name">TOKYO NEON CITY</small>
+              <p class="small-copy" id="setup-track-desc">Rain-slick asphalt under a sky made of signs.</p>
+              <div class="setup-divider"></div>
+              <div class="rival-select-head"><small>YOUR RIVAL</small><span id="setup-rival-skill">SKILL 72</span></div>
+              <div class="setup-rival" id="setup-rival">
+                <div class="rival-avatar">K</div>
+                <div><b>KAZE</b><span>NEON CATS</span></div>
+                <div class="rival-car">S13</div>
+              </div>
+              <div class="setup-reward"><span>WIN REWARD</span><b id="setup-reward">$900</b></div>
+              <div class="race-length-card">
+                <div><small>DISTANCE</small><b id="setup-distance-long">402 METRES</b></div>
+                <div><small>YOUR PB</small><b id="setup-pb">—</b></div>
+              </div>
+              <button class="cta primary wide" id="launch-race-btn"><span>LAUNCH RACE</span><svg viewBox="0 0 28 16"><path d="M0 8h24M18 2l6 6-6 6"/></svg></button>
+              <p class="tiny-copy">Manual gearbox only. Clutch required. Traction optional.</p>
+            </aside>
+          </div>
+        </section>
+
+        <!-- RANKS -->
+        <section class="screen ranks-screen" id="screen-ranks" data-screen="ranks">
+          <div class="screen-head compact">
+            <div><div class="eyebrow">STREET TIMING ASSOCIATION</div><h2 class="screen-title">THE <em>RECORDS</em></h2></div>
+            <div class="records-tabs" id="records-tabs">
+              <button data-distance="quarter" class="active">1/4 MILE</button>
+              <button data-distance="half">1/2 MILE</button>
+            </div>
+          </div>
+          <div class="ranks-layout">
+            <div class="record-hero glass-panel">
+              <div class="panel-kicker"><span>YOUR BEST</span><span id="record-track-label">TOKYO</span></div>
+              <div class="record-time" id="record-time">--:--.---</div>
+              <div class="record-meta" id="record-meta">SET A TIME. MAKE IT LEGENDARY.</div>
+              <div class="record-car" id="record-car">AE86</div>
+            </div>
+            <div class="leaderboard glass-panel">
+              <div class="panel-kicker"><span id="leaderboard-title">TOKYO LEADERBOARD</span><span>LOCAL</span></div>
+              <div id="leaderboard-rows" class="leaderboard-rows"></div>
+            </div>
+            <div class="rank-notes glass-panel">
+              <div class="panel-kicker"><span>CAREER STATS</span><span>LIVE</span></div>
+              <div class="career-stat"><span>RACES WON</span><b id="rank-wins">0</b></div>
+              <div class="career-stat"><span>RIVALS BEATEN</span><b id="rank-rivals">0 / 9</b></div>
+              <div class="career-stat"><span>CARS OWNED</span><b id="rank-cars">1 / 60</b></div>
+              <div class="career-stat"><span>BEST REACTION</span><b id="rank-reaction">—</b></div>
+              <div class="career-stat"><span>NITRO SHIFTS</span><b id="rank-shifts">0</b></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <div id="toast" class="toast" role="status"></div>
+    </div>
+
+    <!-- RACE UI -->
+    <div id="race-layer" hidden>
+      <div class="race-fx" aria-hidden="true"><div class="race-lines"></div><div class="race-speedveil"></div></div>
+      <div id="race-hud">
+        <div class="race-top">
+          <button id="pause-btn" class="race-icon-btn" aria-label="Pause race">Ⅱ</button>
+          <div class="race-location">
+            <small id="race-track-jp">東京</small>
+            <b id="race-track-name">TOKYO NEON CITY</b>
+            <span id="race-distance-label">1/4 MILE</span>
+          </div>
+          <div class="race-clock-wrap">
+            <small>ELAPSED</small>
+            <b id="race-clock">00:00.000</b>
+            <div class="race-progress"><div id="progress-fill"></div><div id="rival-progress"></div></div>
+            <div class="race-progress-labels"><span>START</span><span id="race-distance-left">402 M</span><span>FINISH</span></div>
+          </div>
+          <div class="race-rival-chip">
+            <small>RIVAL</small>
+            <b id="race-rival-name">KAZE</b>
+            <span id="race-gap">—</span>
+          </div>
+          <div class="speed-cluster">
+            <div class="speed-digits"><b id="race-speed">000</b><small>KM/H</small></div>
+            <div class="gear-box"><small>GEAR</small><b id="race-gear">N</b></div>
+          </div>
+        </div>
+
+        <div id="start-tree" class="start-tree">
+          <div class="tree-label">STAGING</div>
+          <div class="tree-bulbs">
+            <span class="bulb amber" data-light="0"></span>
+            <span class="bulb amber" data-light="1"></span>
+            <span class="bulb amber" data-light="2"></span>
+            <span class="bulb green" data-light="3"></span>
+          </div>
+          <div class="tree-reaction" id="tree-reaction">HOLD CLUTCH · SELECT 1ST</div>
+        </div>
+
+        <div class="shift-light-row" id="shift-light-row">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+
+        <div id="race-message" class="race-message"></div>
+
+        <div id="race-status-pill" class="race-status-pill">
+          <span class="status-dot"></span><span id="race-status-text">READY</span>
+        </div>
+
+        <div class="tach-strip"><div id="tach-fill"></div><span id="rpm-readout">900 RPM</span></div>
+
+        <div class="race-controls">
+          <div class="shift-module" id="shift-module" aria-label="H-pattern gear shifter">
+            <div class="shift-module-head"><span>H-PATTERN</span><span id="shift-state">NEUTRAL</span></div>
+            <div class="hshift" id="hshift">
+              <svg viewBox="0 0 200 150" class="shift-paths" aria-hidden="true">
+                <path d="M32 30 V120 M92 30 V120 M152 30 V120 M184 76 V120 M22 75 H164 M174 75 H194" />
+              </svg>
+              <button class="gear-label g1" data-gear="1">1</button>
+              <button class="gear-label g2" data-gear="2">2</button>
+              <button class="gear-label g3" data-gear="3">3</button>
+              <button class="gear-label g4" data-gear="4">4</button>
+              <button class="gear-label g5" data-gear="5">5</button>
+              <button class="gear-label g6" data-gear="6">6</button>
+              <button class="gear-label gr" data-gear="R">R</button>
+              <button class="gear-label gn" data-gear="N">N</button>
+              <div class="shift-knob" id="shift-knob"><span></span></div>
+              <div class="shift-zone" id="shift-zone"></div>
+            </div>
+            <div class="clutch-bar"><span>CLUTCH</span><i id="clutch-meter"></i></div>
+          </div>
+
+          <div class="steer-buttons">
+            <button class="steer-btn" data-steer="left" aria-label="Steer left">‹</button>
+            <button class="steer-btn" data-steer="right" aria-label="Steer right">›</button>
+          </div>
+
+          <div class="pedal-module">
+            <button class="nitro-button" id="nitro-button" aria-label="Use nitro">
+              <span class="nitro-bolt">ϟ</span>
+              <span class="nitro-label">NITRO</span>
+              <div class="nitro-fill"><i id="nitro-fill"></i></div>
+              <small>B</small>
+            </button>
+            <div class="pedals">
+              <button class="pedal clutch" data-control="clutch"><span>CLUTCH</span><b>C</b><i class="pedal-travel"></i></button>
+              <button class="pedal brake" data-control="brake"><span>BRAKE</span><b>S</b><i class="pedal-travel"></i></button>
+              <button class="pedal gas" data-control="throttle"><span>GAS</span><b>W</b><i class="pedal-travel"></i></button>
+            </div>
+            <div class="tire-heat"><span>TYRE HEAT</span><i><b id="tire-heat-fill"></b></i></div>
+          </div>
+        </div>
+
+        <div id="race-toast" class="race-toast"></div>
+        <div class="race-tip-line" id="race-tip-line">HOLD <span class=key>C</span> CLUTCH · SHIFT <span class=key>1</span> · RELEASE CLUTCH AND FEED THROTTLE</div>
+      </div>
+
+      <div id="pause-overlay" class="pause-overlay" hidden>
+        <div class="pause-card glass-panel">
+          <div class="eyebrow">TIME OUT</div>
+          <h2>RACE <em>PAUSED</em></h2>
+          <p>Even Tokyo stops for a moment.</p>
+          <button class="cta primary wide" data-action="resume">RESUME RACE</button>
+          <button class="cta ghost wide" data-action="restart">RESTART</button>
+          <button class="cta ghost wide" data-action="quit-race">QUIT TO GARAGE</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOOT -->
+    <div id="boot">
+      <div class="boot-noise"></div>
+      <div class="boot-logo">
+        <div class="boot-mark"><span>T</span><span>R</span></div>
+        <div class="boot-kicker">OMGITHUB PRESENTS</div>
+        <h1>TOKYO <em>REDLINE</em></h1>
+        <p>MANUAL CLUTCH. MIDNIGHT ASPHALT. ZERO ASSISTS.</p>
+        <div class="boot-actions">
+          <button id="start-btn" class="boot-start">START</button>
+          <div class="boot-status" id="boot-status"><span class="spinner"></span> IGNITION READY</div>
+        </div>
+        <div class="boot-specs">
+          <span><b>60</b> JDM CARS</span><span><b>10</b> MAPS</span><span><b>H</b> PATTERN</span><span><b>1P</b> DRIVER</span>
+        </div>
+      </div>
+      <div class="boot-footer"><span>TOKYO REDLINE // STREET SPEC 2.6</span><span>BEST WITH SOUND ON</span></div>
+    </div>
+
+    <div id="modal-root" class="modal-root" aria-live="polite"></div>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
