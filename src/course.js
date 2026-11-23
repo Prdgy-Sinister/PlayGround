@@ -350,8 +350,8 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
         const zz = p.zBack - p.d * (i + 0.5) / n;
         addObs('flail', {
           x: p.x + (n > 1 ? (i - (n - 1) / 2) * 3.6 : 0), z: zz, top: p.top,
-          pivotH: 5.0, arm: 4.2, amp: 1.05,
-          speed: 1.75 + rand() * 0.45, phase: rand() * Math.PI * 2
+          pivotH: 5.0, arm: 4.2, amp: 0.88,
+          speed: 1.35 + rand() * 0.25, phase: rand() * Math.PI * 2
         });
       }
       decorateSection(p);
@@ -361,8 +361,8 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
       for (let i = 0; i < n; i++) {
         const zz = p.zBack - p.d * (i + 0.5) / n;
         addObs('bumper', {
-          x: xs[i], z: zz, top: p.top, radius: 0.82,
-          height: 2.35, period: 1.55 + rand() * 0.25, phase: rand()
+          x: xs[i], z: zz, top: p.top, radius: 0.78,
+          height: 1.9, period: 2.0 + rand() * 0.35, phase: rand()
         });
       }
       decorateSection(p);
@@ -370,7 +370,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   };
 
   // collapsing section uses individual tiles
-  function addCollapseSection(depth = 22, width = 13) {
+  function addCollapseSection(depth = 22, width = 13, period = 3.15) {
     const gap = 2.2;
     const zBack = cursor - gap;
     const zFront = zBack - depth;
@@ -392,7 +392,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
           tile.mesh.position.y = 0;
           tile.tileMesh = tile.mesh;
         }
-        tile.collapse = { period: 3.15, offset: r * 0.45 + c * 0.18 + rand() * 0.08, off: 1.0, active: true };
+        tile.collapse = { period, offset: r * 0.45 + c * 0.18 + rand() * 0.08, off: 1.0, active: true };
         tile.active = true;
         tile.baseTop = 0;
       }
@@ -426,15 +426,15 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
 
   if (round === 'qualifier') {
     addCheckpoint(start, 'START', 0);
-    const p1 = nextSection(24, { w: 14 });
+    const p1 = nextSection(24, { w: 15 });
     builders.balls(p1);
-    const p2 = nextSection(20, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? 1 : -1) * 1.5 } });
-    builders.rollers(p2, 2);
+    const p2 = nextSection(20, { w: 15 });
+    builders.rollers(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
-    const p3 = nextSection(18, { w: 3.6, kind: 'beam', color: theme.platformSide });
+    const p3 = nextSection(18, { w: 5.2, kind: 'beam', color: theme.platformSide });
     builders.hammers(p3, 1);
-    const p4 = nextSection(20, { w: 14 });
-    builders.walls(p4, 2);
+    const p4 = nextSection(18, { w: 14 });
+    builders.walls(p4, 1);
     const p5 = nextSection(10, { w: 12 });
     builders.launch(p5);
     addCheckpoint(p5, 'CHECKPOINT 2', 2);
@@ -442,84 +442,83 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   } else if (round === 'sweeper') {
     addCheckpoint(start, 'START', 0);
     const p1 = nextSection(24, { w: 15 });
-    builders.sweepers(p1, 2);
-    const p2 = nextSection(15, { w: 14 });
+    builders.sweepers(p1, 1);
+    const p2 = nextSection(18, { w: 15 });
+    builders.sweepers(p2, 2);
     builders.punches(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
-    const p3 = addPlatform({ zBack: cursor - 3.0, depth: 7, w: 6.8, x: -2.4 });
+    const p3 = addPlatform({ zBack: cursor - 3.0, depth: 8, w: 7.2, x: -2.2 });
     cursor = p3.zFront;
-    const p4 = addPlatform({ zBack: cursor - 3.2, depth: 7, w: 6.8, x: 2.6 });
+    const p4 = addPlatform({ zBack: cursor - 3.2, depth: 8, w: 7.2, x: 2.2 });
     cursor = p4.zFront;
-    const p5 = nextSection(22, { w: 15 });
+    const p5 = nextSection(20, { w: 15 });
     builders.sweepers(p5, 2);
     addCheckpoint(p5, 'CHECKPOINT 2', 2);
-    const p6 = nextSection(18, { w: 3.8, kind: 'beam', color: theme.platformSide });
+    const p6 = nextSection(18, { w: 4.6, kind: 'beam', color: theme.platformSide });
     builders.hammers(p6, 1);
     const p7 = nextSection(16, { w: 14 });
     builders.walls(p7, 2);
-    const p8 = nextSection(9, { w: 12 });
+    const p8 = nextSection(10, { w: 12 });
     builders.launch(p8);
 
   } else if (round === 'dizzy') {
     addCheckpoint(start, 'START', 0);
-    addDiscSection(2);
-    const p1 = nextSection(24, { w: 15 });
+    addDiscSection(2, 0);
+    const p1 = nextSection(22, { w: 15 });
     builders.sweepers(p1, 1);
     builders.hammers(p1, 1);
     addCheckpoint(p1, 'CHECKPOINT 1', 1);
-    const p2 = nextSection(22, { w: 13, slippery: true, conveyor: { x: -1.9 } });
+    const p2 = nextSection(20, { w: 13, slippery: true, conveyor: { x: -1.4 } });
     builders.rollers(p2, 2);
+    builders.bumpers(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 2', 2);
-    addCollapseSection(22, 13);
-    addDiscSection(2);
-    const p3 = nextSection(20, { w: 3.8, kind: 'beam', color: theme.platformSide });
-    builders.hammers(p3, 2);
+    addCollapseSection(20, 13, 3.8);
+    addDiscSection(2, 0.15);
+    const p3 = nextSection(18, { w: 5.0, kind: 'beam', color: theme.platformSide });
+    builders.hammers(p3, 1);
+    builders.flails(p3, 1);
     const p4 = nextSection(20, { w: 14 });
     builders.punches(p4, 2);
+    builders.bumpers(p4, 2);
     addCheckpoint(p4, 'CHECKPOINT 3', 3);
-    const p5 = nextSection(9, { w: 12 });
+    const p5 = nextSection(10, { w: 12 });
     builders.launch(p5);
 
-  } else { // WIPEOUT ZONE - everything
+  } else { // WIPEOUT ZONE - dense, but every major section has readable lanes
     addCheckpoint(start, 'START', 0);
-    const p1 = nextSection(24, { w: 15 });
-    builders.balls(p1);
+    const p1 = nextSection(22, { w: 15 });
     builders.sweepers(p1, 2);
-    builders.bumpers(p1, 3);
-    const p2 = nextSection(24, { w: 15 });
-    builders.sweepers(p2, 3);
+    builders.bumpers(p1, 2);
+    const p2 = nextSection(22, { w: 15 });
     builders.punches(p2, 2);
-    builders.flails(p2, 2);
+    builders.flails(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
-    const p3 = nextSection(24, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 2.3 } });
-    builders.rollers(p3, 4);
-    builders.walls(p3, 3);
-    builders.bumpers(p3, 3);
+    const p3 = nextSection(22, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 1.8 } });
+    builders.rollers(p3, 2);
+    builders.bumpers(p3, 2);
     addCheckpoint(p3, 'CHECKPOINT 2', 2);
-    addCollapseSection(24, 13);
-    const p4 = nextSection(24, { w: 14 });
-    builders.punches(p4, 3);
+    addCollapseSection(20, 13, 3.45);
+    const p4 = nextSection(22, { w: 14 });
     builders.balls(p4);
-    builders.flails(p4, 2);
+    builders.punches(p4, 2);
+    builders.flails(p4, 1);
     addCheckpoint(p4, 'CHECKPOINT 3', 3);
-    addDiscSection(4, round === 'wipeout' ? 0.35 : 0);
-    const p5 = nextSection(24, { w: 15 });
-    builders.sweepers(p5, 3);
-    builders.hammers(p5, 3);
-    builders.bumpers(p5, 3);
+    addDiscSection(3, 0.25);
+    const p5 = nextSection(22, { w: 15 });
+    builders.sweepers(p5, 2);
+    builders.bumpers(p5, 2);
     addCheckpoint(p5, 'CHECKPOINT 4', 4);
-    const p6 = nextSection(22, { w: 4.2, kind: 'beam', color: theme.platformSide });
-    builders.hammers(p6, 3);
-    builders.flails(p6, 2);
-    const p7 = nextSection(22, { w: 14 });
-    builders.walls(p7, 4);
-    builders.bumpers(p7, 3);
-    const p8 = nextSection(22, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 2.5 } });
-    builders.rollers(p8, 3);
-    builders.punches(p8, 3);
-    builders.flails(p8, 2);
-    addCheckpoint(p8, 'CHECKPOINT 5', 5);
-    const p9 = nextSection(12, { w: 12 });
+    const p6 = nextSection(20, { w: 5.2, kind: 'beam', color: theme.platformSide });
+    builders.hammers(p6, 2);
+    builders.flails(p6, 1);
+    const p7 = nextSection(20, { w: 14 });
+    builders.walls(p7, 2);
+    builders.bumpers(p7, 2);
+    addCheckpoint(p7, 'CHECKPOINT 5', 5);
+    const p8 = nextSection(18, { w: 14 });
+    builders.rollers(p8, 2);
+    builders.punches(p8, 2);
+    const p9 = nextSection(10, { w: 12 });
     builders.launch(p9);
     addCheckpoint(p9, 'FINAL CHECKPOINT', 6);
   }
