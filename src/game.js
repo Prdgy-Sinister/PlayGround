@@ -508,6 +508,7 @@ export function createGame(renderer, ui) {
         speed: player.speed,
         checkpoint: cp ? cp.label : 'START'
       });
+      document.body.classList.toggle('speeding', this.state === 'racing' && player.speed > 8.1);
     },
 
     updateCamera(dt) {
@@ -540,6 +541,12 @@ export function createGame(renderer, ui) {
       );
       this.cameraLook.lerp(lookTarget, Math.min(1, dt * 7));
       cam.lookAt(this.cameraLook);
+
+      // subtle speed FOV + camera roll sells momentum without disorienting
+      const targetFov = (window.innerWidth < 700 ? 66 : 58) + speedFactor * 3.2;
+      cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 3.5);
+      cam.updateProjectionMatrix();
+      cam.rotation.z += Math.sin(this.elapsed * 1.9) * 0.0035 * speedFactor;
 
       // Balls that bounce behind the player can swallow the chase camera.
       // Hide any that the camera is inside instead of rendering a blind wall.
@@ -703,6 +710,7 @@ export function createGame(renderer, ui) {
        ============================================================ */
     finalizeRound(finished) {
       this.state = 'results';
+      document.body.classList.remove('speeding');
       this.ui.showPause(false);
       input.setEnabled(false);
       const s = this.session;
@@ -864,7 +872,7 @@ export function createGame(renderer, ui) {
       const pointsByEntry = new Map();
       const projected = [
         { key: 'player', time },
-        ...this.bots.bots.map((b, i) => ({ key: 'ai' + i, time: b.finishTime }))
+        ...this.bots.bots.map((b, i) => ({ key: 'ai' + i, time: b.finishTime ?? b.targetTime }))
       ].sort((a, b) => a.time - b.time);
       const pointTable = [10, 8, 6, 5, 4, 3, 2];
       projected.forEach((e, i) => {
@@ -1100,6 +1108,7 @@ export function createGame(renderer, ui) {
       audio.init();
       input.setEnabled(false);
       this.state = 'menu';
+      document.body.classList.remove('speeding');
       this.ui.showPause(false);
       if (this.gameScene) { this.gameScene.clear(); this.gameScene = null; }
       this.player = null;

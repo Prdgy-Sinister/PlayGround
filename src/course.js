@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { toonMat } from './characterRig.js';
+import { addGlow } from './fx.js';
 import { createObstacle, createCheckpointGate, WATER_Y } from './obstacles.js';
 
 function rng(seed) {
@@ -263,6 +264,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
       m(g, G.sphere, toonMat(theme.accent, { emissive: theme.accent, emissiveIntensity: 0.6 }), [s * 6.2, 7.2, 1.0], [0.5, 0.5, 0.5]);
     });
     m(g, G.box, toonMat(theme.accent), [0, 7.35, 1.0], [12.4, 0.55, 0.6]);
+    addGlow(g, theme.accent, [0, 7.4, 1.0], 7.5, 0.28);
     const startLights = new THREE.Group();
     for (let i = 0; i < 3; i++) {
       const light = m(startLights, G.sphere, toonMat('#ff4d5e', { emissive: '#ff4d5e', emissiveIntensity: 1.2 }), [(i - 1) * 1.5, 7.65, 0.85], [0.4, 0.4, 0.4]);
@@ -367,6 +369,40 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
       }
       decorateSection(p);
     },
+    crushers(p, n = 1) {
+      const size = Math.min(3.0, Math.max(2.0, p.w * 0.34));
+      for (let i = 0; i < n; i++) {
+        const zz = p.zBack - p.d * (i + 0.5) / n;
+        addObs('crusher', {
+          x: p.x, z: zz, top: p.top, size,
+          lift: 4.8, period: 2.6 + rand() * 0.5, phase: rand()
+        });
+      }
+      decorateSection(p);
+    },
+    saws(p, n = 1) {
+      for (let i = 0; i < n; i++) {
+        const zz = p.zBack - p.d * (i + 0.5) / n;
+        addObs('saw', {
+          x: p.x, z: zz, top: p.top,
+          radius: Math.min(1.15, Math.max(0.7, p.w * 0.13)),
+          amp: Math.max(1.5, Math.min(4.0, p.w / 2 - 2.1)),
+          speed: 1.3 + rand() * 0.45, phase: rand()
+        });
+      }
+      decorateSection(p);
+    },
+    cannons(p, n = 1) {
+      for (let i = 0; i < n; i++) {
+        const zz = p.zBack - p.d * (i + 0.5) / n;
+        addObs('cannon', {
+          z: zz, top: p.top, side: i % 2 ? 1 : -1,
+          mountX: Math.max(3.2, p.w / 2 + 0.2),
+          period: 2.7 + rand() * 0.6, phase: rand()
+        });
+      }
+      decorateSection(p);
+    },
     randomized(p, pool, n = 1) {
       const shuffled = pool.slice();
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -382,15 +418,18 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
       if (first === 'rollers') return builders.rollers(p, n);
       if (first === 'flails') return builders.flails(p, n);
       if (first === 'bumpers') return builders.bumpers(p, n);
+      if (first === 'crushers') return builders.crushers(p, n);
+      if (first === 'saws') return builders.saws(p, n);
+      if (first === 'cannons') return builders.cannons(p, n);
     }
   };
 
   // collapsing section uses individual tiles
-  function addCollapseSection(depth = 22, width = 13, period = 3.15) {
+  function addCollapseSection(depth = 22, width = 13, period = 3.15, safeCols = [2]) {
     const gap = 2.2;
     const zBack = cursor - gap;
     const zFront = zBack - depth;
-    const cols = 4, rows = 4;
+    const cols = 5, rows = 4;
     const tw = width / cols - 0.18, td = depth / rows - 0.18;
     const pg = new THREE.Group();
     group.add(pg);
@@ -398,9 +437,10 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
       for (let c = 0; c < cols; c++) {
         const tx = -width / 2 + tw / 2 + c * (tw + 0.18);
         const tz = zBack - td / 2 - r * (td + 0.18);
+        const safe = safeCols.includes(c);
         const tile = addPlatform({
           x: tx, zBack: tz + td / 2, depth: td, w: tw, top: 0,
-          kind: 'tile', color: (r + c) % 2 ? theme.platform : theme.platformSide,
+          kind: 'tile', color: safe ? theme.platformTrim : ((r + c) % 2 ? theme.platform : theme.platformSide),
           edge: 0.01
         });
         // replace visual with a chunkier tile
@@ -408,7 +448,13 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
           tile.mesh.position.y = 0;
           tile.tileMesh = tile.mesh;
         }
-        tile.collapse = { period, offset: r * 0.45 + c * 0.18 + rand() * 0.08, off: 1.0, active: true };
+        if (safe) {
+          tile.safeLane = true;
+          // A lit safe strip is the readable route through the collapse grid.
+          addGlow(group, theme.accent, [tx, 0.32, tz], 2.4, 0.3);
+        } else {
+          tile.collapse = { period, offset: r * 0.45 + c * 0.18 + rand() * 0.08, off: 1.0, active: true };
+        }
         tile.active = true;
         tile.baseTop = 0;
       }
@@ -443,10 +489,10 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   if (round === 'qualifier') {
     addCheckpoint(start, 'START', 0);
     const p1 = nextSection(24, { w: 15 });
-    builders.randomized(p1, ['balls', 'sweepers', 'rollers', 'bumpers'], 2);
-    builders.randomized(p1, ['punches', 'walls', 'hammers', 'bumpers'], 1);
+    builders.randomized(p1, ['balls', 'sweepers', 'rollers', 'bumpers', 'saws'], 2);
+    builders.randomized(p1, ['punches', 'walls', 'hammers', 'bumpers', 'cannons'], 1);
     const p2 = nextSection(20, { w: 15 });
-    builders.randomized(p2, ['rollers', 'punches', 'walls', 'balls'], 2);
+    builders.randomized(p2, ['rollers', 'punches', 'walls', 'balls', 'saws'], 2);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
     const p3 = nextSection(18, { w: 5.2, kind: 'beam', color: theme.platformSide });
     builders.hammers(p3, 2);
@@ -460,17 +506,17 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   } else if (round === 'sweeper') {
     addCheckpoint(start, 'START', 0);
     const p1 = nextSection(24, { w: 15 });
-    builders.randomized(p1, ['sweepers', 'walls', 'rollers', 'bumpers'], 2);
+    builders.randomized(p1, ['sweepers', 'walls', 'rollers', 'bumpers', 'saws'], 2);
     builders.bumpers(p1, 1);
     const p2 = nextSection(18, { w: 15 });
-    builders.randomized(p2, ['sweepers', 'punches', 'flails', 'bumpers'], 2);
+    builders.randomized(p2, ['sweepers', 'punches', 'flails', 'bumpers', 'cannons'], 2);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
     const p3 = addPlatform({ zBack: cursor - 3.0, depth: 8, w: 7.2, x: -2.2 });
     cursor = p3.zFront;
     const p4 = addPlatform({ zBack: cursor - 3.2, depth: 8, w: 7.2, x: 2.2 });
     cursor = p4.zFront;
     const p5 = nextSection(20, { w: 15 });
-    builders.randomized(p5, ['sweepers', 'rollers', 'balls', 'bumpers'], 2);
+    builders.randomized(p5, ['sweepers', 'rollers', 'balls', 'bumpers', 'cannons'], 2);
     builders.bumpers(p5, 1);
     addCheckpoint(p5, 'CHECKPOINT 2', 2);
     const p6 = nextSection(18, { w: 4.6, kind: 'beam', color: theme.platformSide });
@@ -484,11 +530,11 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     addCheckpoint(start, 'START', 0);
     addDiscSection(2, 0);
     const p1 = nextSection(22, { w: 15 });
-    builders.randomized(p1, ['sweepers', 'hammers', 'flails', 'bumpers'], 2);
+    builders.randomized(p1, ['sweepers', 'hammers', 'flails', 'bumpers', 'crushers'], 2);
     builders.randomized(p1, ['rollers', 'walls', 'punches'], 1);
     addCheckpoint(p1, 'CHECKPOINT 1', 1);
     const p2 = nextSection(20, { w: 13, slippery: true, conveyor: { x: -1.4 } });
-    builders.randomized(p2, ['rollers', 'walls', 'punches', 'bumpers'], 2);
+    builders.randomized(p2, ['rollers', 'walls', 'punches', 'bumpers', 'cannons'], 2);
     builders.bumpers(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 2', 2);
     addCollapseSection(20, 13, 3.8);
@@ -496,7 +542,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     const p3 = nextSection(18, { w: 5.0, kind: 'beam', color: theme.platformSide });
     builders.randomized(p3, ['hammers', 'flails', 'punches'], 2);
     const p4 = nextSection(20, { w: 14 });
-    builders.randomized(p4, ['punches', 'walls', 'rollers', 'bumpers'], 2);
+    builders.randomized(p4, ['punches', 'walls', 'rollers', 'bumpers', 'saws'], 2);
     builders.bumpers(p4, 1);
     addCheckpoint(p4, 'CHECKPOINT 3', 3);
     const p5 = nextSection(10, { w: 12 });
@@ -508,7 +554,8 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     builders.randomized(p1, ['sweepers', 'rollers', 'walls', 'bumpers'], 2);
     builders.bumpers(p1, 1);
     const p2 = nextSection(22, { w: 15 });
-    builders.randomized(p2, ['punches', 'flails', 'hammers', 'bumpers'], 2);
+    builders.randomized(p2, ['punches', 'saws', 'hammers', 'bumpers'], 2);
+    builders.cannons(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
     const p3 = nextSection(22, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 1.8 } });
     builders.randomized(p3, ['rollers', 'balls', 'walls', 'bumpers'], 2);
@@ -516,7 +563,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     addCheckpoint(p3, 'CHECKPOINT 2', 2);
     addCollapseSection(20, 13, 3.45);
     const p4 = nextSection(22, { w: 14 });
-    builders.randomized(p4, ['balls', 'rollers', 'bumpers'], 1);
+    builders.crushers(p4, 1);
     builders.randomized(p4, ['punches', 'flails', 'hammers', 'walls'], 2);
     addCheckpoint(p4, 'CHECKPOINT 3', 3);
     addDiscSection(3, 0.25);
@@ -527,7 +574,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     const p6 = nextSection(20, { w: 5.2, kind: 'beam', color: theme.platformSide });
     builders.randomized(p6, ['hammers', 'flails', 'punches'], 2);
     const p7 = nextSection(20, { w: 14 });
-    builders.randomized(p7, ['walls', 'rollers', 'sweepers', 'bumpers'], 2);
+    builders.randomized(p7, ['walls', 'saws', 'sweepers', 'bumpers'], 2);
     builders.bumpers(p7, 1);
     addCheckpoint(p7, 'CHECKPOINT 5', 5);
     const p8 = nextSection(18, { w: 14 });
@@ -556,6 +603,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
       m(g, G.sphere, toonMat(theme.accent, { emissive: theme.accent, emissiveIntensity: 0.7 }), [s * 9.4, 6.2, finish.zBack - 4], [0.55, 0.55, 0.55]);
     });
     m(g, G.box, toonMat(theme.accent), [0, 6.7, finish.zBack - 4], [19.5, 1.2, 0.8]);
+    addGlow(g, theme.accent, [0, 6.9, finish.zBack - 4], 12, 0.3);
     // checkered finish line
     const checker = document.createElement('canvas');
     checker.width = 256; checker.height = 64;

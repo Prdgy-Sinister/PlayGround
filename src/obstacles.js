@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { toonMat } from './characterRig.js';
+import { addGlow } from './fx.js';
 
 // ---------------------------------------------------------------------------
 // Shared geometry / helpers
@@ -49,6 +50,53 @@ function hazardMat(arena) {
 
 function glow(parent, color, pos, radius = 0.18) {
   return mesh(parent, G.sphere, toonMat(color, { emissive: color, emissiveIntensity: 1.4 }), pos, [radius, radius, radius]);
+}
+
+function beacon(parent, color, pos, size = 2.2, opacity = 0.55) {
+  return addGlow(parent, color, pos, size, opacity);
+}
+
+// ---------------------------------------------------------------------------
+// Floor warning markings. Distinct hazard signatures help players read a lane
+// before it punishes them, which matters most in the dense WIPEOUT layout.
+// ---------------------------------------------------------------------------
+const chevronCache = new Map();
+function chevronTexture(color) {
+  if (chevronCache.has(color)) return chevronCache.get(color);
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 128, 64);
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.85;
+  for (let i = -2; i < 10; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * 18, 64); ctx.lineTo(i * 18 + 22, 64);
+    ctx.lineTo(i * 18 + 40, 0); ctx.lineTo(i * 18 + 18, 0);
+    ctx.closePath(); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  chevronCache.set(color, tex);
+  return tex;
+}
+
+function hazardStripe(parent, w, d, color, y = 0.035, opacity = 0.42) {
+  const map = chevronTexture(color);
+  const tex = map.clone();
+  tex.needsUpdate = true;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(Math.max(1, Math.round(w / 3)), Math.max(1, Math.round(d / 3)));
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide
+  });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+  m.rotation.x = -Math.PI / 2;
+  m.scale.set(w, d, 1);
+  m.position.y = y;
+  parent.add(m);
+  return m;
 }
 
 export const WATER_Y = -2.25;
@@ -149,6 +197,8 @@ function sweeper(opt, arena) {
 
   // support base
   mesh(group, G.cyl, toonMat(arena.platformSide), [0, -0.4, 0], [1.2, 0.8, 1.2]);
+  hazardStripe(group, reach * 2 + 1.2, 1.05, arena.accent, 0.035, 0.3);
+  beacon(group, arena.accent, [0, 1.85, 0], 2.4, 0.4);
 
   return {
     type: 'sweeper', group, power: 11,
@@ -194,6 +244,8 @@ function hammer(opt, arena) {
   mesh(group, G.box, frameMat, [reachX(opt), h * 0.72, 0], [0.6, h * 2, 0.6]);
   mesh(group, G.box, postMat, [0, h, 0], [reachX(opt) * 2 + 0.6, 0.7, 0.7]);
   glow(group, arena.accent, [0, h + 0.5, 0], 0.2);
+  hazardStripe(group, reachX(opt) * 2, 3.2, arena.obstacle, 0.035, 0.3);
+  beacon(group, arena.accent, [0, h + 0.55, 0], 2.6, 0.5);
 
   const swing = new THREE.Group();
   swing.position.set(0, h, 0);
@@ -253,6 +305,8 @@ function punch(opt, arena) {
   mesh(mount, G.box, toonMat(arena.platformSide), [0, -0.45, 0], [1.5, 1.6, 1.6]);
   const warn = glow(mount, arena.accent, [0, 0.6, 0.9], 0.2);
   mesh(mount, G.cylAxisX, toonMat('#afb9c4'), [side * -0.9, 0, 0], [1.8, 0.34, 0.34]);
+  hazardStripe(group, opt.extend || 5.2, 2.1, arena.accent2 || arena.accent, 0.035, 0.3);
+  beacon(group, arena.accent, [baseX, 1.7, 0], 2.0, 0.42);
   const glove = new THREE.Group();
   glove.position.set(0, 0, 0);
   mount.add(glove);
@@ -307,6 +361,7 @@ function movingWall(opt, arena) {
   });
   // track
   mesh(group, G.box, toonMat('#30363f'), [0, 0.04, 0], [opt.track || 12, 0.08, 0.75]);
+  hazardStripe(group, opt.track || 12, 1.25, arena.accent, 0.03, 0.24);
   const amp = opt.amp || 4.8;
   const speed = opt.speed || 1.45;
   const phase = opt.phase || 0;
@@ -428,6 +483,8 @@ function flail(opt, arena) {
   mesh(group, G.box, toonMat(arena.platformSide), [-4.2, pivotH * 0.5, 0], [0.55, pivotH, 0.55]);
   mesh(group, G.box, toonMat(arena.platformSide), [4.2, pivotH * 0.5, 0], [0.55, pivotH, 0.55]);
   mesh(group, G.box, toonMat(arena.platformTrim), [0, pivotH, 0], [8.5, 0.55, 0.55]);
+  hazardStripe(group, 7.2, 2.4, arena.obstacle, 0.035, 0.28);
+  beacon(group, arena.accent, [0, pivotH + 0.4, 0], 2.2, 0.45);
 
   const swing = new THREE.Group();
   swing.position.set(0, pivotH, 0);
@@ -435,6 +492,7 @@ function flail(opt, arena) {
   mesh(swing, G.cyl, toonMat('#5f6670'), [0, -arm * 0.5, 0], [0.12, arm, 0.12]);
   const head = mesh(swing, G.sphere, toonMat(arena.obstacle), [0, -arm, 0], [1.2, 1.2, 1.2]);
   mesh(head, G.torus, toonMat(arena.accent), [0, 0, 0], [1.05, 1.05, 1.05], [Math.PI / 2, 0, 0]);
+  beacon(swing, arena.accent, [0, -arm, 0], 2.2, 0.5);
   const headWorld = new THREE.Vector3();
 
   return {
@@ -469,6 +527,8 @@ function bumper(opt, arena) {
   mesh(column, G.cyl, toonMat(arena.platformSide), [0, -0.45, 0], [r * 1.15, 0.9, r * 1.15]);
   mesh(column, G.sphere, toonMat(arena.obstacle), [0, 0, 0], [r, r, r]);
   glow(column, arena.accent, [0, r * 0.55, 0], 0.16);
+  beacon(column, arena.accent, [0, r * 0.6, 0], 1.9, 0.5);
+  hazardStripe(group, r * 4.2, r * 4.2, arena.accent, 0.03, 0.3);
 
   return {
     type: 'bumper', group, power: 13,
@@ -492,9 +552,218 @@ function bumper(opt, arena) {
 }
 
 // ---------------------------------------------------------------------------
+// HYDRAULIC CRUSHER - heavy, telegraphed vertical slam
+// ---------------------------------------------------------------------------
+function crusher(opt, arena) {
+  const group = new THREE.Group();
+  group.position.set(opt.x || 0, opt.top, opt.z);
+  const s = opt.size || 2.7;
+  const lift = opt.lift || 5.0;
+  const period = opt.period || 2.7;
+  const phase = opt.phase || 0;
+
+  const postMat = toonMat(arena.platformSide);
+  const trimMat = toonMat(arena.platformTrim);
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+    mesh(group, G.box, postMat, [sx * s * 0.74, lift * 0.52, sz * s * 0.74], [0.34, lift * 1.04, 0.34]);
+    glow(group, arena.accent, [sx * s * 0.74, lift * 0.98, sz * s * 0.74], 0.1);
+  });
+  mesh(group, G.box, postMat, [0, lift, 0], [s * 1.84, 0.52, s * 1.84]);
+  mesh(group, G.box, trimMat, [0, lift + 0.32, 0], [s * 1.9, 0.14, s * 1.9]);
+
+  const head = new THREE.Group();
+  head.position.y = lift;
+  group.add(head);
+  mesh(head, G.box, hazardMat(arena), [0, 0, 0], [s, 1.12, s]);
+  mesh(head, G.box, toonMat('#30363f'), [0, 0.6, 0], [s * 1.04, 0.18, s * 1.04]);
+  const toothGeo = new THREE.ConeGeometry(0.24, 0.48, 4);
+  for (let i = -1; i <= 1; i++) {
+    for (let k = -1; k <= 1; k++) {
+      mesh(head, toothGeo, trimMat, [i * s * 0.29, -0.72, k * s * 0.29], [1, 1, 1], [Math.PI, 0, 0]);
+    }
+  }
+  const headBeacon = beacon(head, arena.accent, [0, 0.88, 0], 2.5, 0.5);
+  const decal = hazardStripe(group, s * 1.12, s * 1.12, arena.obstacle, 0.04, 0.35);
+
+  return {
+    type: 'crusher', group, power: 18,
+    update(dt, t) {
+      const p = ((t / period + phase) % 1);
+      let y;
+      if (p < 0.6) {
+        y = lift + Math.sin(t * 2.4) * 0.07;
+      } else if (p < 0.72) {
+        const q = (p - 0.6) / 0.12;
+        y = lift * (1 - q * q) + 1.22 * q * q;
+      } else if (p < 0.84) {
+        y = 1.22 + Math.sin(t * 46) * 0.025;
+      } else {
+        const q = (p - 0.84) / 0.16;
+        y = 1.22 + (lift - 1.22) * (q * q * (3 - 2 * q));
+      }
+      head.position.y = y;
+      head.rotation.z = p > 0.6 && p < 0.85 ? Math.sin(t * 52) * 0.02 : 0;
+      decal.material.opacity = p > 0.45 && p < 0.72
+        ? 0.55 + Math.sin(t * 30) * 0.25
+        : 0.24 + Math.sin(t * 5) * 0.06;
+      if (headBeacon) headBeacon.material.opacity = p > 0.45 && p < 0.72 ? 0.85 : 0.45;
+    },
+    hit(pos, radius, height) {
+      const cy = opt.top + head.position.y;
+      if (pos.y > cy + 0.8) return null;
+      if (pos.y + height < cy - 0.62) return null;
+      const dx = pos.x - (opt.x || 0);
+      const dz = pos.z - opt.z;
+      const half = s / 2 + radius;
+      if (Math.abs(dx) > half || Math.abs(dz) > half) return null;
+      return {
+        nx: Math.abs(dx) > 0.01 ? Math.sign(dx) * 0.75 : 0.25,
+        nz: 0.8, power: 19, up: 6.2,
+        label: 'FLATTENED BY THE CRUSHER!'
+      };
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// BUZZSAW - fast spinning blade that sweeps sideways across the lane
+// ---------------------------------------------------------------------------
+function saw(opt, arena) {
+  const group = new THREE.Group();
+  group.position.set(opt.x || 0, opt.top, opt.z);
+  const r = opt.radius || 1.05;
+  const amp = opt.amp || 3.2;
+  const speed = opt.speed || 1.55;
+  const phase = opt.phase || 0;
+
+  // rail + warning floor
+  mesh(group, G.box, toonMat('#30363f'), [0, 0.05, 0], [amp * 2 + 1.6, 0.09, 0.7]);
+  hazardStripe(group, amp * 2 + 1.8, 1.9, arena.accent2 || arena.accent, 0.03, 0.28);
+
+  const slide = new THREE.Group();
+  slide.position.y = r + 0.42;
+  group.add(slide);
+  const blade = new THREE.Group();
+  slide.add(blade);
+
+  const steel = toonMat('#c7d3de');
+  const dark = toonMat('#4a5059');
+  const disc = mesh(blade, new THREE.CylinderGeometry(r, r, 0.2, 28), steel, [0, 0, 0], [1, 1, 1], [Math.PI / 2, 0, 0]);
+  mesh(blade, G.torus, toonMat(arena.accent2 || arena.accent), [0, 0, 0], [r * 0.93, r * 0.93, r * 1.15]);
+  mesh(blade, G.cyl, dark, [0, 0, 0], [r * 0.3, 0.34, r * 0.3], [Math.PI / 2, 0, 0]);
+  const toothGeo = new THREE.ConeGeometry(r * 0.18, r * 0.42, 3);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    mesh(blade, toothGeo, steel,
+      [Math.cos(a) * (r * 0.92), Math.sin(a) * (r * 0.92), 0],
+      [1, 1, 1], [0, 0, a - Math.PI / 2]);
+  }
+  beacon(slide, arena.accent2 || arena.accent, [0, 0, 0], r * 4.4, 0.3);
+  // sparks
+  const sparkMat = toonMat('#ffe066', { emissive: '#ffb02e', emissiveIntensity: 1.2 });
+  for (let i = 0; i < 4; i++) {
+    const sp = mesh(group, G.sphere, sparkMat, [0, 0.3 + i * 0.08, 0.5], [0.07, 0.07, 0.07]);
+    sp.userData.spark = i;
+  }
+
+  return {
+    type: 'saw', group, power: 15,
+    update(dt, t) {
+      slide.position.x = Math.sin(t * speed + phase) * amp;
+      blade.rotation.z = -t * 14;
+      group.children.forEach(c => {
+        if (c.userData.spark !== undefined) {
+          const k = c.userData.spark;
+          c.position.x = slide.position.x + Math.sin(t * 17 + k * 2.1) * 0.24;
+          c.position.y = 0.25 + Math.abs(Math.sin(t * 13 + k)) * 0.32;
+          c.position.z = 0.45 + Math.cos(t * 9 + k) * 0.2;
+          c.visible = Math.sin(t * 7 + k * 1.7) > 0.2;
+        }
+      });
+    },
+    hit(pos, radius, height) {
+      const cx = (opt.x || 0) + slide.position.x;
+      const cy = opt.top + slide.position.y;
+      if (pos.y > cy + r * 0.92) return null;
+      if (pos.y + height < cy - r * 0.92) return null;
+      const dx = pos.x - cx, dz = pos.z - opt.z;
+      if (dx * dx + dz * dz > (r * 0.86 + radius) ** 2) return null;
+      const len = Math.hypot(dx, dz) || 1;
+      return { nx: dx / len, nz: dz / len + 0.7, power: 15.5, up: 5, label: 'CHOMPED BY THE BUZZSAW!' };
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// FOAM CANNON - periodic projectile crossing the platform
+// ---------------------------------------------------------------------------
+function cannon(opt, arena) {
+  const group = new THREE.Group();
+  group.position.set(0, opt.top, opt.z);
+  const side = opt.side || 1;
+  const mountX = opt.mountX || 7.0;
+  const period = opt.period || 2.9;
+  const phase = opt.phase || 0;
+  const wind = 0.3;
+  const travel = 0.42;
+
+  const turret = new THREE.Group();
+  turret.position.set(side * mountX, 0, 0);
+  group.add(turret);
+  mesh(turret, G.box, toonMat(arena.platformSide), [0, 0.55, 0], [1.7, 1.3, 1.7]);
+  mesh(turret, G.cyl, toonMat(arena.platformTrim), [0, 1.2, 0], [0.55, 0.5, 0.55]);
+  const barrel = mesh(turret, G.cylAxisX, toonMat('#aab4be'), [-side * 1.15, 0.9, 0], [2.3, 0.42, 0.42]);
+  const muzzle = beacon(turret, arena.accent2 || arena.accent, [-side * 2.35, 0.9, 0], 2.2, 0.35);
+  hazardStripe(group, mountX * 2, 1.5, arena.accent2 || arena.accent, 0.03, 0.26);
+
+  const proj = new THREE.Group();
+  group.add(proj);
+  const ballMat = toonMat(arena.accent2 || arena.accent, { emissive: arena.accent2 || arena.accent, emissiveIntensity: 0.25 });
+  mesh(proj, G.sphere, ballMat, [0, 0, 0], [0.62, 0.62, 0.62]);
+  mesh(proj, G.torus, toonMat('#fffaf0'), [0, 0, 0], [0.55, 0.55, 0.7], [Math.PI / 2, 0, 0]);
+  mesh(proj, G.torus, toonMat('#fffaf0'), [0, 0, 0], [0.55, 0.55, 0.7], [0, 0, Math.PI / 2]);
+  const projGlow = beacon(proj, arena.accent2 || arena.accent, [0, 0, 0], 2.2, 0.4);
+  proj.visible = false;
+
+  let px = side * mountX;
+  return {
+    type: 'cannon', group, power: 12,
+    update(dt, t) {
+      const p = ((t / period + phase) % 1);
+      if (p >= wind && p < wind + travel) {
+        const q = (p - wind) / travel;
+        px = side * mountX + (-side * mountX * 2) * q;
+        proj.visible = true;
+        proj.position.set(px, 1.18, 0);
+        proj.rotation.z -= dt * 9;
+      } else {
+        proj.visible = false;
+      }
+      const charging = p < wind;
+      const charge = charging ? 0.4 + (p / wind) * 0.6 : 0.35;
+      if (muzzle) muzzle.material.opacity = charge;
+      if (projGlow) projGlow.material.opacity = proj.visible ? 0.55 : 0;
+      barrel.position.x = -side * (1.15 - (charging ? 0.12 * (p / wind) : 0));
+      barrel.rotation.z = charging ? Math.sin(t * 18) * 0.02 : 0;
+    },
+    hit(pos, radius, height) {
+      if (!proj.visible) return null;
+      const gy = opt.top + 1.18;
+      if (pos.y > gy + 0.7 || pos.y + height < gy - 0.7) return null;
+      const dx = pos.x - px, dz = pos.z - opt.z;
+      if (dx * dx + dz * dz > (0.68 + radius) ** 2) return null;
+      return { nx: -side * 0.9, nz: 0.7, power: 12.5, up: 4.2, label: 'FOAM CANNONED!' };
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
-const BUILDERS = { ball: bigBall, sweeper, hammer, punch, wall: movingWall, roller, launch: launchPad, flail, bumper };
+const BUILDERS = {
+  ball: bigBall, sweeper, hammer, punch, wall: movingWall, roller,
+  launch: launchPad, flail, bumper, crusher, saw, cannon
+};
 
 export function createObstacle(type, opt, arena) {
   const build = BUILDERS[type];
@@ -515,5 +784,6 @@ export function createCheckpointGate(arena, z, index) {
     mesh(group, G.sphere, glowMat, [s * 7, 3.65, 0], [0.35, 0.35, 0.35]);
   });
   mesh(group, G.box, new THREE.MeshToonMaterial({ color: arena.accent2, transparent: true, opacity: 0.32 }), [0, 3.3, 0], [13.4, 0.8, 0.12]);
+  addGlow(group, '#6bff9d', [0, 3.45, 0], 8, 0.22);
   return group;
 }

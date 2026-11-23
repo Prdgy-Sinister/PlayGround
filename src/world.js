@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { toonMat, toonGradient } from './characterRig.js';
+import { makeGlow } from './fx.js';
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -93,6 +94,18 @@ export function createEnvironment(arena, courseLength, quality = 'high') {
   sky.frustumCulled = false;
   group.add(sky);
 
+  // sun / moon halo
+  const sunDir = new THREE.Vector3(...arena.sunDir).normalize();
+  const halo = makeGlow(arena.id === 'night' ? '#bcd3ff' : arena.sun, arena.id === 'night' ? 150 : 210, arena.id === 'night' ? 0.5 : 0.34);
+  halo.position.copy(sunDir).multiplyScalar(470);
+  halo.frustumCulled = false;
+  group.add(halo);
+  if (arena.id === 'night') {
+    const moon = new THREE.Mesh(new THREE.SphereGeometry(14, 18, 12), toonMat('#e8efff', { emissive: '#8899cc', emissiveIntensity: 0.7 }));
+    moon.position.copy(sunDir).multiplyScalar(430);
+    group.add(moon);
+  }
+
   // ---------- animated water ----------
   const waterUniforms = {
     uTime: { value: 0 },
@@ -151,6 +164,14 @@ export function createEnvironment(arena, courseLength, quality = 'high') {
     isl.position.set(side * (46 + rand() * 55), -7 - rand() * 5, z);
     isl.scale.set(s, 5 + rand() * 7, s * 0.8);
     group.add(isl);
+    // shoreline foam ring
+    const foam = new THREE.Mesh(
+      new THREE.RingGeometry(s * 0.52, s * 0.78, 22, 1),
+      new THREE.MeshBasicMaterial({ color: '#e9ffff', transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false })
+    );
+    foam.rotation.x = -Math.PI / 2;
+    foam.position.set(isl.position.x, -2.2, isl.position.z);
+    group.add(foam);
     if (!low) {
       const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), toonMat(arena.platformSide));
       rock.position.set(side * (40 + rand() * 20), -1.4, z + rand() * 20);
@@ -442,6 +463,62 @@ export function createEnvironment(arena, courseLength, quality = 'high') {
   placeInstances(markers, markersL);
   placeInstances(flags, flagsL);
 
+  // ---------- buoy lanes + framing pylons ----------
+  const buoyStep = low ? 14 : 10;
+  const buoyGeo = new THREE.TorusGeometry(0.62, 0.26, 7, 14);
+  const buoyCount = Math.ceil((courseLength + 20) / buoyStep) + 2;
+  const buoyA = instance(buoyGeo, toonMat(arena.accent, { emissive: arena.accent, emissiveIntensity: arena.id === 'night' ? 0.5 : 0.12 }), buoyCount, group);
+  const buoyB = instance(buoyGeo, toonMat(arena.accent2, { emissive: arena.accent2, emissiveIntensity: arena.id === 'night' ? 0.5 : 0.12 }), buoyCount, group);
+  const buoyAL = [], buoyBL = [];
+  for (let z = 18, i = 0; z > -courseLength - 24; z -= buoyStep, i++) {
+    const listA = i % 2 ? buoyAL : buoyBL;
+    const listB = i % 2 ? buoyBL : buoyAL;
+    listA.push({ x: -14.2 - (i % 3) * 1.1, y: -2.0, z, rx: Math.PI / 2, ry: i * 0.4 });
+    listB.push({ x: 14.2 + (i % 3) * 1.1, y: -2.0, z, rx: Math.PI / 2, ry: -i * 0.4 });
+  }
+  placeInstances(buoyA, buoyAL);
+  placeInstances(buoyB, buoyBL);
+
+  if (!low) {
+    // floodlight masts frame the course and add depth cues at speed
+    const mastGeo = new THREE.CylinderGeometry(0.22, 0.36, 1, 6);
+    const mastMat = toonMat(arena.platformSide);
+    const orbMat = toonMat(arena.accent2, { emissive: arena.accent2, emissiveIntensity: 1 });
+    const pylonCount = Math.ceil(courseLength / 54) * 2;
+    const masts = instance(mastGeo, mastMat, pylonCount, group);
+    const orbs = instance(new THREE.SphereGeometry(0.55, 8, 6), orbMat, pylonCount, group);
+    const mastL = [], orbL = [];
+    for (let i = 0; i < pylonCount / 2; i++) {
+      const z = -8 - i * 54;
+      [-1, 1].forEach(side => {
+        const x = side * 17.5;
+        mastL.push({ x, y: 3.0, z, sy: 10 });
+        orbL.push({ x, y: 8.3, z });
+      });
+    }
+    placeInstances(masts, mastL);
+    placeInstances(orbs, orbL);
+  }
+
+  // ---------- ambient motes ----------
+  if (arena.props !== 'winter') {
+    const moteCount = low ? 48 : 140;
+    const mpos = new Float32Array(moteCount * 3);
+    for (let i = 0; i < moteCount; i++) {
+      mpos[i * 3] = (rand() - 0.5) * 64;
+      mpos[i * 3 + 1] = -1 + rand() * 16;
+      mpos[i * 3 + 2] = 20 - rand() * (courseLength + 60);
+    }
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.BufferAttribute(mpos, 3));
+    const motes = new THREE.Points(mg, new THREE.PointsMaterial({
+      color: arena.accent2, size: low ? 0.22 : 0.16, transparent: true,
+      opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending
+    }));
+    group.add(motes);
+    anim.push({ type: 'motes', points: motes, count: moteCount });
+  }
+
   // ambient background character shapes (small floating inflatables)
   for (let i = 0; i < 4; i++) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.8, 8, 18), toonMat(arena.crowd[i % arena.crowd.length]));
@@ -452,14 +529,18 @@ export function createEnvironment(arena, courseLength, quality = 'high') {
   }
 
   // ---------- lights ----------
-  const hemi = new THREE.HemisphereLight(arena.hemi, arena.ground, arena.id === 'night' ? 0.9 : 1.15);
+  const hemi = new THREE.HemisphereLight(arena.hemi, arena.ground, arena.id === 'night' ? 1.0 : 1.25);
   group.add(hemi);
-  const sun = new THREE.DirectionalLight(arena.sun, arena.id === 'night' ? 1.1 : 1.9);
+  const sun = new THREE.DirectionalLight(arena.sun, arena.id === 'night' ? 1.25 : 2.1);
   sun.position.set(...arena.sunDir).multiplyScalar(60);
   group.add(sun);
-  const fill = new THREE.DirectionalLight(arena.accent2, 0.3);
+  const fill = new THREE.DirectionalLight(arena.accent2, arena.id === 'night' ? 0.55 : 0.38);
   fill.position.set(-40, 20, 20);
   group.add(fill);
+  // warm rim from behind keeps silhouettes readable against the sky
+  const rim = new THREE.DirectionalLight(arena.accent, arena.id === 'night' ? 0.35 : 0.5);
+  rim.position.set(25, 14, -60);
+  group.add(rim);
 
   function update(dt, t) {
     skyUniforms.uTime.value = t;
@@ -483,6 +564,15 @@ export function createEnvironment(arena, courseLength, quality = 'high') {
         if (a.mesh.position.y > 38) a.mesh.position.y = a.base;
       } else if (a.type === 'sway') {
         a.mesh.rotation.z = a.base + Math.sin(t * a.speed) * 0.12;
+      } else if (a.type === 'motes') {
+        const arr = a.points.geometry.attributes.position.array;
+        for (let i = 0; i < a.count; i++) {
+          arr[i * 3] += Math.sin(t * 0.55 + i * 1.7) * dt * 0.18;
+          arr[i * 3 + 1] += Math.cos(t * 0.42 + i * 0.9) * dt * 0.2;
+          if (arr[i * 3 + 1] > 16) arr[i * 3 + 1] = -1;
+          if (arr[i * 3 + 1] < -1.5) arr[i * 3 + 1] = 15.5;
+        }
+        a.points.geometry.attributes.position.needsUpdate = true;
       }
     }
   }
