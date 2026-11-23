@@ -277,7 +277,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   const builders = {
     balls(p) {
       const laneXs = p.w > 13 ? [-4.2, 0, 4.2] : [-3.2, 3.2];
-      const count = difficulty > 1.12 ? 3 : 2;
+      const count = p.w > 12 ? 3 : 2;
       for (let i = 0; i < count; i++) {
         addObs('ball', {
           x: laneXs[i % laneXs.length] + (rand() - 0.5) * 0.8,
@@ -428,13 +428,16 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     addCheckpoint(start, 'START', 0);
     const p1 = nextSection(24, { w: 15 });
     builders.balls(p1);
+    builders.bumpers(p1, 1);
     const p2 = nextSection(20, { w: 15 });
-    builders.rollers(p2, 1);
+    builders.rollers(p2, 2);
+    builders.punches(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
     const p3 = nextSection(18, { w: 5.2, kind: 'beam', color: theme.platformSide });
-    builders.hammers(p3, 1);
+    builders.hammers(p3, 2);
+    builders.flails(p3, 1);
     const p4 = nextSection(18, { w: 14 });
-    builders.walls(p4, 1);
+    builders.walls(p4, 2);
     const p5 = nextSection(10, { w: 12 });
     builders.launch(p5);
     addCheckpoint(p5, 'CHECKPOINT 2', 2);
@@ -442,10 +445,11 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   } else if (round === 'sweeper') {
     addCheckpoint(start, 'START', 0);
     const p1 = nextSection(24, { w: 15 });
-    builders.sweepers(p1, 1);
+    builders.sweepers(p1, 2);
+    builders.bumpers(p1, 2);
     const p2 = nextSection(18, { w: 15 });
     builders.sweepers(p2, 2);
-    builders.punches(p2, 1);
+    builders.punches(p2, 2);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
     const p3 = addPlatform({ zBack: cursor - 3.0, depth: 8, w: 7.2, x: -2.2 });
     cursor = p3.zFront;
@@ -453,6 +457,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     cursor = p4.zFront;
     const p5 = nextSection(20, { w: 15 });
     builders.sweepers(p5, 2);
+    builders.bumpers(p5, 2);
     addCheckpoint(p5, 'CHECKPOINT 2', 2);
     const p6 = nextSection(18, { w: 4.6, kind: 'beam', color: theme.platformSide });
     builders.hammers(p6, 1);
@@ -465,18 +470,18 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     addCheckpoint(start, 'START', 0);
     addDiscSection(2, 0);
     const p1 = nextSection(22, { w: 15 });
-    builders.sweepers(p1, 1);
-    builders.hammers(p1, 1);
+    builders.sweepers(p1, 2);
+    builders.hammers(p1, 2);
     addCheckpoint(p1, 'CHECKPOINT 1', 1);
     const p2 = nextSection(20, { w: 13, slippery: true, conveyor: { x: -1.4 } });
-    builders.rollers(p2, 2);
-    builders.bumpers(p2, 1);
+    builders.rollers(p2, 3);
+    builders.bumpers(p2, 2);
     addCheckpoint(p2, 'CHECKPOINT 2', 2);
     addCollapseSection(20, 13, 3.8);
     addDiscSection(2, 0.15);
     const p3 = nextSection(18, { w: 5.0, kind: 'beam', color: theme.platformSide });
-    builders.hammers(p3, 1);
-    builders.flails(p3, 1);
+    builders.hammers(p3, 2);
+    builders.flails(p3, 2);
     const p4 = nextSection(20, { w: 14 });
     builders.punches(p4, 2);
     builders.bumpers(p4, 2);
@@ -562,7 +567,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   }
 
   const length = 14 - (finish.zFront);
-  const parTime = length / 6.2 + (round === 'wipeout' ? 12 : round === 'dizzy' ? 9 : 5) + difficulty * 3;
+  const parTime = length / 6.2 + (round === 'wipeout' ? 12 : round === 'dizzy' ? 8 : round === 'sweeper' ? 4 : 4) + difficulty * 3;
 
   const course = {
     round, arena: theme, group, platforms, obstacles, pads, checkpoints, finish, finishZ,

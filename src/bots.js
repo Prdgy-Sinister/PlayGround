@@ -15,8 +15,8 @@ export function createBots(course, playerCharacterId, count = 7, options = {}) {
   const par = course.parTime;
   const times = [];
   for (let i = 0; i < count; i++) {
-    // Keep a quick front pack while preserving a fair spread of finish times.
-    const factor = 0.82 + (i / Math.max(1, count - 1)) * 0.32;
+    // Keep a tightly contested front pack so early rounds are not solo runs.
+    const factor = 0.84 + (i / Math.max(1, count - 1)) * 0.28;
     times.push(par * factor);
   }
   // shuffle so rank isn't tied to lane
@@ -45,7 +45,7 @@ export function createBots(course, playerCharacterId, count = 7, options = {}) {
       rank: i + 1,
       phase: Math.random() * 6,
       stumble: 0,
-      stumbleTimer: 1 + Math.random() * 4,
+      stumbleTimer: 1.5 + Math.random() * 3.5,
       yaw: 0,
       lastGround: 0,
       lean: 0
@@ -99,8 +99,8 @@ export function createBots(course, playerCharacterId, count = 7, options = {}) {
       b.stumbleTimer -= dt;
       if (b.stumbleTimer <= 0 && !b.finished && racing) {
         b.stumble = 0.55 + Math.random() * 0.5;
-        b.stumbleTimer = 4 + Math.random() * 6;
-        b.finishTime += 0.35 + Math.random() * 0.8;
+        b.stumbleTimer = 3 + Math.random() * 5;
+        b.finishTime += 0.5 + Math.random() * 0.9;
       }
       if (b.stumble > 0) {
         b.stumble -= dt;
