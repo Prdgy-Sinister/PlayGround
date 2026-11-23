@@ -366,6 +366,22 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
         });
       }
       decorateSection(p);
+    },
+    randomized(p, pool, n = 1) {
+      const shuffled = pool.slice();
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const first = shuffled[0];
+      if (first === 'balls') return builders.balls(p);
+      if (first === 'sweepers') return builders.sweepers(p, n);
+      if (first === 'hammers') return builders.hammers(p, n);
+      if (first === 'punches') return builders.punches(p, n);
+      if (first === 'walls') return builders.walls(p, n);
+      if (first === 'rollers') return builders.rollers(p, n);
+      if (first === 'flails') return builders.flails(p, n);
+      if (first === 'bumpers') return builders.bumpers(p, n);
     }
   };
 
@@ -427,11 +443,10 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   if (round === 'qualifier') {
     addCheckpoint(start, 'START', 0);
     const p1 = nextSection(24, { w: 15 });
-    builders.balls(p1);
-    builders.bumpers(p1, 1);
+    builders.randomized(p1, ['balls', 'sweepers', 'rollers', 'bumpers'], 2);
+    builders.randomized(p1, ['punches', 'walls', 'hammers', 'bumpers'], 1);
     const p2 = nextSection(20, { w: 15 });
-    builders.rollers(p2, 2);
-    builders.punches(p2, 1);
+    builders.randomized(p2, ['rollers', 'punches', 'walls', 'balls'], 2);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
     const p3 = nextSection(18, { w: 5.2, kind: 'beam', color: theme.platformSide });
     builders.hammers(p3, 2);
@@ -445,22 +460,21 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   } else if (round === 'sweeper') {
     addCheckpoint(start, 'START', 0);
     const p1 = nextSection(24, { w: 15 });
-    builders.sweepers(p1, 2);
-    builders.bumpers(p1, 2);
+    builders.randomized(p1, ['sweepers', 'walls', 'rollers', 'bumpers'], 2);
+    builders.bumpers(p1, 1);
     const p2 = nextSection(18, { w: 15 });
-    builders.sweepers(p2, 2);
-    builders.punches(p2, 2);
+    builders.randomized(p2, ['sweepers', 'punches', 'flails', 'bumpers'], 2);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
     const p3 = addPlatform({ zBack: cursor - 3.0, depth: 8, w: 7.2, x: -2.2 });
     cursor = p3.zFront;
     const p4 = addPlatform({ zBack: cursor - 3.2, depth: 8, w: 7.2, x: 2.2 });
     cursor = p4.zFront;
     const p5 = nextSection(20, { w: 15 });
-    builders.sweepers(p5, 2);
-    builders.bumpers(p5, 2);
+    builders.randomized(p5, ['sweepers', 'rollers', 'balls', 'bumpers'], 2);
+    builders.bumpers(p5, 1);
     addCheckpoint(p5, 'CHECKPOINT 2', 2);
     const p6 = nextSection(18, { w: 4.6, kind: 'beam', color: theme.platformSide });
-    builders.hammers(p6, 1);
+    builders.randomized(p6, ['hammers', 'flails', 'punches'], 1);
     const p7 = nextSection(16, { w: 14 });
     builders.walls(p7, 2);
     const p8 = nextSection(10, { w: 12 });
@@ -470,21 +484,20 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     addCheckpoint(start, 'START', 0);
     addDiscSection(2, 0);
     const p1 = nextSection(22, { w: 15 });
-    builders.sweepers(p1, 2);
-    builders.hammers(p1, 2);
+    builders.randomized(p1, ['sweepers', 'hammers', 'flails', 'bumpers'], 2);
+    builders.randomized(p1, ['rollers', 'walls', 'punches'], 1);
     addCheckpoint(p1, 'CHECKPOINT 1', 1);
     const p2 = nextSection(20, { w: 13, slippery: true, conveyor: { x: -1.4 } });
-    builders.rollers(p2, 3);
-    builders.bumpers(p2, 2);
+    builders.randomized(p2, ['rollers', 'walls', 'punches', 'bumpers'], 2);
+    builders.bumpers(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 2', 2);
     addCollapseSection(20, 13, 3.8);
     addDiscSection(2, 0.15);
     const p3 = nextSection(18, { w: 5.0, kind: 'beam', color: theme.platformSide });
-    builders.hammers(p3, 2);
-    builders.flails(p3, 2);
+    builders.randomized(p3, ['hammers', 'flails', 'punches'], 2);
     const p4 = nextSection(20, { w: 14 });
-    builders.punches(p4, 2);
-    builders.bumpers(p4, 2);
+    builders.randomized(p4, ['punches', 'walls', 'rollers', 'bumpers'], 2);
+    builders.bumpers(p4, 1);
     addCheckpoint(p4, 'CHECKPOINT 3', 3);
     const p5 = nextSection(10, { w: 12 });
     builders.launch(p5);
@@ -492,37 +505,34 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
   } else { // WIPEOUT ZONE - dense, but every major section has readable lanes
     addCheckpoint(start, 'START', 0);
     const p1 = nextSection(22, { w: 15 });
-    builders.sweepers(p1, 2);
-    builders.bumpers(p1, 2);
+    builders.randomized(p1, ['sweepers', 'rollers', 'walls', 'bumpers'], 2);
+    builders.bumpers(p1, 1);
     const p2 = nextSection(22, { w: 15 });
-    builders.punches(p2, 2);
-    builders.flails(p2, 1);
+    builders.randomized(p2, ['punches', 'flails', 'hammers', 'bumpers'], 2);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
     const p3 = nextSection(22, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 1.8 } });
-    builders.rollers(p3, 2);
-    builders.bumpers(p3, 2);
+    builders.randomized(p3, ['rollers', 'balls', 'walls', 'bumpers'], 2);
+    builders.bumpers(p3, 1);
     addCheckpoint(p3, 'CHECKPOINT 2', 2);
     addCollapseSection(20, 13, 3.45);
     const p4 = nextSection(22, { w: 14 });
-    builders.balls(p4);
-    builders.punches(p4, 2);
-    builders.flails(p4, 1);
+    builders.randomized(p4, ['balls', 'rollers', 'bumpers'], 1);
+    builders.randomized(p4, ['punches', 'flails', 'hammers', 'walls'], 2);
     addCheckpoint(p4, 'CHECKPOINT 3', 3);
     addDiscSection(3, 0.25);
     const p5 = nextSection(22, { w: 15 });
-    builders.sweepers(p5, 2);
-    builders.bumpers(p5, 2);
+    builders.randomized(p5, ['sweepers', 'balls', 'rollers', 'bumpers'], 2);
+    builders.bumpers(p5, 1);
     addCheckpoint(p5, 'CHECKPOINT 4', 4);
     const p6 = nextSection(20, { w: 5.2, kind: 'beam', color: theme.platformSide });
-    builders.hammers(p6, 2);
-    builders.flails(p6, 1);
+    builders.randomized(p6, ['hammers', 'flails', 'punches'], 2);
     const p7 = nextSection(20, { w: 14 });
-    builders.walls(p7, 2);
-    builders.bumpers(p7, 2);
+    builders.randomized(p7, ['walls', 'rollers', 'sweepers', 'bumpers'], 2);
+    builders.bumpers(p7, 1);
     addCheckpoint(p7, 'CHECKPOINT 5', 5);
     const p8 = nextSection(18, { w: 14 });
-    builders.rollers(p8, 2);
-    builders.punches(p8, 2);
+    builders.randomized(p8, ['rollers', 'walls', 'balls', 'bumpers'], 2);
+    builders.randomized(p8, ['punches', 'flails', 'hammers'], 1);
     const p9 = nextSection(10, { w: 12 });
     builders.launch(p9);
     addCheckpoint(p9, 'FINAL CHECKPOINT', 6);
