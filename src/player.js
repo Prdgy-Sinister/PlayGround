@@ -3,7 +3,7 @@ import { buildCharacterMesh, toonMat } from './characterRig.js';
 import { physical } from './characters.js';
 import { WATER_Y } from './obstacles.js';
 
-const GRAVITY = 27;
+const GRAVITY = 25;
 const COYOTE = 0.12;
 const MAX_FALL = -32;
 
@@ -127,7 +127,7 @@ export function createPlayer(course, character, options = {}) {
     player.spin.ax = (Math.random() - 0.5) * 18;
     player.spin.az = (Math.random() - 0.5) * 20;
     player.spin.x = 0; player.spin.z = 0;
-    player.invuln = 0.55;
+    player.invuln = 0.85;
     player.grounded = false;
     player.callbacks.onHit?.(hit, power);
   };
@@ -155,8 +155,10 @@ export function createPlayer(course, character, options = {}) {
 
     if (player.state === 'splash') {
       player.splashTimer -= dt;
-      player.vel.y -= GRAVITY * dt;
-      player.pos.y += player.vel.y * dt;
+      if (player.pos.y > WATER_Y - 5) {
+        player.vel.y -= GRAVITY * dt;
+        player.pos.y += player.vel.y * dt;
+      }
       if (!player.splashed && player.splashTimer < 1.28) {
         player.splashed = true;
         player.rig.root.visible = false;

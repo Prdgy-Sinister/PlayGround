@@ -541,6 +541,16 @@ export function createGame(renderer, ui) {
       this.cameraLook.lerp(lookTarget, Math.min(1, dt * 7));
       cam.lookAt(this.cameraLook);
 
+      // Balls that bounce behind the player can swallow the chase camera.
+      // Hide any that the camera is inside instead of rendering a blind wall.
+      for (const o of this.course.obstacles) {
+        if (o.type !== 'ball') continue;
+        const gp = o.group.position;
+        if (gp.z < p.pos.z - 0.5) continue;
+        const d = Math.hypot(gp.x - cam.position.x, gp.y + 1.9 - cam.position.y, gp.z - cam.position.z);
+        o.group.visible = d > 6.2;
+      }
+
       if (this.shake > 0.001) {
         this.shake *= Math.pow(0.0018, dt);
         const s = this.shake;
@@ -609,7 +619,12 @@ export function createGame(renderer, ui) {
       const c = document.createElement('canvas');
       c.width = 320; c.height = 128;
       const ctx = c.getContext('2d');
-      ctx.font = 'bold 55px Outfit, sans-serif';
+      let fontSize = 55;
+      ctx.font = `bold ${fontSize}px Outfit, sans-serif`;
+      while (ctx.measureText(text).width > 302 && fontSize > 18) {
+        fontSize -= 2;
+        ctx.font = `bold ${fontSize}px Outfit, sans-serif`;
+      }
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 12; ctx.strokeStyle = '#0b2136';
@@ -765,9 +780,11 @@ export function createGame(renderer, ui) {
       const qualified = finished && rank <= 5;
       const isFinal = s.index >= 3;
       const tokens = qualified ? (isFinal ? 12 : 5) : 1;
-      save.addResult('career', s.plan[s.index].round, s.plan[s.index].arena, {
-        name: 'YOU', charId: s.characterId, time, date, me: true
-      });
+      if (finished) {
+        save.addResult('career', s.plan[s.index].round, s.plan[s.index].arena, {
+          name: 'YOU', charId: s.characterId, time, date, me: true
+        });
+      }
       const unlocks = [];
       if (qualified) {
         if (isFinal) {
@@ -823,9 +840,11 @@ export function createGame(renderer, ui) {
     finishChampionship(finished, time, rank, rows, splashes, theme, date) {
       const s = this.session;
       const idx = s.index;
-      save.addResult('championship', s.plan[idx].round, s.plan[idx].arena, {
-        name: 'YOU', charId: s.characterId, time: finished ? time : 999, date, me: true
-      });
+      if (finished) {
+        save.addResult('championship', s.plan[idx].round, s.plan[idx].arena, {
+          name: 'YOU', charId: s.characterId, time, date, me: true
+        });
+      }
       if (!finished) {
         this.showResultsData({
           kicker: `CHAMPIONSHIP ROUND ${idx + 1} OF 6`,
@@ -958,7 +977,9 @@ export function createGame(renderer, ui) {
         save.addResult('endless', this.roundInfo.round, this.roundInfo.arena, {
           name: `ROUND ${level}`, charId: s.characterId, time, date, me: true
         });
-        save.addTokens(1 + Math.floor(level / 2));
+        const reward = 1 + Math.floor(level / 2);
+        save.addTokens(reward);
+        this.ui.refreshTokens();
         const unlocks = [];
         if (level === 5) {
           const u = this.awardUnlock('chuck');
@@ -969,7 +990,7 @@ export function createGame(renderer, ui) {
           title: 'STILL STANDING!',
           titleColor: '#6be675',
           sub: `${theme.name} survived. Round ${level + 1} will be faster, longer and considerably less fair.`,
-          time, rank, total: this.totalRacers, splashes, tokens: 0,
+          time, rank, total: this.totalRacers, splashes, tokens: reward,
           rows, qualified: true, unlocks,
           buttons: [
             {
@@ -1001,7 +1022,7 @@ export function createGame(renderer, ui) {
         sub: levelReached > 0
           ? `You survived ${levelReached} round${levelReached === 1 ? '' : 's'} before the water got you.`
           : 'The first course got you. That is genuinely impressive.',
-        time: 0, rank: 0, total: 4, splashes, tokens: 0,
+        time: 0, rank: 0, total: 4, splashes, tokens,
         rows: [], eliminated: true, unlocked: unlocks,
         unlocks: [
           `ROUNDS CLEARED: ${levelReached}`,

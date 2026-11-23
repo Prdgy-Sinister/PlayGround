@@ -196,8 +196,8 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
 
   function nextSection(depth, opt = {}) {
     // Keep the opening route connected to the start platform; later gaps are
-    // intentional jumps that add difficulty once players are underway.
-    const gap = opt.gap ?? (cursor === -2 ? 0 : 2.4);
+    // intentional jumps sized to clear comfortably with a running jump.
+    const gap = opt.gap ?? (cursor === -2 ? 0 : 2.2);
     const zBack = cursor - gap;
     const p = addPlatform({ ...opt, zBack, depth });
     cursor = zBack - depth;
@@ -206,8 +206,12 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
 
   function addCheckpoint(p, label, index) {
     const z = p.z + p.d / 2 - 2.2;
-    const gate = createCheckpointGate(theme, z, index);
-    group.add(gate);
+    // The start gate would sit between the chase camera and the player during
+    // the countdown, filling the screen. The start gantry already marks it.
+    if (index > 0) {
+      const gate = createCheckpointGate(theme, z, index);
+      group.add(gate);
+    }
     checkpoints.push({
       index, label, z, platform: p,
       respawn: { x: p.x, z: z - 0.8, top: p.topAt(p.x, z) }
@@ -255,13 +259,13 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     group.add(g);
     const postMat = toonMat(theme.platformSide);
     [-1, 1].forEach(s => {
-      m(g, G.box, postMat, [s * 7.4, 3.0, 1.0], [0.7, 6.0, 0.7]);
-      m(g, G.sphere, toonMat(theme.accent, { emissive: theme.accent, emissiveIntensity: 0.6 }), [s * 7.4, 6.0, 1.0], [0.5, 0.5, 0.5]);
+      m(g, G.box, postMat, [s * 6.2, 3.6, 1.0], [0.7, 7.2, 0.7]);
+      m(g, G.sphere, toonMat(theme.accent, { emissive: theme.accent, emissiveIntensity: 0.6 }), [s * 6.2, 7.2, 1.0], [0.5, 0.5, 0.5]);
     });
-    m(g, G.box, toonMat(theme.accent), [0, 6.15, 1.0], [15.5, 0.55, 0.6]);
+    m(g, G.box, toonMat(theme.accent), [0, 7.35, 1.0], [12.4, 0.55, 0.6]);
     const startLights = new THREE.Group();
     for (let i = 0; i < 3; i++) {
-      const light = m(startLights, G.sphere, toonMat('#ff4d5e', { emissive: '#ff4d5e', emissiveIntensity: 1.2 }), [(i - 1) * 1.5, 6.45, 0.85], [0.4, 0.4, 0.4]);
+      const light = m(startLights, G.sphere, toonMat('#ff4d5e', { emissive: '#ff4d5e', emissiveIntensity: 1.2 }), [(i - 1) * 1.5, 7.65, 0.85], [0.4, 0.4, 0.4]);
       light.userData.startLight = i;
     }
     g.add(startLights);
@@ -277,7 +281,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
       for (let i = 0; i < count; i++) {
         addObs('ball', {
           x: laneXs[i % laneXs.length] + (rand() - 0.5) * 0.8,
-          top: p.top, zFar: p.zFront + 1, span: p.d + 3,
+          top: p.top, zFar: p.zFront + 1.5, span: p.d - 2,
           speed: 4.0 + rand() * 1.2 + difficulty * 0.3,
           phase: rand(), radius: 1.75,
           bounceHeight: 1.0
@@ -289,7 +293,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
       for (let i = 0; i < n; i++) {
         const zz = p.zBack - p.d * (i + 0.5) / n;
         addObs('sweeper', {
-          x: 0, z: zz, top: p.top, reach: Math.min(6.6, p.w / 2 - 0.2),
+          x: 0, z: zz, top: p.top, reach: Math.max(2.2, Math.min(5.2, p.w / 2 - 2.0)),
           speed: (1.35 + rand() * 0.35) * (difficulty > 1.15 ? 1.2 : 1),
           dir: i % 2 ? -1 : 1, phase: rand() * 2
         });
@@ -348,7 +352,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     const gap = 2.2;
     const zBack = cursor - gap;
     const zFront = zBack - depth;
-    const cols = 4, rows = 5;
+    const cols = 4, rows = 4;
     const tw = width / cols - 0.18, td = depth / rows - 0.18;
     const pg = new THREE.Group();
     group.add(pg);
@@ -366,7 +370,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
           tile.mesh.position.y = 0;
           tile.tileMesh = tile.mesh;
         }
-        tile.collapse = { period: 3.4, offset: r * 0.42 + c * 0.15 + rand() * 0.12, off: 0.95, active: true };
+        tile.collapse = { period: 3.8, offset: r * 0.55 + c * 0.2 + rand() * 0.1, off: 0.8, active: true };
         tile.active = true;
         tile.baseTop = 0;
       }
@@ -386,9 +390,9 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
         spinRate: (i % 2 ? -1 : 1) * (1.0 + rand() * 0.5)
       });
       p.d = 8.5;
-      zz = zz - 8.5 - 3.4;
+      zz = zz - 8.5 - 3.0;
     }
-    cursor = zz + 3.4;
+    cursor = zz + 3.0;
     return zz;
   }
 
@@ -420,9 +424,9 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     const p2 = nextSection(15, { w: 14 });
     builders.punches(p2, 1);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
-    const p3 = addPlatform({ zBack: cursor - 4, depth: 7, w: 6.5, x: -2.5 });
+    const p3 = addPlatform({ zBack: cursor - 3.0, depth: 7, w: 6.8, x: -2.4 });
     cursor = p3.zFront;
-    const p4 = addPlatform({ zBack: cursor - 4.5, depth: 7, w: 6.5, x: 2.8 });
+    const p4 = addPlatform({ zBack: cursor - 3.2, depth: 7, w: 6.8, x: 2.6 });
     cursor = p4.zFront;
     const p5 = nextSection(22, { w: 15 });
     builders.sweepers(p5, 2);
@@ -443,13 +447,14 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     addCheckpoint(p1, 'CHECKPOINT 1', 1);
     const p2 = nextSection(22, { w: 13, slippery: true, conveyor: { x: -1.9 } });
     builders.rollers(p2, 2);
+    addCheckpoint(p2, 'CHECKPOINT 2', 2);
     addCollapseSection(22, 13);
     addDiscSection(2);
     const p3 = nextSection(20, { w: 3.8, kind: 'beam', color: theme.platformSide });
     builders.hammers(p3, 2);
     const p4 = nextSection(20, { w: 14 });
     builders.punches(p4, 2);
-    addCheckpoint(p4, 'CHECKPOINT 2', 2);
+    addCheckpoint(p4, 'CHECKPOINT 3', 3);
     const p5 = nextSection(9, { w: 12 });
     builders.launch(p5);
 
@@ -463,29 +468,30 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     const p3 = nextSection(22, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 2.0 } });
     builders.rollers(p3, 2);
     builders.walls(p3, 1);
+    addCheckpoint(p3, 'CHECKPOINT 2', 2);
     addCollapseSection(22, 13);
     const p4 = nextSection(22, { w: 14 });
     builders.punches(p4, 2);
-    addCheckpoint(p4, 'CHECKPOINT 2', 2);
+    addCheckpoint(p4, 'CHECKPOINT 3', 3);
     addDiscSection(3);
     const p5 = nextSection(22, { w: 15 });
     builders.sweepers(p5, 1);
     builders.hammers(p5, 1);
-    addCheckpoint(p5, 'CHECKPOINT 3', 3);
+    addCheckpoint(p5, 'CHECKPOINT 4', 4);
     const p6 = nextSection(20, { w: 4.0, kind: 'beam', color: theme.platformSide });
     builders.hammers(p6, 2);
     const p7 = nextSection(20, { w: 14 });
     builders.walls(p7, 2);
     const p8 = nextSection(10, { w: 12 });
     builders.launch(p8);
-    addCheckpoint(p8, 'FINAL CHECKPOINT', 4);
+    addCheckpoint(p8, 'FINAL CHECKPOINT', 5);
   }
 
   // =========================================================================
   // FINISH PLATFORM + ARCH
   // =========================================================================
   const finish = addPlatform({
-    zBack: cursor - 3.2, depth: 20, w: 20, kind: 'start',
+    zBack: cursor - 2.6, depth: 20, w: 20, kind: 'start',
     color: theme.platform, trim: theme.accent
   });
   const finishZ = finish.zBack - 1.5;

@@ -357,7 +357,12 @@ body.low-gfx .menu-screen::before { backdrop-filter: none; }
 @media (max-width: 420px) {
   .mode-grid { grid-template-columns: 1fr; }
   .mode-card p { min-height: 0; }
-  .hud-center { width: 42vw; top: 6px; }
+  .hud-top { gap: 6px; }
+  .hud-left { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .hud-round { max-width: 100px; }
+  .hud-round span { font-size: 8px; letter-spacing: .1em; }
+  .hud-round b { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hud-center { width: 40vw; top: 4px; }
   .splash-pips i { width: 14px; height: 14px; }
   .checkpoint-tag { display: none; }
   #joystick { width: 112px; height: 112px; }

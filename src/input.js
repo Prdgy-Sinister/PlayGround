@@ -27,7 +27,6 @@ export const input = {
       if (e.code === 'Escape') { this.pauseQueued = true; return; }
       if (!this.enabled) return;
       this.keys.add(e.code);
-      if (e.code === 'Space' || e.code === 'KeyW' && false) this.jumpQueued = true;
       if (e.code === 'Space') this.jumpQueued = true;
       if (e.code === 'KeyC' || e.code === 'KeyX') this.diveQueued = true;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.sprint = true;
