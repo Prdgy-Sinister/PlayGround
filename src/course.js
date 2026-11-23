@@ -344,6 +344,28 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     launch(p) {
       addObs('launch', { x: p.x, z: p.z + 1, top: p.top, power: 16, forward: 6 });
       decorateSection(p);
+    },
+    flails(p, n = 1) {
+      for (let i = 0; i < n; i++) {
+        const zz = p.zBack - p.d * (i + 0.5) / n;
+        addObs('flail', {
+          x: p.x + (n > 1 ? (i - (n - 1) / 2) * 3.6 : 0), z: zz, top: p.top,
+          pivotH: 5.0, arm: 4.2, amp: 1.05,
+          speed: 1.75 + rand() * 0.45, phase: rand() * Math.PI * 2
+        });
+      }
+      decorateSection(p);
+    },
+    bumpers(p, n = 3) {
+      const xs = n === 1 ? [p.x] : [-4.2, 0, 4.2].slice(0, n).map(v => v + p.x);
+      for (let i = 0; i < n; i++) {
+        const zz = p.zBack - p.d * (i + 0.5) / n;
+        addObs('bumper', {
+          x: xs[i], z: zz, top: p.top, radius: 0.82,
+          height: 2.35, period: 1.55 + rand() * 0.25, phase: rand()
+        });
+      }
+      decorateSection(p);
     }
   };
 
@@ -370,7 +392,7 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
           tile.mesh.position.y = 0;
           tile.tileMesh = tile.mesh;
         }
-        tile.collapse = { period: 3.8, offset: r * 0.55 + c * 0.2 + rand() * 0.1, off: 0.8, active: true };
+        tile.collapse = { period: 3.15, offset: r * 0.45 + c * 0.18 + rand() * 0.08, off: 1.0, active: true };
         tile.active = true;
         tile.baseTop = 0;
       }
@@ -380,14 +402,14 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
     return { zBack, zFront };
   }
 
-  function addDiscSection(count = 2) {
+  function addDiscSection(count = 2, speedBoost = 0) {
     const zBack = cursor - 3;
     let zz = zBack;
     for (let i = 0; i < count; i++) {
       const p = addPlatform({
         x: (i - (count - 1) / 2) * 5.4 + (rand() - 0.5) * 1.2,
         zBack: zz, depth: 8.5, w: 8.6, top: 0, kind: 'disc',
-        spinRate: (i % 2 ? -1 : 1) * (1.0 + rand() * 0.5)
+        spinRate: (i % 2 ? -1 : 1) * (1.35 + rand() * 0.65 + speedBoost)
       });
       p.d = 8.5;
       zz = zz - 8.5 - 3.0;
@@ -460,36 +482,44 @@ export function buildCourse({ round, arena, difficulty = 1, seedExtra = '', endl
 
   } else { // WIPEOUT ZONE - everything
     addCheckpoint(start, 'START', 0);
-    const p1 = nextSection(22, { w: 14 });
+    const p1 = nextSection(24, { w: 15 });
     builders.balls(p1);
-    builders.sweepers(p1, 1);
+    builders.sweepers(p1, 2);
+    builders.bumpers(p1, 3);
     const p2 = nextSection(24, { w: 15 });
     builders.sweepers(p2, 3);
-    builders.punches(p2, 1);
+    builders.punches(p2, 2);
+    builders.flails(p2, 2);
     addCheckpoint(p2, 'CHECKPOINT 1', 1);
-    const p3 = nextSection(22, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 2.0 } });
-    builders.rollers(p3, 3);
-    builders.walls(p3, 2);
+    const p3 = nextSection(24, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 2.3 } });
+    builders.rollers(p3, 4);
+    builders.walls(p3, 3);
+    builders.bumpers(p3, 3);
     addCheckpoint(p3, 'CHECKPOINT 2', 2);
-    addCollapseSection(22, 13);
-    const p4 = nextSection(22, { w: 14 });
+    addCollapseSection(24, 13);
+    const p4 = nextSection(24, { w: 14 });
     builders.punches(p4, 3);
     builders.balls(p4);
+    builders.flails(p4, 2);
     addCheckpoint(p4, 'CHECKPOINT 3', 3);
-    addDiscSection(3);
-    const p5 = nextSection(22, { w: 15 });
-    builders.sweepers(p5, 2);
-    builders.hammers(p5, 2);
+    addDiscSection(4, round === 'wipeout' ? 0.35 : 0);
+    const p5 = nextSection(24, { w: 15 });
+    builders.sweepers(p5, 3);
+    builders.hammers(p5, 3);
+    builders.bumpers(p5, 3);
     addCheckpoint(p5, 'CHECKPOINT 4', 4);
-    const p6 = nextSection(20, { w: 4.0, kind: 'beam', color: theme.platformSide });
-    builders.hammers(p6, 2);
-    const p7 = nextSection(20, { w: 14 });
-    builders.walls(p7, 3);
-    const p8 = nextSection(20, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 2.2 } });
-    builders.rollers(p8, 2);
-    builders.punches(p8, 2);
+    const p6 = nextSection(22, { w: 4.2, kind: 'beam', color: theme.platformSide });
+    builders.hammers(p6, 3);
+    builders.flails(p6, 2);
+    const p7 = nextSection(22, { w: 14 });
+    builders.walls(p7, 4);
+    builders.bumpers(p7, 3);
+    const p8 = nextSection(22, { w: 14, slippery: true, conveyor: { x: (rand() > 0.5 ? -1 : 1) * 2.5 } });
+    builders.rollers(p8, 3);
+    builders.punches(p8, 3);
+    builders.flails(p8, 2);
     addCheckpoint(p8, 'CHECKPOINT 5', 5);
-    const p9 = nextSection(10, { w: 12 });
+    const p9 = nextSection(12, { w: 12 });
     builders.launch(p9);
     addCheckpoint(p9, 'FINAL CHECKPOINT', 6);
   }

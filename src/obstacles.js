@@ -59,7 +59,7 @@ export const WATER_Y = -2.25;
 function bigBall(opt, arena) {
   const group = new THREE.Group();
   group.position.set(opt.x, opt.top, opt.z);
-  const r = opt.radius || 1.85;
+  const r = opt.radius || 2.05;
   const spinGroup = new THREE.Group();
   spinGroup.position.y = r;
   group.add(spinGroup);
@@ -88,7 +88,7 @@ function bigBall(opt, arena) {
   mesh(face, G.sphere, pupil, [-r * 0.27, 0, -r * 0.1], [r * 0.09, r * 0.11, r * 0.06]);
   mesh(face, G.sphere, pupil, [r * 0.27, 0, -r * 0.1], [r * 0.09, r * 0.11, r * 0.06]);
 
-  const spd = opt.speed || 4.2;
+  const spd = opt.speed || 6.2;
   const span = opt.span || 24;
   const phase = opt.phase || 0;
 
@@ -112,7 +112,7 @@ function bigBall(opt, arena) {
       if (head < center.y - r || feet > center.y + r) return null;
       let nx = dx / (dist || 1), nz = dz / (dist || 1);
       nz = Math.max(nz, 0.35); // always shove backwards a bit
-      return { nx, nz, power: 8.5, up: 2.5, label: 'BONKED BY A BIG RED BALL' };
+      return { nx, nz, power: 11.5, up: 3.8, label: 'BONKED BY A BIG RED BALL' };
     }
   };
 }
@@ -123,8 +123,8 @@ function bigBall(opt, arena) {
 function sweeper(opt, arena) {
   const group = new THREE.Group();
   group.position.set(opt.x || 0, opt.top, opt.z);
-  const reach = opt.reach || 7.6;
-  const speed = (opt.speed || 1.5) * (opt.dir || 1);
+  const reach = opt.reach || 8.4;
+  const speed = (opt.speed || 2.05) * (opt.dir || 1);
 
   const hub = mesh(group, G.cyl, toonMat(arena.platformTrim), [0, 0.75, 0], [0.75, 1.5, 0.75]);
   mesh(group, G.cyl, toonMat('#30363f'), [0, 1.52, 0], [0.9, 0.12, 0.9]);
@@ -169,7 +169,7 @@ function sweeper(opt, arena) {
       if (Math.hypot(lx, lz) < 0.8) return null;
       const sgn = Math.sign(speed);
       const tx = -Math.sin(ang) * sgn, tz = -Math.cos(ang) * sgn;
-      return { nx: tx, nz: tz + 0.35, power: 11, up: 3.6, label: 'SWEPT OFF YOUR FEET' };
+      return { nx: tx, nz: tz + 0.55, power: 14.5, up: 4.6, label: 'SWEPT OFF YOUR FEET' };
     }
   };
 }
@@ -182,8 +182,8 @@ function hammer(opt, arena) {
   group.position.set(opt.x || 0, opt.top, opt.z);
   const h = opt.pivotH || 5.4;
   const len = opt.arm || 4.0;
-  const amp = opt.amp || 1.2;
-  const speed = opt.speed || 1.35;
+  const amp = opt.amp || 1.38;
+  const speed = opt.speed || 1.75;
   const axis = opt.axis || 'x';
   const phase = opt.phase || 0;
 
@@ -229,7 +229,7 @@ function hammer(opt, arena) {
       if (dx * dx + dz * dz > rr * rr) return null;
       if (Math.abs(dy) > 1.15 + height * 0.5) return null;
       const len2 = Math.hypot(dx, dz) || 1;
-      return { nx: dx / len2, nz: dz / len2 + 0.4, power: 13, up: 4.2, label: 'HAMMERED!' };
+      return { nx: dx / len2, nz: dz / len2 + 0.55, power: 16.5, up: 5.2, label: 'HAMMERED!' };
     }
   };
 }
@@ -243,8 +243,8 @@ function punch(opt, arena) {
   group.position.set(opt.x || 0, opt.top, opt.z);
   const side = opt.side || 1;
   const baseX = side * (opt.mountX || 6.4);
-  const period = opt.period || 2.6;
-  const extendMax = opt.extend || 4.2;
+  const period = opt.period || 2.05;
+  const extendMax = opt.extend || 5.2;
   const phase = opt.phase || 0;
 
   const mount = new THREE.Group();
@@ -284,7 +284,7 @@ function punch(opt, arena) {
       const rr = 0.95 + radius;
       if (dx * dx + dz * dz > rr * rr) return null;
       if (pos.y > gy + 0.95 || pos.y + height < gy - 0.95) return null;
-      return { nx: -side * 0.9, nz: 0.55, power: 9.5, up: 3.2, label: 'SURPRISE PUNCH!' };
+      return { nx: -side * 1.15, nz: 0.75, power: 13.5, up: 4.5, label: 'SURPRISE PUNCH!' };
     }
   };
 }
@@ -295,7 +295,7 @@ function punch(opt, arena) {
 function movingWall(opt, arena) {
   const group = new THREE.Group();
   group.position.set(0, opt.top, opt.z);
-  const w = opt.w || 3.4;
+  const w = opt.w || 4.2;
   const h = 2.4;
   const move = new THREE.Group();
   group.add(move);
@@ -307,8 +307,8 @@ function movingWall(opt, arena) {
   });
   // track
   mesh(group, G.box, toonMat('#30363f'), [0, 0.04, 0], [opt.track || 12, 0.08, 0.75]);
-  const amp = opt.amp || 4;
-  const speed = opt.speed || 1.1;
+  const amp = opt.amp || 4.8;
+  const speed = opt.speed || 1.45;
   const phase = opt.phase || 0;
   let x = 0;
 
@@ -328,7 +328,7 @@ function movingWall(opt, arena) {
       if (Math.abs(pos.z - group.position.z) > 0.3 + radius) return null;
       const tt = this.time || 0;
       const vx = Math.cos(tt * speed + phase) * amp * speed;
-      return { nx: Math.sign(vx || 1), nz: 0.5, power: 8.5, up: 2.2, label: 'CLOTHESLINED BY A WALL' };
+      return { nx: Math.sign(vx || 1), nz: 0.75, power: 12, up: 3.8, label: 'CLOTHESLINED BY A WALL' };
     }
   };
 }
@@ -350,7 +350,7 @@ function roller(opt, arena) {
   group.add(bar);
   [-1, 1].forEach(s => mesh(group, G.cylAxisX, toonMat(arena.platformSide), [s * len / 2, 0, 0], [0.12, r * 1.02, r * 1.02]));
   const span = opt.span || 26;
-  const speed = opt.speed || 5;
+  const speed = opt.speed || 6.8;
 
   return {
     type: 'roller', group, power: 7,
@@ -366,7 +366,7 @@ function roller(opt, arena) {
       if (pos.y > group.position.y + r * 0.85) return null;
       if (pos.y + height < group.position.y - r) return null;
       const nz = dz / (Math.hypot(dx, dz) || 1);
-      return { nx: dx / (Math.hypot(dx, dz) || 1) * 0.5, nz: 0.5 + nz, power: 7, up: 2.4, label: 'FLATTENED BY A ROLLER' };
+      return { nx: dx / (Math.hypot(dx, dz) || 1) * 0.75, nz: 0.75 + nz, power: 11.5, up: 4.0, label: 'FLATTENED BY A ROLLER' };
     }
   };
 }
@@ -406,17 +406,95 @@ function launchPad(opt, arena) {
       if (cooldown > 0) return false;
       if (Math.abs(pos.x - (opt.x || 0)) > 1.8 || Math.abs(pos.z - opt.z) > 1.8) return false;
       if (Math.abs(feetY - opt.top) > 0.5) return false;
-      cooldown = 1;
-      return { power: opt.power || 15, forward: opt.forward || 7 };
+      cooldown = 0.75;
+      return { power: opt.power || 19, forward: opt.forward || 9 };
     },
     hit() { return null; }
   };
 }
 
 // ---------------------------------------------------------------------------
+// SWINGING FLAIL - faster, lower pendulum for narrow timing windows
+// ---------------------------------------------------------------------------
+function flail(opt, arena) {
+  const group = new THREE.Group();
+  group.position.set(opt.x || 0, opt.top, opt.z);
+  const pivotH = opt.pivotH || 4.8;
+  const arm = opt.arm || 4.2;
+  const amp = opt.amp || 0.92;
+  const speed = opt.speed || 1.9;
+  const phase = opt.phase || 0;
+
+  mesh(group, G.box, toonMat(arena.platformSide), [-4.2, pivotH * 0.5, 0], [0.55, pivotH, 0.55]);
+  mesh(group, G.box, toonMat(arena.platformSide), [4.2, pivotH * 0.5, 0], [0.55, pivotH, 0.55]);
+  mesh(group, G.box, toonMat(arena.platformTrim), [0, pivotH, 0], [8.5, 0.55, 0.55]);
+
+  const swing = new THREE.Group();
+  swing.position.set(0, pivotH, 0);
+  group.add(swing);
+  mesh(swing, G.cyl, toonMat('#5f6670'), [0, -arm * 0.5, 0], [0.12, arm, 0.12]);
+  const head = mesh(swing, G.sphere, toonMat(arena.obstacle), [0, -arm, 0], [1.2, 1.2, 1.2]);
+  mesh(head, G.torus, toonMat(arena.accent), [0, 0, 0], [1.05, 1.05, 1.05], [Math.PI / 2, 0, 0]);
+  const headWorld = new THREE.Vector3();
+
+  return {
+    type: 'flail', group, power: 15,
+    update(dt, t) {
+      swing.rotation.z = Math.sin(t * speed + phase) * amp;
+      head.getWorldPosition(headWorld);
+    },
+    hit(pos, radius, height) {
+      const dx = pos.x - headWorld.x;
+      const dy = pos.y + height * 0.5 - headWorld.y;
+      const dz = pos.z - headWorld.z;
+      if (dx * dx + dy * dy + dz * dz > (1.2 + radius) ** 2) return null;
+      const len = Math.hypot(dx, dz) || 1;
+      return { nx: dx / len, nz: dz / len + 0.65, power: 15, up: 5.2, label: 'CRUSHED BY THE FLAIL!' };
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// POP-UP BOMPER - alternating, retractable impact columns
+// ---------------------------------------------------------------------------
+function bumper(opt, arena) {
+  const group = new THREE.Group();
+  group.position.set(opt.x || 0, opt.top, opt.z);
+  const r = opt.radius || 0.72;
+  const height = opt.height || 2;
+  const phase = opt.phase || 0;
+  const period = opt.period || 1.9;
+  const column = new THREE.Group();
+  group.add(column);
+  mesh(column, G.cyl, toonMat(arena.platformSide), [0, -0.45, 0], [r * 1.15, 0.9, r * 1.15]);
+  mesh(column, G.sphere, toonMat(arena.obstacle), [0, 0, 0], [r, r, r]);
+  glow(column, arena.accent, [0, r * 0.55, 0], 0.16);
+
+  return {
+    type: 'bumper', group, power: 13,
+    update(dt, t) {
+      const p = ((t / period + phase) % 1);
+      const raised = p < 0.58;
+      column.position.y = raised ? height * (0.5 + 0.5 * Math.sin(p * Math.PI / 0.58)) : -0.8;
+      column.visible = raised;
+    },
+    hit(pos, radius, height) {
+      if (!column.visible) return null;
+      const cx = group.position.x;
+      const cy = opt.top + column.position.y;
+      const dx = pos.x - cx, dz = pos.z - opt.z;
+      if (dx * dx + dz * dz > (r + radius) ** 2) return null;
+      if (pos.y > cy + r || pos.y + height < cy - r) return null;
+      const len = Math.hypot(dx, dz) || 1;
+      return { nx: dx / len, nz: dz / len + 0.7, power: 13, up: 5, label: 'Popped by a BUMPER!' };
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
-const BUILDERS = { ball: bigBall, sweeper, hammer, punch, wall: movingWall, roller, launch: launchPad };
+const BUILDERS = { ball: bigBall, sweeper, hammer, punch, wall: movingWall, roller, launch: launchPad, flail, bumper };
 
 export function createObstacle(type, opt, arena) {
   const build = BUILDERS[type];
