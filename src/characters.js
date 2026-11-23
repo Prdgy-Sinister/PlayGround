@@ -99,7 +99,7 @@ export const CHARACTERS = [
     body: { height: 1.0, width: 0.88, head: 1.06, belly: 0.9, limb: 0.88, leg: 0.52 },
     colors: { skin: '#8f5a35', shirt: '#ff8a2b', pants: '#2a3f6b', hair: '#3a2a1e', accent: '#2fc4ff' },
     hairStyle: 'puffs', accessory: 'goggles', style: 'twitchy', voice: 1.3,
-    unlock: { tokens: 2 }
+    unlock: { tokens: 3 }
   },
   {
     id: 'sam', name: 'Sumo Sam', tag: 'Immovable object. Very movable appetite.',
@@ -107,7 +107,7 @@ export const CHARACTERS = [
     body: { height: 1.0, width: 1.55, head: 1.08, belly: 1.9, limb: 1.25, leg: 0.36 },
     colors: { skin: '#e8ae7d', shirt: '#ff5b2b', pants: '#1d1d1d', hair: '#1a1a1a', accent: '#ffd23f' },
     hairStyle: 'topknot', accessory: 'none', style: 'heavy', voice: 0.45,
-    unlock: { tokens: 3 }
+    unlock: { tokens: 4 }
   },
   {
     id: 'pixie', name: 'Pixie Pearl', tag: 'Light as a crisp packet. Twice as loud.',
@@ -115,7 +115,7 @@ export const CHARACTERS = [
     body: { height: 0.78, width: 0.72, head: 1.12, belly: 0.7, limb: 0.66, leg: 0.46 },
     colors: { skin: '#ffd9b3', shirt: '#24a8a0', pants: '#ffd23f', hair: '#ff5fa2', accent: '#7c5cff' },
     hairStyle: 'pigtails', accessory: 'crown', style: 'bouncy', voice: 1.8,
-    unlock: { tokens: 3 }
+    unlock: { tokens: 4 }
   },
   {
     id: 'tom', name: 'Turbo Tom', tag: 'Has two speeds: flat out and asleep.',
@@ -123,7 +123,7 @@ export const CHARACTERS = [
     body: { height: 1.02, width: 0.8, head: 0.95, belly: 0.7, limb: 0.86, leg: 0.56 },
     colors: { skin: '#5f3720', shirt: '#e63946', pants: '#181c2b', hair: '#1a1a1a', accent: '#ffd23f' },
     hairStyle: 'flat', accessory: 'headband', style: 'athletic', voice: 0.95,
-    unlock: { tokens: 4 }
+    unlock: { tokens: 5 }
   },
   {
     id: 'gwen', name: 'Gritty Gwen', tag: 'Solid at everything. Rude about it.',
@@ -131,7 +131,7 @@ export const CHARACTERS = [
     body: { height: 1.04, width: 1.02, head: 0.98, belly: 0.9, limb: 1.0, leg: 0.5 },
     colors: { skin: '#c88555', shirt: '#b8e04a', pants: '#3a4a5e', hair: '#7a4a24', accent: '#ff5b2b' },
     hairStyle: 'bob', accessory: 'none', style: 'stiff', voice: 0.85,
-    unlock: { tokens: 4 }
+    unlock: { tokens: 5 }
   },
   {
     id: 'plop', name: 'Professor Plop', tag: 'Calculates trajectories. Ignores them completely.',
@@ -139,7 +139,7 @@ export const CHARACTERS = [
     body: { height: 1.08, width: 0.9, head: 1.08, belly: 1.0, limb: 0.8, leg: 0.48 },
     colors: { skin: '#ffd9b3', shirt: '#f0f4f8', pants: '#3a4a5e', hair: '#cfd6de', accent: '#24a8a0' },
     hairStyle: 'wild', accessory: 'glasses', style: 'wobbly', voice: 0.9,
-    unlock: { tokens: 5 }
+    unlock: { tokens: 6 }
   },
   {
     id: 'bruno', name: 'Brick Bruno', tag: 'Made entirely of enthusiasm and protein.',
@@ -147,7 +147,7 @@ export const CHARACTERS = [
     body: { height: 1.1, width: 1.3, head: 1.0, belly: 0.75, limb: 1.55, leg: 0.45 },
     colors: { skin: '#8f5a35', shirt: '#2b2b2b', pants: '#e63946', hair: '#1a1a1a', accent: '#ffd23f' },
     hairStyle: 'buzz', accessory: 'none', style: 'heavy', voice: 0.5,
-    unlock: { tokens: 5 }
+    unlock: { tokens: 6 }
   },
   {
     id: 'fiona', name: 'Fizzy Fiona', tag: 'Three espressos and a dream.',
@@ -155,7 +155,7 @@ export const CHARACTERS = [
     body: { height: 0.94, width: 0.86, head: 1.04, belly: 0.85, limb: 0.8, leg: 0.5 },
     colors: { skin: '#f6c9a0', shirt: '#ff8a2b', pants: '#5b2a86', hair: '#e63946', accent: '#43e08a' },
     hairStyle: 'spiky', accessory: 'none', style: 'twitchy', voice: 1.7,
-    unlock: { tokens: 6 }
+    unlock: { tokens: 8 }
   },
   {
     id: 'wobble', name: 'Old Man Wobble', tag: 'Was promised a gentle stroll.',
@@ -163,7 +163,7 @@ export const CHARACTERS = [
     body: { height: 1.2, width: 0.82, head: 1.0, belly: 1.05, limb: 0.72, leg: 0.52 },
     colors: { skin: '#f6c9a0', shirt: '#6b5a8c', pants: '#3a4a5e', hair: '#f6f6fa', accent: '#b8e04a' },
     hairStyle: 'bald', accessory: 'glasses', style: 'wobbly', voice: 0.7,
-    unlock: { tokens: 6 }
+    unlock: { tokens: 7 }
   },
   {
     id: 'nina', name: 'Ninja Nina', tag: 'Not here to make friends. Here to make distance.',
@@ -171,7 +171,7 @@ export const CHARACTERS = [
     body: { height: 0.98, width: 0.76, head: 0.96, belly: 0.7, limb: 0.78, leg: 0.55 },
     colors: { skin: '#e8ae7d', shirt: '#181c2b', pants: '#181c2b', hair: '#1a1a1a', accent: '#e63946' },
     hairStyle: 'ponytail', accessory: 'mask', style: 'athletic', voice: 1.1,
-    unlock: { tokens: 8 }
+    unlock: { tokens: 12 }
   },
   {
     id: 'chuck', name: 'Chef Chuck', tag: 'Runs on butter. All of the butter.',
@@ -179,7 +179,7 @@ export const CHARACTERS = [
     body: { height: 1.02, width: 1.25, head: 1.05, belly: 1.5, limb: 1.12, leg: 0.44 },
     colors: { skin: '#c88555', shirt: '#f6f6fa', pants: '#2b2b2b', hair: '#3a2a1e', accent: '#ff5b2b' },
     hairStyle: 'short', accessory: 'chef', style: 'heavy', voice: 0.65,
-    unlock: { tokens: 8 }
+    unlock: { tokens: 13 }
   },
   {
     id: 'bea', name: 'Ballerina Bea', tag: 'Graceful until the giant red ball arrives.',
@@ -187,7 +187,7 @@ export const CHARACTERS = [
     body: { height: 1.14, width: 0.7, head: 0.94, belly: 0.7, limb: 0.7, leg: 0.62 },
     colors: { skin: '#ffd9b3', shirt: '#ff5fa2', pants: '#ffd9ef', hair: '#3a2a1e', accent: '#7c5cff' },
     hairStyle: 'bun', accessory: 'tiara', style: 'stiff', voice: 1.2,
-    unlock: { tokens: 10 }
+    unlock: { tokens: 13 }
   },
   {
     id: 'maxine', name: 'Mad Maxine', tag: 'Signed the waiver with a drawing of a shark.',
@@ -195,7 +195,7 @@ export const CHARACTERS = [
     body: { height: 1.06, width: 1.08, head: 1.0, belly: 0.9, limb: 1.15, leg: 0.5 },
     colors: { skin: '#8f5a35', shirt: '#2b2b2b', pants: '#ff8a2b', hair: '#e63946', accent: '#ffd23f' },
     hairStyle: 'mohawk', accessory: 'goggles', style: 'twitchy', voice: 0.75,
-    unlock: { tokens: 12 }
+    unlock: { tokens: 15 }
   },
   {
     id: 'pete', name: 'Penguin Pete', tag: 'Technically a penguin. Legally a menace.',
@@ -203,7 +203,7 @@ export const CHARACTERS = [
     body: { height: 0.86, width: 1.1, head: 1.14, belly: 1.25, limb: 0.9, leg: 0.38 },
     colors: { skin: '#f6c9a0', shirt: '#181c2b', pants: '#181c2b', hair: '#1a1a1a', accent: '#ff8a2b' },
     hairStyle: 'bald', accessory: 'beanie', style: 'stiff', voice: 1.4,
-    unlock: { tokens: 12 }
+    unlock: { tokens: 15 }
   }
 ];
 

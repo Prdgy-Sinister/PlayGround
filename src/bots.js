@@ -15,8 +15,8 @@ export function createBots(course, playerCharacterId, count = 7, options = {}) {
   const par = course.parTime;
   const times = [];
   for (let i = 0; i < count; i++) {
-    // spread finishers from quick to hopeless, with a little seeded variety
-    const factor = 0.86 + (i / Math.max(1, count - 1)) * 0.36;
+    // Keep a quick front pack while preserving a fair spread of finish times.
+    const factor = 0.82 + (i / Math.max(1, count - 1)) * 0.32;
     times.push(par * factor);
   }
   // shuffle so rank isn't tied to lane

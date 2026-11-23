@@ -18,13 +18,13 @@ const CHAMPIONSHIP_PLAN = [
   { round: 'dizzy', arena: 'winter' },
   { round: 'sweeper', arena: 'desert' },
   { round: 'dizzy', arena: 'night' },
-  { round: 'wipeout', arena: 'industrial' }
+  { round: 'wipeout', arena: 'night' }
 ];
 const CAREER_PLAN = [
   { round: 'qualifier', arena: 'classic' },
   { round: 'sweeper', arena: 'tropical' },
   { round: 'dizzy', arena: 'winter' },
-  { round: 'wipeout', arena: 'industrial' }
+  { round: 'wipeout', arena: 'night' }
 ];
 const ENDLESS_PLAN_ROUNDS = ['qualifier', 'sweeper', 'dizzy', 'wipeout'];
 
